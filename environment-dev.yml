@@ -1,0 +1,10 @@
+name: cpg-utils
+
+channels:
+  - conda-forge
+
+dependencies:
+  - pre-commit
+  - pylint
+  - bumpversion
+  - google-api-python-client
