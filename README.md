@@ -12,5 +12,5 @@ conda install -c cpg cpg-utils
 To use the library, import functions like this:
 
 ```python
-from cpg_utils.cloud import check_group_membership
+from cpg_utils.cloud import is_google_group_member
 ```

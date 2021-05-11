@@ -1,19 +1,21 @@
-"""Convenience functions for using the GCP Cloud Identity API."""
+"""Convenience functions related to cloud infrastructure."""
 
 import logging
 import googleapiclient.discovery
 
-SERVICE_NAME = 'cloudidentity.googleapis.com'
-API_VERSION = 'v1'
-DISCOVERY_URL = f'https://{SERVICE_NAME}/$discovery/rest?version={API_VERSION}'
+_CLOUD_IDENTITY_SERVICE_NAME = 'cloudidentity.googleapis.com'
+_CLOUD_IDENTITY_API_VERSION = 'v1'
+_DISCOVERY_URL = f'https://{_CLOUD_IDENTITY_SERVICE_NAME}/$discovery/rest?version={_CLOUD_IDENTITY_API_VERSION}'
 
-service = googleapiclient.discovery.build(
-    SERVICE_NAME, API_VERSION, discoveryServiceUrl=DISCOVERY_URL
+_cloud_identity_service = googleapiclient.discovery.build(
+    _CLOUD_IDENTITY_SERVICE_NAME,
+    _CLOUD_IDENTITY_API_VERSION,
+    discoveryServiceUrl=_DISCOVERY_URL,
 )
 
 
-def check_group_membership(user: str, group: str) -> bool:
-    """Returns whether the user is a member of the group.
+def is_google_group_member(user: str, group: str) -> bool:
+    """Returns whether the user is a member of the given Google group.
 
     Both user and group are specified as email addresses.
 
@@ -27,10 +29,12 @@ def check_group_membership(user: str, group: str) -> bool:
         # See https://bit.ly/37WcB1d for the API calls.
         # Pylint can't resolve the methods in Resource objects.
         # pylint: disable=E1101
-        parent = service.groups().lookup(groupKey_id=group).execute()['name']
+        parent = (
+            _cloud_identity_service.groups().lookup(groupKey_id=group).execute()['name']
+        )
 
         _ = (
-            service.groups()
+            _cloud_identity_service.groups()
             .memberships()
             .lookup(parent=parent, memberKey_id=user)
             .execute()['name']
