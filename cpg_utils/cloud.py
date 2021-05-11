@@ -5,7 +5,10 @@ import googleapiclient.discovery
 
 _CLOUD_IDENTITY_SERVICE_NAME = 'cloudidentity.googleapis.com'
 _CLOUD_IDENTITY_API_VERSION = 'v1'
-_DISCOVERY_URL = f'https://{_CLOUD_IDENTITY_SERVICE_NAME}/$discovery/rest?version={_CLOUD_IDENTITY_API_VERSION}'
+_DISCOVERY_URL = (
+    f'https://{_CLOUD_IDENTITY_SERVICE_NAME}/$discovery/rest?'
+    f'version={_CLOUD_IDENTITY_API_VERSION}'
+)
 
 _cloud_identity_service = googleapiclient.discovery.build(
     _CLOUD_IDENTITY_SERVICE_NAME,
