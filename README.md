@@ -2,8 +2,7 @@
 
 This is a Python library containing convenience functions that are specific to the CPG.
 
-On every merge with the `main` branch, a new version gets published in the `cpg` conda
-channel. In order to install the library in a conda environment, run:
+In order to install the library in a conda environment, run:
 
 ```bash
 conda install -c cpg cpg-utils
@@ -14,3 +13,5 @@ To use the library, import functions like this:
 ```python
 from cpg_utils.cloud import is_google_group_member
 ```
+
+We use `bump2version` for incrementing the library's semantic version. A new conda package gets published automatically in the `cpg` conda channel whenever a version bump commit is merged with the `main` branch.
