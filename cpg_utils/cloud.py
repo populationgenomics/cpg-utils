@@ -2,6 +2,7 @@
 
 import logging
 import googleapiclient.discovery
+from google.auth import jwt
 
 _CLOUD_IDENTITY_SERVICE_NAME = 'cloudidentity.googleapis.com'
 _CLOUD_IDENTITY_API_VERSION = 'v1'
@@ -47,3 +48,15 @@ def is_google_group_member(user: str, group: str) -> bool:
     except googleapiclient.errors.HttpError as e:  # Failed lookups result in a 403.
         logging.warning(e)
         return False
+
+
+def email_from_id_token(auth_header: str) -> str:
+    """Decodes the ID token (JWT) to get the email address of the caller.
+
+    See http://bit.ly/2YAIkzy for details.
+
+    This function assumes that the token has been verified beforehand."""
+
+    id_token = auth_header[7:]  # Strip the 'bearer' / 'Bearer' prefix.
+    id_info = jwt.decode(id_token, verify=False)
+    return id_info['email']
