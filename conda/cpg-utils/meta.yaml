@@ -17,6 +17,7 @@ requirements:
   run:
     - python
     - google-api-python-client
+    - google-auth
 
 about:
   home: {{ data['url'] }}

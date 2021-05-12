@@ -14,4 +14,4 @@ To use the library, import functions like this:
 from cpg_utils.cloud import is_google_group_member
 ```
 
-We use `bump2version` for incrementing the library's semantic version. A new conda package gets published automatically in the `cpg` conda channel whenever a version bump commit is merged with the `main` branch.
+We use `bumpversion` for incrementing the library's semantic version. A new conda package gets published automatically in the `cpg` conda channel whenever a version bump commit is merged with the `main` branch.

@@ -8,3 +8,4 @@ dependencies:
   - pylint
   - bumpversion
   - google-api-python-client
+  - google-auth
