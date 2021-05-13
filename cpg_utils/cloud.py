@@ -50,13 +50,11 @@ def is_google_group_member(user: str, group: str) -> bool:
         return False
 
 
-def email_from_id_token(auth_header: str) -> str:
+def email_from_id_token(id_token: str) -> str:
     """Decodes the ID token (JWT) to get the email address of the caller.
 
     See http://bit.ly/2YAIkzy for details.
 
     This function assumes that the token has been verified beforehand."""
 
-    id_token = auth_header[7:]  # Strip the 'bearer' / 'Bearer' prefix.
-    id_info = jwt.decode(id_token, verify=False)
-    return id_info['email']
+    return jwt.decode(id_token, verify=False)['email']
