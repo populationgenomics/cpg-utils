@@ -16,7 +16,6 @@ requirements:
     - python
   run:
     - python
-    - google-api-python-client
     - google-auth
 
 about:
