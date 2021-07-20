@@ -8,3 +8,4 @@ dependencies:
   - pylint
   - bumpversion
   - google-auth
+  - google-cloud-secret-manager

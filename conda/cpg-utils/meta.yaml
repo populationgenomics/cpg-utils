@@ -17,6 +17,7 @@ requirements:
   run:
     - python
     - google-auth
+    - google-cloud-secret-manager
 
 about:
   home: {{ data['url'] }}
