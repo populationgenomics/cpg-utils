@@ -50,5 +50,10 @@ def write_secret(project_id: str, secret_name: str, secret_value: str) -> None:
 
     # Disable all previous versions.
     for version in secret_manager.list_secret_versions(request={'parent': secret_path}):
-        if version.name != response.name:  # Don't disable the latest version.
+        # Don't disable the latest version and don't attempt to change the state of
+        # destroyed / already disabled secrets.
+        if (
+            version.name != response.name
+            and version.state == secretmanager.SecretVersion.State.ENABLED
+        ):
             secret_manager.disable_secret_version(request={'name': version.name})
