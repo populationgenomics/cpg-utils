@@ -1,15 +1,26 @@
-from typing import List
-
-import json
+# pylint: disable=import-outside-toplevel
+"""
+Sample-metadata related functions
+    https://github.com/populationgenomics/sample-metadata
+"""
+from typing import List, Dict
 
 from os import getenv
-
+import json
 import requests
 
 HOST = 'https://sample-metadata.populationgenomics.org.au/api/v1/'
 
 
-def get_sample_id_map_with_project(project: str, internal_ids: List[str]):
+def get_sample_id_map_with_project(
+    project: str, internal_ids: List[str]
+) -> Dict[str, str]:
+    """
+    Get sample-id map for listed internal_ids, specifying a project:
+        {internal_id: external_id}.
+    Specifying a project is a quicker and easier request
+    for the sample-metadata server
+    """
     path = f'{project}/sample/id-map/internal'
     url = HOST + path
     resp = requests.post(url, json.dumps(internal_ids), headers=get_auth_header(url))
@@ -17,7 +28,13 @@ def get_sample_id_map_with_project(project: str, internal_ids: List[str]):
     return resp.json()
 
 
-def get_sample_id_map_for_all_samples_with_project(project: str):
+def get_sample_id_map_for_all_samples_with_project(project: str) -> Dict[str, str]:
+    """
+    Get sample-id map for all samples, specifying a project:
+        {internal_id: external_id}.
+    Specifying a project is a quicker and easier request
+    for the sample-metadata server
+    """
     path = f'{project}/sample/id-map/internal/all'
     url = HOST + path
     resp = requests.get(url, headers=get_auth_header(url))
@@ -25,14 +42,20 @@ def get_sample_id_map_for_all_samples_with_project(project: str):
     return resp.json()
 
 
-def get_sample_id_map(internal_ids: List[str]):
+def get_sample_id_map(internal_ids: List[str]) -> Dict[str, str]:
+    """
+    Get sample-id map for listed samples without knowing a project:
+        {internal_id: external_id}.
+    If you know the project, you should specify the project.
+    """
     path = 'sample-map'
     url = HOST + path
     resp = requests.post(url, json.dumps(internal_ids), headers=get_auth_header(url))
     return resp.json()
 
 
-def get_auth_header(url):
+def get_auth_header(url) -> Dict[str, str]:
+    """Get Authorization header"""
     return {'Authorization': f'Bearer {_get_google_auth_token(url)}'}
 
 
@@ -41,18 +64,28 @@ def get_auth_header(url):
 #     return ht.annotate_rows(external_id=)
 
 
-def _get_google_auth_token(url) -> str:
+def _get_google_auth_token(url, use_service_account=None) -> str:
+    """
+    Get google-auth token, by default for service-account. Can use a locally
+    authenticated account by exporting the following env variable:
+
+        export SM_USE_SERVICE_ACCOUNT=false
+    """
     # https://stackoverflow.com/a/55804230
     # command = ['gcloud', 'auth', 'print-identity-token']
     import google.oauth2.id_token
     import google.auth.exceptions
     import google.auth.transport.requests
 
-    # ie: use service account identity token by default, then fallback otherwise
-    use_service_account = str(getenv('SM_USE_SERVICE_ACCOUNT', 'true')).lower() in (
-        'true',
-        '1',
-    )
+    # ie: use service account identity token by default
+    if use_service_account is None:
+        truthy_vals = (
+            'true',
+            '1',
+        )
+        use_service_account = (
+            str(getenv('SM_USE_SERVICE_ACCOUNT', 'true')).lower() in truthy_vals
+        )
 
     if use_service_account:
         try:
