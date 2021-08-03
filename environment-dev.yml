@@ -9,3 +9,4 @@ dependencies:
   - bumpversion
   - google-auth
   - google-cloud-secret-manager
+  - requests
