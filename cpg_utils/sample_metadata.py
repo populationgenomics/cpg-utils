@@ -3,11 +3,17 @@
 Sample-metadata related functions
     https://github.com/populationgenomics/sample-metadata
 """
-from typing import List, Dict
+from typing import List, Dict, Optional
 
 from os import getenv
 import json
+import logging
+
 import requests
+import google.oauth2.id_token
+import google.auth.exceptions
+import google.auth.transport.requests
+
 
 HOST = 'https://sample-metadata.populationgenomics.org.au/api/v1/'
 
@@ -23,7 +29,7 @@ def get_sample_id_map_with_project(
     """
     path = f'{project}/sample/id-map/internal'
     url = HOST + path
-    resp = requests.post(url, json.dumps(internal_ids), headers=get_auth_header(url))
+    resp = requests.post(url, json.dumps(internal_ids), headers=_get_auth_header())
     resp.raise_for_status()
     return resp.json()
 
@@ -37,7 +43,7 @@ def get_sample_id_map_for_all_samples_with_project(project: str) -> Dict[str, st
     """
     path = f'{project}/sample/id-map/internal/all'
     url = HOST + path
-    resp = requests.get(url, headers=get_auth_header(url))
+    resp = requests.get(url, headers=_get_auth_header())
     resp.raise_for_status()
     return resp.json()
 
@@ -50,57 +56,79 @@ def get_sample_id_map(internal_ids: List[str]) -> Dict[str, str]:
     """
     path = 'sample-map'
     url = HOST + path
-    resp = requests.post(url, json.dumps(internal_ids), headers=get_auth_header(url))
+    resp = requests.post(url, json.dumps(internal_ids), headers=_get_auth_header())
     return resp.json()
 
 
-def get_auth_header(url) -> Dict[str, str]:
-    """Get Authorization header"""
-    return {'Authorization': f'Bearer {_get_google_auth_token(url)}'}
-
-
-# def annotation_ht(ht, key):
-#
-#     return ht.annotate_rows(external_id=)
-
-
-def _get_google_auth_token(url, use_service_account=None) -> str:
+def annotate_mt_with_external_ids(
+    mt, project: Optional[str], key='s', annotate_column_name='external_id'
+):
     """
-    Get google-auth token, by default for service-account. Can use a locally
-    authenticated account by exporting the following env variable:
+    Annotate a matrix table with the external id:
+    - By default, find external ids in column {key='s'}
+    - Annotate with name {annotate_column_name='external_id'}
+    """
+    import hail as hl
 
-        export SM_USE_SERVICE_ACCOUNT=false
+    keys = mt[key].collect()
+    if project:
+        id_map = get_sample_id_map_with_project(project, keys)
+    else:
+        id_map = get_sample_id_map(keys)
+
+    id_map_expr = hl.literal(id_map)
+
+    annotation = {annotate_column_name: id_map_expr.get(mt[key])}
+    return mt.annotate_cols(**annotation)
+
+
+# UTIL
+
+
+def _get_auth_header() -> Dict[str, str]:
+    """Get Authorization header"""
+    return {'Authorization': f'Bearer {_get_google_auth_token()}'}
+
+
+def _get_google_auth_token(
+    url='https://sample-metadata-api-mnrpw3mdza-ts.a.run.app/',
+) -> str:
+    """
+    Get google auth token in two ways:
+    - if GOOGLE_APPLICATION_CREDENTIALS is set, then you
     """
     # https://stackoverflow.com/a/55804230
     # command = ['gcloud', 'auth', 'print-identity-token']
-    import google.oauth2.id_token
-    import google.auth.exceptions
-    import google.auth.transport.requests
+    # OR
 
-    # ie: use service account identity token by default
-    if use_service_account is None:
-        truthy_vals = (
-            'true',
-            '1',
-        )
-        use_service_account = (
-            str(getenv('SM_USE_SERVICE_ACCOUNT', 'true')).lower() in truthy_vals
-        )
+    # ie: use service account identity token by default, then fallback otherwise
+    credentials_filename = getenv('GOOGLE_APPLICATION_CREDENTIALS')
 
-    if use_service_account:
-        try:
+    if credentials_filename:
+        with open(credentials_filename, 'r') as f:
+            from google.oauth2 import service_account
+
+            info = json.load(f)
+            credentials_content = (
+                info if (info.get('type') == 'service_account') else None
+            )
+            credentials = service_account.IDTokenCredentials.from_service_account_info(
+                credentials_content, target_audience=url
+            )
             auth_req = google.auth.transport.requests.Request()
-            id_token = google.oauth2.id_token.fetch_id_token(auth_req, url)
+            credentials.refresh(auth_req)
+            return credentials.token
 
-            return id_token
-        except google.auth.exceptions.DefaultCredentialsError as e:
-            raise google.auth.exceptions.DefaultCredentialsError(
-                f"Couldn't find a local service account for GCP, if you mean to use your local credentials,"
-                f"please 'export SM_USE_SERVICE_ACCOUNT=false'. Original error: {str(e)}"
-            ) from e
     else:
-        creds, _ = google.auth.default()
-
-        auth_req = google.auth.transport.requests.Request()
-        creds.refresh(auth_req)
-        return creds.id_token
+        try:
+            creds, _ = google.auth.default()
+            auth_req = google.auth.transport.requests.Request()
+            creds.refresh(auth_req)
+            return creds.id_token
+        except google.auth.exceptions.RefreshError as e:
+            m = (
+                'Failed to refresh credentials, you might need to export '
+                f'"GOOGLE_APPLICATION_CREDENTIALS" due to {e}'
+            )
+            logging.critical(m)
+            raise Exception(m) from e
