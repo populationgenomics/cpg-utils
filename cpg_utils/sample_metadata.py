@@ -27,7 +27,7 @@ def get_sample_id_map_with_project(
     Specifying a project is a quicker and easier request
     for the sample-metadata server
     """
-    path = f'{project}/sample/id-map/internal'
+    path = f'sample/{project}/id-map/internal'
     url = HOST + path
     resp = requests.post(url, json.dumps(internal_ids), headers=_get_auth_header())
     resp.raise_for_status()
@@ -41,7 +41,7 @@ def get_sample_id_map_for_all_samples_with_project(project: str) -> Dict[str, st
     Specifying a project is a quicker and easier request
     for the sample-metadata server
     """
-    path = f'{project}/sample/id-map/internal/all'
+    path = f'sample/{project}/id-map/internal/all'
     url = HOST + path
     resp = requests.get(url, headers=_get_auth_header())
     resp.raise_for_status()
@@ -54,7 +54,7 @@ def get_sample_id_map(internal_ids: List[str]) -> Dict[str, str]:
         {internal_id: external_id}.
     If you know the project, you should specify the project.
     """
-    path = 'sample-map'
+    path = 'sample/id-map/internal'
     url = HOST + path
     resp = requests.post(url, json.dumps(internal_ids), headers=_get_auth_header())
     return resp.json()
