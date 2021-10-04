@@ -105,7 +105,7 @@ def _get_google_auth_token(
     credentials_filename = getenv('GOOGLE_APPLICATION_CREDENTIALS')
 
     if credentials_filename:
-        with open(credentials_filename, 'r') as f:
+        with open(credentials_filename, 'r', encoding='utf-8') as f:
             from google.oauth2 import service_account
 
             info = json.load(f)
