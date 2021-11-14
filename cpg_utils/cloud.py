@@ -28,11 +28,16 @@ def read_secret(project_id: str, secret_name: str) -> Optional[str]:
         response = secret_manager.access_secret_version(
             request={'name': f'{secret_path}/versions/latest'}
         )
+        return response.payload.data.decode('UTF-8')
     except google.api_core.exceptions.ClientError:
         # Fail gracefully if there's no secret version yet.
         return None
-
-    return response.payload.data.decode('UTF-8')
+    except AttributeError:
+        # Sometimes the google API fails when no version is present, with:
+        #   File "{site-packages}/google/api_core/exceptions.py",
+        #   line 532, in from_grpc_error if isinstance(rpc_exc, grpc.Call) or _is_informative_grpc_error(rpc_exc):
+        #   AttributeError: 'NoneType' object has no attribute 'Call'
+        return None
 
 
 def write_secret(project_id: str, secret_name: str, secret_value: str) -> None:
