@@ -8,7 +8,8 @@ on:
 jobs:
   build-publish:
     # Run on merge to main, where the commit name starts with "Bump version:" (for bumpversion)
-    if: "startsWith(github.event.head_commit.message, 'Bump version:')"
+    # OR where the workflow was manually dispatched
+    if: "${{ startsWith(github.event.head_commit.message, 'Bump version:') || github.event_name == 'workflow_dispatch' }}"
     runs-on: ubuntu-latest
     defaults:
       run:
