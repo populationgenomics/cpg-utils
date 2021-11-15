@@ -3,6 +3,8 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch: {}
+
 jobs:
   build-publish:
     # Run on merge to main, where the commit name starts with "Bump version:" (for bumpversion)
