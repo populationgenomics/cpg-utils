@@ -12,6 +12,10 @@ setuptools.setup(
     url=f'https://github.com/populationgenomics/cpg-utils',
     license='MIT',
     packages=['cpg_utils'],
+    install_requires=[
+        'google-auth',
+        'google-cloud-secret-manager',
+    ],
     include_package_data=True,
     keywords='bioinformatics',
     classifiers=[
