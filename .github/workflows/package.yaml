@@ -1,18 +1,15 @@
 name: Package
 on:
-  # Building on pull-requests and pushes to main, but restricting publishing
-  # to push events with `if: github.event_name == 'push'` for specific steps
+  # Building on pull-requests, manual dispatch, and pushes to main; but restricting
+  # publishing only to push and manual dispatch.
   pull_request:
+  workflow_dispatch:
   push:
     branches:
       - main
-  workflow_dispatch: {}
 
 jobs:
   package:
-    # Run when merging into main with a commit that starts with "Bump version:"
-    # OR where the workflow was manually dispatched:
-    if: "${{ startsWith(github.event.head_commit.message, 'Bump version:') || github.event_name == 'workflow_dispatch' }}"
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -35,7 +32,9 @@ jobs:
         run: python -c "import cpg_utils.cloud"
 
       - name: Publish the wheel to PyPI
-        if: github.event_name == 'push'
+        # Run when merging into main with a commit that starts with "Bump version:"
+        # OR where the workflow was manually dispatched:
+        if: "${{ startsWith(github.event.head_commit.message, 'Bump version:') || github.event_name == 'workflow_dispatch' }}"
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           user: __token__
