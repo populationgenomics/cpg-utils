@@ -3,6 +3,7 @@
 import asyncio
 import os
 import hail as hl
+import hailtop.batch as hb
 
 
 def init_query_service():
@@ -21,3 +22,28 @@ def init_query_service():
             remote_tmpdir=f'gs://{hail_bucket}/batch-tmp',
         )
     )
+
+
+def copy_common_env(job: hb.job.Job):
+    """Copies common environment variables that we use to run Hail jobs.
+
+    These variables are typically set up in the analysis-runner driver, but need to be
+    passed through for "batch-in-batch" use cases.
+
+    The environment variable values are extracted from the current process and
+    copied to the environment dictionary of the given Hail Batch job."""
+
+    for key in (
+        'DRIVER_IMAGE',
+        'DATASET',
+        'ACCESS_LEVEL',
+        'HAIL_BILLING_PROJECT',
+        'HAIL_BUCKET',
+        'HAIL_JAR_URL',
+        'HAIL_SHA',
+        'DATASET_GCP_PROJECT',
+        'OUTPUT',
+    ):
+        val = os.getenv(key)
+        if val:
+            job.env(key, val)
