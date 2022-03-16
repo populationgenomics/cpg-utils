@@ -2,6 +2,7 @@
 
 import asyncio
 import os
+from typing import Optional
 import hail as hl
 import hailtop.batch as hb
 
@@ -47,11 +48,12 @@ def copy_common_env(job: hb.job.Job) -> None:
             job.env(key, val)
 
 
-def remote_tmpdir() -> str:
+def remote_tmpdir(hail_bucket: Optional[str] = None) -> str:
     """Returns the remote_tmpdir to use for Hail initialization.
 
-    Requires the HAIL_BUCKET environment variable to be set."""
+    If `hail_bucket` is not specified explicitly, requires the HAIL_BUCKET environment variable to be set."""
 
-    hail_bucket = os.getenv('HAIL_BUCKET')
-    assert hail_bucket
+    if not hail_bucket:
+        hail_bucket = os.getenv('HAIL_BUCKET')
+        assert hail_bucket
     return f'gs://{hail_bucket}/batch-tmp'
