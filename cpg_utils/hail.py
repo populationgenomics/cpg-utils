@@ -38,7 +38,7 @@ def copy_common_env(job: hb.job.Job) -> None:
         'CPG_DATASET_GCP_PROJECT',
         'CPG_DATASET_PATH',
         'CPG_DRIVER_IMAGE',
-        'CPG_OUTPUT',
+        'CPG_OUTPUT_SUFFIX',
         'HAIL_BILLING_PROJECT',
         'HAIL_BUCKET',
         'HAIL_JAR_URL',
@@ -64,8 +64,8 @@ def dataset_path(suffix: str, category: Optional[str] = None) -> str:
     """Returns a full path for the current dataset, given a category and path suffix.
 
     This is useful for specifying input files, as in contrast to the output_path
-    function, dataset_path does _not_ take the CPG_OUTPUT environment variable into
-    account.
+    function, dataset_path does _not_ take the CPG_OUTPUT_SUFFIX environment variable
+    into account.
 
     Examples
     --------
@@ -119,7 +119,7 @@ def dataset_path(suffix: str, category: Optional[str] = None) -> str:
 def output_path(suffix: str, category: Optional[str] = None) -> str:
     """Returns a full path for the given category and path suffix.
 
-    In contrast to the dataset_path function, output_path takes the CPG_OUTPUT
+    In contrast to the dataset_path function, output_path takes the CPG_OUTPUT_SUFFIX
     environment variable into account.
 
     Examples
@@ -135,7 +135,7 @@ def output_path(suffix: str, category: Optional[str] = None) -> str:
 
     Notes
     -----
-    Requires the `CPG_OUTPUT` environment variable to be set, in addition to the
+    Requires the `CPG_OUTPUT_SUFFIX` environment variable to be set, in addition to the
     requirements for `dataset_path`.
 
     Parameters
@@ -152,6 +152,6 @@ def output_path(suffix: str, category: Optional[str] = None) -> str:
     -------
     str
     """
-    output = os.getenv('CPG_OUTPUT')
+    output = os.getenv('CPG_OUTPUT_SUFFIX')
     assert output
     return dataset_path(os.path.join(output, suffix), category)
