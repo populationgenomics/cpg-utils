@@ -45,6 +45,7 @@ def copy_common_env(job: hb.job.Job) -> None:
         'CPG_DATASET_GCP_PROJECT',
         'CPG_DATASET_PATH',
         'CPG_DRIVER_IMAGE',
+        'CPG_IMAGE_REGISTRY_PREFIX',
         'CPG_OUTPUT_PREFIX',
         'HAIL_BILLING_PROJECT',
         'HAIL_BUCKET',
@@ -160,3 +161,29 @@ def output_path(suffix: str, category: Optional[str] = None) -> str:
     output = os.getenv('CPG_OUTPUT_PREFIX')
     assert output
     return dataset_path(os.path.join(output, suffix), category)
+
+
+def image_path(suffix: str) -> str:
+    """Returns a full path to a container image in the default registry.
+
+    Examples
+    --------
+    >>> image_path('bcftools:1.10.2')
+    'australia-southeast1-docker.pkg.dev/cpg-common/images/bcftools:1.10.2'
+
+    Notes
+    -----
+    Requires the `CPG_IMAGE_REGISTRY_PREFIX` environment variable to be set.
+
+    Parameters
+    ----------
+    suffix : str
+        Describes the location within the registry.
+
+    Returns
+    -------
+    str
+    """
+    prefix = os.getenv('CPG_IMAGE_REGISTRY_PREFIX')
+    assert prefix
+    return f'{prefix}/{suffix}'
