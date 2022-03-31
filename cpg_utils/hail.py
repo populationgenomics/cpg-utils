@@ -7,10 +7,16 @@ import hail as hl
 import hailtop.batch as hb
 
 
-def init_batch():
+def init_batch(**kwargs):
     """Initializes the Hail Query Service from within Hail Batch.
 
-    Requires the HAIL_BILLING_PROJECT and HAIL_BUCKET environment variables to be set."""
+    Requires the HAIL_BILLING_PROJECT and HAIL_BUCKET environment variables to be set.
+
+    Parameters
+    ----------
+    kwargs : keyword arguments
+        Forwarded directly to `hl.init_batch`.
+    """
 
     billing_project = os.getenv('HAIL_BILLING_PROJECT')
     assert billing_project
@@ -19,6 +25,7 @@ def init_batch():
             default_reference='GRCh38',
             billing_project=billing_project,
             remote_tmpdir=remote_tmpdir(),
+            **kwargs,
         )
     )
 
