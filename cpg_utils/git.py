@@ -97,15 +97,20 @@ def get_repo_name_from_remote(remote_name: str) -> str:
     """
 
     repo = None
-    if remote_name.startswith('http'):
-        match = re.match(r'https:\/\/[A-z0-9\.]+?\/(.+?)\/(.+)$', remote_name)
-        organization, repo = match.groups()
+    try:
+        if remote_name.startswith('http'):
+            match = re.match(r'https:\/\/[A-z0-9\.]+?\/.+?\/(?P<repo>.+)$', remote_name)
+            if match:
+                repo = match.group('repo')
 
-    elif remote_name.startswith('git@'):
-        match = re.match(r'git@[A-z0-9\.]+?:(.+?)\/(.+)$', remote_name)
-        organization, repo = match.groups()
+        elif remote_name.startswith('git@'):
+            match = re.match(r'git@[A-z0-9\.]+?:.+?\/(?P<repo>.+)$', remote_name)
+            if match:
+                repo = match.group('repo')
+    except AttributeError as ae:
+        raise Exception(f'Unsupported remote format: "{remote_name}"') from ae
 
-    if not repo:
+    if repo is None:
         raise Exception(f'Unsupported remote format: "{remote_name}"')
 
     if repo.endswith('.git'):
@@ -134,8 +139,8 @@ def prepare_git_job(
     repo_name: str,
     commit: str,
     is_test: bool = True,
-    print_all_statements: bool =True,
-    key_path: str = '/gsa-key/key.json'
+    print_all_statements: bool = True,
+    key_path: str = '/gsa-key/key.json',
 ):
     """
     Takes a hail batch job, and:
@@ -166,9 +171,7 @@ def prepare_git_job(
         job.command('set -x')
 
     # activate the google service account
-    job.command(
-        f'gcloud -q auth activate-service-account --key-file=$AUTH_KEY_PATH'
-    )
+    job.command(f'gcloud -q auth activate-service-account --key-file=$AUTH_KEY_PATH')
 
     # Note: for private GitHub repos we'd need to use a token to clone.
     # Any job commands here are evaluated in a bash shell, so user arguments should
