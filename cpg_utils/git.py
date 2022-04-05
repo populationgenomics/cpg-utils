@@ -140,14 +140,15 @@ def prepare_git_job(
     commit: str,
     is_test: bool = True,
     print_all_statements: bool = True,
-    key_path: str = '/gsa-key/key.json',
 ):
     """
     Takes a hail batch job, and:
-        * Activates the google service account
         * Clones the repository
             * if access_level != "test": check the desired commit is on 'main'
         * Check out the specific commit
+
+    Requires the authentication command to be executed prior to calling this method
+        - hail.gcloud_authenticate_job
 
     Parameters
     ----------
@@ -157,21 +158,15 @@ def prepare_git_job(
     commit                  - The commit hash to check out
     is_test                 - CPG specific: only Main commits can run on Main data
     print_all_statements    - logging toggle
-    key_path                - path to auth key within the container/environment
 
     Returns
     -------
     No return required
     """
 
-    job.env('AUTH_KEY_PATH', key_path)
-
     # Use "set -x" to print the commands for easier debugging.
     if print_all_statements:
         job.command('set -x')
-
-    # activate the google service account
-    job.command(f'gcloud -q auth activate-service-account --key-file=$AUTH_KEY_PATH')
 
     # Note: for private GitHub repos we'd need to use a token to clone.
     # Any job commands here are evaluated in a bash shell, so user arguments should
