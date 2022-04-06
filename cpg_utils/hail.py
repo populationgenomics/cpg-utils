@@ -189,7 +189,7 @@ def image_path(suffix: str) -> str:
     return f'{prefix}/{suffix}'
 
 
-def authenticate_job(
+def authenticate_cloud_credentials_in_job(
     job,
     print_all_statements: bool = True,
 ):
