@@ -148,7 +148,7 @@ def prepare_git_job(
         * Check out the specific commit
 
     Requires the authentication command to be executed prior to calling this method
-        - hail.gcloud_authenticate_job
+        - hail.authenticate_job
 
     Parameters
     ----------

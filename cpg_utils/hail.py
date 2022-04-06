@@ -189,13 +189,16 @@ def image_path(suffix: str) -> str:
     return f'{prefix}/{suffix}'
 
 
-def gcloud_authenticate_job(
+def authenticate_job(
     job,
     key_path: str = '/gsa-key/key.json',
     print_all_statements: bool = True,
 ):
     """
-    Takes a hail batch job, activates the google service account
+    Takes a hail batch job, activates the appropriate service account
+
+    Once multiple environments are supported this method will decide
+    on which authentication method is appropriate
 
     Parameters
     ----------
