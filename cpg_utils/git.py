@@ -147,9 +147,6 @@ def prepare_git_job(
             * if access_level != "test": check the desired commit is on 'main'
         * Check out the specific commit
 
-    Requires the authentication command to be executed prior to calling this method
-        - hail.authenticate_job
-
     Parameters
     ----------
     job                     - A hail BashJob
