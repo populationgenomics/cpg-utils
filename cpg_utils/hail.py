@@ -187,3 +187,33 @@ def image_path(suffix: str) -> str:
     prefix = os.getenv('CPG_IMAGE_REGISTRY_PREFIX')
     assert prefix
     return f'{prefix}/{suffix}'
+
+
+def authenticate_cloud_credentials_in_job(
+    job,
+    print_all_statements: bool = True,
+):
+    """
+    Takes a hail batch job, activates the appropriate service account
+
+    Once multiple environments are supported this method will decide
+    on which authentication method is appropriate
+
+    Parameters
+    ----------
+    job
+        * A hail BashJob
+    print_all_statements
+        * logging toggle
+
+    Returns
+    -------
+    None
+    """
+
+    # Use "set -x" to print the commands for easier debugging.
+    if print_all_statements:
+        job.command('set -x')
+
+    # activate the google service account
+    job.command(f'gcloud -q auth activate-service-account --key-file=/gsa-key/key.json')
