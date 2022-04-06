@@ -191,7 +191,6 @@ def image_path(suffix: str) -> str:
 
 def authenticate_job(
     job,
-    key_path: str = '/gsa-key/key.json',
     print_all_statements: bool = True,
 ):
     """
@@ -204,8 +203,6 @@ def authenticate_job(
     ----------
     job
         * A hail BashJob
-    key_path
-        * path to auth key within the container
     print_all_statements
         * logging toggle
 
@@ -215,7 +212,7 @@ def authenticate_job(
     """
 
     # set the key path variable inside the job environment
-    job.env('AUTH_KEY_PATH', key_path)
+    job.env('AUTH_KEY_PATH', '/gsa-key/key.json')
 
     # Use "set -x" to print the commands for easier debugging.
     if print_all_statements:
