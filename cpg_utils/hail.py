@@ -211,12 +211,9 @@ def authenticate_job(
     None
     """
 
-    # set the key path variable inside the job environment
-    job.env('AUTH_KEY_PATH', '/gsa-key/key.json')
-
     # Use "set -x" to print the commands for easier debugging.
     if print_all_statements:
         job.command('set -x')
 
     # activate the google service account
-    job.command(f'gcloud -q auth activate-service-account --key-file=$AUTH_KEY_PATH')
+    job.command(f'gcloud -q auth activate-service-account --key-file=/gsa-key/key.json')
