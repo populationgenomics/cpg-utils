@@ -169,7 +169,9 @@ def prepare_git_job(
     # Any job commands here are evaluated in a bash shell, so user arguments should
     # be escaped to avoid command injection.
     job.command(
-        quote(f'git clone --recurse-submodules https://github.com/{organisation}/{repo_name}.git')
+        quote(
+            f'git clone --recurse-submodules https://github.com/{organisation}/{repo_name}.git'
+        )
     )
     job.command(f'cd {quote(repo_name)}')
 
