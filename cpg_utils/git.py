@@ -1,4 +1,6 @@
-"""Helper functions for working with Git repositories."""
+"""
+Helper functions for working with Git repositories
+"""
 
 
 from typing import List
@@ -10,8 +12,20 @@ from shlex import quote
 
 
 def get_output_of_command(command: List[str], description: str) -> str:
-    """subprocess.check_output wrapper that returns string output and raises detailed
-    exceptions on error."""
+    """
+    subprocess.check_output wrapper that returns string output and raises detailed
+    exceptions on error.
+
+    Parameters
+    ----------
+    command:     list of strings creating a full command
+    description: meaningful message for error logging
+
+    Returns
+    -------
+    stripped output string if command was successful
+
+    """
     try:
         return subprocess.check_output(command).decode().strip()
     # Handle and rethrow KeyboardInterrupt error to stop global exception catch
@@ -34,6 +48,14 @@ def get_relative_script_path_from_git_root(script_name: str) -> str:
     to the current directory, and append the script path.
     For example, the relative path to this script (from git root) is:
         cpg-utils/git.py
+
+    Parameters
+    ----------
+    script_name
+
+    Returns
+    -------
+    fully qualified script path from repo root
     """
     base = get_relative_path_from_git_root()
     return os.path.join(base, script_name)
@@ -49,16 +71,26 @@ def get_relative_path_from_git_root() -> str:
 
 
 def get_git_default_remote() -> str:
-    """Returns the git remote of 'origin',
+    """
+    Returns the git remote of 'origin',
     e.g. https://github.com/populationgenomics/cpg-utils
+
+    Returns
+    -------
+
     """
     command = ['git', 'remote', 'get-url', 'origin']
     return get_output_of_command(command, 'get Git remote of origin')
 
 
 def get_git_repo_root() -> str:
-    """Returns the git repository directory root,
+    """
+    Returns the git repository directory root,
     e.g. /Users/foo/repos/cpg-utils
+
+    Returns
+    -------
+
     """
     command = ['git', 'rev-parse', '--show-toplevel']
     repo_root = get_output_of_command(command, 'get Git repo directory')
@@ -66,7 +98,13 @@ def get_git_repo_root() -> str:
 
 
 def get_git_commit_ref_of_current_repository() -> str:
-    """Returns the commit SHA at the current HEAD."""
+    """
+    Returns the commit SHA at the current HEAD
+
+    Returns
+    -------
+
+    """
     command = ['git', 'rev-parse', 'HEAD']
     return get_output_of_command(command, 'get latest Git commit')
 
@@ -74,6 +112,10 @@ def get_git_commit_ref_of_current_repository() -> str:
 def get_repo_name_from_current_directory() -> str:
     """
     Gets the repo name from the default remote
+
+    Returns
+    -------
+
     """
     return get_repo_name_from_remote(get_git_default_remote())
 
@@ -124,6 +166,14 @@ def check_if_commit_is_on_remote(commit: str) -> bool:
     Returns 'True' if the commit is available on a remote branch.
     This relies on the current environment to be up-to-date.
     It asks if the local environment knows a remote branch with the commit.
+
+    Parameters
+    ----------
+    commit
+
+    Returns
+    -------
+
     """
     command = ['git', 'branch', '-r', '--contains', commit]
     try:
