@@ -218,7 +218,9 @@ def prepare_git_job(
     # Note: for private GitHub repos we'd need to use a token to clone.
     # Any job commands here are evaluated in a bash shell, so user arguments should
     # be escaped to avoid command injection.
-    job.command(f'git clone --recurse-submodules https://github.com/{quote(organisation)}/{quote(repo_name)}.git')
+    job.command(
+        f'git clone --recurse-submodules https://github.com/{quote(organisation)}/{quote(repo_name)}.git'
+    )
     job.command(f'cd {quote(repo_name)}')
 
     # Except for the "test" access level, we check whether commits have been
