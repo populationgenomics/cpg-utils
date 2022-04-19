@@ -28,7 +28,17 @@ def group_name_to_filename(
     return os.path.join(group_cache_location, base, version)
 
 
-def get_group_members(
+def get_group_members(group: str):
+    """Returns the members of the given group.
+
+    :param group: str The group to query.
+    :returns: List[str] Members of the group
+    """
+    # TODO: change this to call serverless function
+    return get_group_members_direct(group)
+
+
+def get_group_members_direct(
     group: str, group_cache_location=DEFAULT_GROUP_CACHE_LOCATION
 ) -> List[str]:
     """Returns the members of the given group.
