@@ -15,6 +15,7 @@ setuptools.setup(
     install_requires=[
         'google-auth',
         'google-cloud-secret-manager',
+        'cloudpathlib',
     ],
     include_package_data=True,
     keywords='bioinformatics',
