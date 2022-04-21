@@ -15,3 +15,10 @@ from cpg_utils.cloud import is_google_group_member
 ```
 
 We use `bumpversion` for incrementing the library's semantic version. A new conda package gets published automatically in the `cpg` conda channel whenever a version bump commit is merged with the `main` branch.
+
+
+## Contents
+
+- [Methods to facilitate cloud computing](documentation/cloud.md)
+- [Helper functions for Hail Batch jobs](documentation/hail_batch.md)
+- [Cloning git repositories inside Hail Batch jobs](documentation/git.md)
