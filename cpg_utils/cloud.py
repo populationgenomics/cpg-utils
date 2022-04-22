@@ -41,7 +41,19 @@ def read_secret(project_id: str, secret_name: str) -> Optional[str]:
 
 
 def write_secret(project_id: str, secret_name: str, secret_value: str) -> None:
-    """Adds a new version for a GCP Secret Manager secret and disables all previous versions."""
+    """
+    Adds a new version for a GCP Secret Manager secret and disables all previous versions
+
+    Parameters
+    ----------
+    project_id
+    secret_name
+    secret_value
+
+    Returns
+    -------
+
+    """
 
     secret_manager = secretmanager.SecretManagerServiceClient()
     secret_path = secret_manager.secret_path(project_id, secret_name)
