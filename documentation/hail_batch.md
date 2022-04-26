@@ -21,7 +21,7 @@ def main():
 ```
 
 When running a Hail Batch workflow using the analysis-runner, the core Driver image will
-have authentication set up, but separate child batches will start with fresh containers.
+have authentication set up, but separate child batches will start with fresh jobs.
 When setting up those additional environments, helper methods are available to assist in
 finding template images to use for child batches, and activating authentication within
 those environments.
