@@ -4,6 +4,7 @@ from os import getenv
 from typing import Any, Dict, Optional
 
 deploy_config: "DeployConfig" = None
+server_config: Dict[str, Any] = None
 DEFAULT_CONFIG = {
     "cloud": "gcp",
     "sample_metadata_project": "sample-metadata",
@@ -44,6 +45,7 @@ class DeployConfig:
     def to_dict(self) -> Dict[str, str]:
         return self.__dict__.copy()
 
+
 def get_deploy_config() -> DeployConfig:
     global deploy_config
     if deploy_config is None:
@@ -58,6 +60,9 @@ def set_deploy_config(config: DeployConfig):
 
 
 def get_server_config() -> Dict[str, Any]:
-    from .secrets import read_secret
-    config_project = get_deploy_config().analysis_runner_project
-    return json.loads(read_secret(config_project, "server-config"))
+    global server_config
+    if server_config is None:
+        from .secrets import read_secret
+        config_project = get_deploy_config().analysis_runner_project
+        server_config = json.loads(read_secret(config_project, "server-config"))
+    return server_config
