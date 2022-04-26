@@ -1,0 +1,7 @@
+{
+    "cloud": "azure",
+    "sample_metadata_project": "cpgsm01",
+    "sample_metadata_host": "https://sm01.azurewebsites.net",
+    "analysis_runner_project": "cpgar01",
+    "analysis_runner_host": "https://ar01.azurewebsites.net"
+}

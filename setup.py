@@ -3,19 +3,20 @@
 import setuptools
 
 setuptools.setup(
-    name='cpg-utils',
+    name='cpg-utils-ms',
     # This tag is automatically updated by bumpversion
-    version='3.3.2',
-    description='Library of convenience functions specific to the CPG',
+    version='0.1.0',
+    description='Library of convenience functions specific to the CPG (MS version)',
     long_description=open('README.md').read(),
     long_description_content_type='text/markdown',
-    url=f'https://github.com/populationgenomics/cpg-utils',
+    url=f'https://github.com/gregsmi/cpg-utils',
     license='MIT',
     packages=['cpg_utils'],
     install_requires=[
         'google-auth',
         'google-cloud-secret-manager',
     ],
+    python_requires=">=3.8",
     include_package_data=True,
     keywords='bioinformatics',
     classifiers=[
