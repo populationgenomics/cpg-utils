@@ -19,6 +19,11 @@ def get_default_secret_manager() -> "SecretManager":
     return secret_manager
 
 
+def set_default_secret_manager(sm: "SecretManager") -> None:
+    global secret_manager
+    secret_manager = sm
+
+
 def read_secret(secret_host: str, secret_name: str):
     return get_default_secret_manager().read_secret(secret_host, secret_name)
 
