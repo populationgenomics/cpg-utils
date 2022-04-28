@@ -2,7 +2,7 @@
 
 import asyncio
 import os
-from typing import Optional, Union
+from typing import Optional
 
 import hail as hl
 import hailtop.batch as hb
@@ -36,7 +36,7 @@ def init_batch(**kwargs):
     )
 
 
-def copy_common_env(job: Union[hb.batch.job.BashJob, hb.batch.job.Job]) -> None:
+def copy_common_env(job: hb.batch.job.Job) -> None:
     """Copies common environment variables that we use to run Hail jobs.
 
     These variables are typically set up in the analysis-runner driver, but need to be
