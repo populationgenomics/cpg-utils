@@ -6,14 +6,15 @@ from cpg_utils.config import (
     DEFAULT_CONFIG,
     DeployConfig,
     get_deploy_config,
-    set_deploy_config
+    set_deploy_config,
+    set_deploy_config_from_env
 )
 
 
 def test_default_config(monkeypatch):
     monkeypatch.delenv("CPG_DEPLOY_CONFIG", raising=False)
     monkeypatch.delenv("CLOUD", raising=False)
-    set_deploy_config(DeployConfig.from_environment())
+    set_deploy_config_from_env()
     dc = get_deploy_config()
     assert dc.to_dict() == DEFAULT_CONFIG
 

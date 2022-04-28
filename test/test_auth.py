@@ -1,6 +1,6 @@
 import pytest
 from cpg_utils.auth import get_user_from_headers
-from cpg_utils.config import DeployConfig, set_deploy_config
+from cpg_utils.config import set_deploy_config_from_env
 
 # Mocked tokens from https://www.javainuse.com/jwtgenerator
 TEST_TOKEN1 = "eyJhbGciOiJIUzI1NiJ9.eyJSb2xlIjoiQWRtaW4iLCJJc3N1ZXIiOiJJc3N1ZXIiLCJVc2VybmFtZSI6IkphdmFJblVzZSIsImV4cCI6MTY1MDczNDA0NSwiaWF0IjoxNjUwNzM0MDQ1LCJlbWFpbCI6InRlc3QxQHRlc3QuY29tIn0.OJ-39xdDbIH8FDsdlwFsIwyDzgSbA_gOtYbRNhBmLxo"
@@ -12,7 +12,7 @@ def test_bogus_header(monkeypatch):
     assert get_user_from_headers({}) is None
     headers = { "x-goog-iap-jwt-assertion" : "bogus" }
     monkeypatch.setenv("CLOUD", "gcp")
-    set_deploy_config(DeployConfig.from_environment())
+    set_deploy_config_from_env()
     with pytest.raises(ValueError, match="Wrong number of segments in token"):
         get_user_from_headers(headers)
     headers = { "Authorization" : "Bearer bogus" }
@@ -27,10 +27,10 @@ def test_headers(monkeypatch):
         "Authorization" : "Bearer " + TEST_TOKEN3
     }
     monkeypatch.setenv("CLOUD", "gcp")
-    set_deploy_config(DeployConfig.from_environment())
+    set_deploy_config_from_env()
     assert get_user_from_headers(headers) == "test1@test.com"
     monkeypatch.setenv("CLOUD", "azure")
-    set_deploy_config(DeployConfig.from_environment())
+    set_deploy_config_from_env()
     assert get_user_from_headers(headers) == "test2@test.com"
     headers = {
         "x-goog-iap-jwt-assertion" : TEST_TOKEN1,

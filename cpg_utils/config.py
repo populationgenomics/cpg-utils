@@ -49,14 +49,18 @@ class DeployConfig:
 def get_deploy_config() -> DeployConfig:
     global deploy_config
     if deploy_config is None:
-        set_deploy_config(DeployConfig.from_environment())
+        set_deploy_config_from_env()
     return deploy_config
 
 
-def set_deploy_config(config: DeployConfig):
+def set_deploy_config(config: DeployConfig) -> None:
     global deploy_config
     logging.info(f"setting deploy_config: {json.dumps(config.__dict__)}")
     deploy_config = config
+
+
+def set_deploy_config_from_env() -> None:
+    set_deploy_config(DeployConfig.from_environment())
 
 
 def get_server_config() -> Dict[str, Any]:

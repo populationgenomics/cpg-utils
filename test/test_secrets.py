@@ -4,7 +4,7 @@ import azure.identity
 import azure.keyvault.secrets as secrets
 import pytest
 from cpg_utils.auth import check_dataset_access
-from cpg_utils.config import DeployConfig, set_deploy_config
+from cpg_utils.config import set_deploy_config_from_env
 from cpg_utils.secrets import (
     SecretManager,
     SecretManagerGCP,
@@ -59,7 +59,7 @@ def mock_get_client(*args, **kwargs):
 def test_cloud_secret(monkeypatch):
     monkeypatch.setattr(secretmanager, "SecretManagerServiceClient", mock_get_client)
     monkeypatch.setenv("CLOUD", "gcp")
-    set_deploy_config(DeployConfig.from_environment())
+    set_deploy_config_from_env()
     sm = get_default_secret_manager()
     assert isinstance(sm, SecretManagerGCP)
 
