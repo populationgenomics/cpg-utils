@@ -3,13 +3,19 @@
 import asyncio
 import os
 from typing import Optional
+
 import hail as hl
 import hailtop.batch as hb
 
 
-def init_batch(**kwargs):
-    """Initializes the Hail Query Service from within Hail Batch.
+GCLOUD_AUTH_COMMAND = (
+    'gcloud -q auth activate-service-account --key-file=/gsa-key/key.json'
+)
 
+
+def init_batch(**kwargs):
+    """
+    Initializes the Hail Query Service from within Hail Batch.
     Requires the HAIL_BILLING_PROJECT and HAIL_BUCKET environment variables to be set.
 
     Parameters
@@ -30,7 +36,7 @@ def init_batch(**kwargs):
     )
 
 
-def copy_common_env(job: hb.job.Job) -> None:
+def copy_common_env(job: hb.batch.job.Job) -> None:
     """Copies common environment variables that we use to run Hail jobs.
 
     These variables are typically set up in the analysis-runner driver, but need to be
@@ -67,7 +73,8 @@ def remote_tmpdir(hail_bucket: Optional[str] = None) -> str:
 
 
 def dataset_path(suffix: str, category: Optional[str] = None) -> str:
-    """Returns a full path for the current dataset, given a category and path suffix.
+    """
+    Returns a full path for the current dataset, given a category and path suffix.
 
     This is useful for specifying input files, as in contrast to the output_path
     function, dataset_path does _not_ take the CPG_OUTPUT_PREFIX environment variable
@@ -78,10 +85,10 @@ def dataset_path(suffix: str, category: Optional[str] = None) -> str:
     Assuming that the analysis-runner has been invoked with
     `--dataset fewgenomes --access-level test --output 1kg_pca/v42`:
 
-    >>> from analysis_runner import bucket_path
-    >>> bucket_path('1kg_densified/combined.mt')
+    >>> from cpg_utils.hail_batch import dataset_path
+    >>> dataset_path('1kg_densified/combined.mt')
     'gs://cpg-fewgenomes-test/1kg_densified/combined.mt'
-    >>> bucket_path('1kg_densified/report.html', 'web')
+    >>> dataset_path('1kg_densified/report.html', 'web')
     'gs://cpg-fewgenomes-test-web/1kg_densified/report.html'
 
     Notes
@@ -130,10 +137,12 @@ def output_path(suffix: str, category: Optional[str] = None) -> str:
 
     Examples
     --------
-    Assuming that the analysis-runner has been invoked with
+    If using the analysis-runner, the CPG_OUTPUT_PREFIX would be set to the argument
+    provided using the --output argument, e.g.
     `--dataset fewgenomes --access-level test --output 1kg_pca/v42`:
+    will use '1kg_pca/v42' as the base path to build upon in this method
 
-    >>> from analysis_runner import output_path
+    >>> from cpg_utils.hail_batch import output_path
     >>> output_path('loadings.ht')
     'gs://cpg-fewgenomes-test/1kg_pca/v42/loadings.ht'
     >>> output_path('report.html', 'web')
@@ -216,4 +225,4 @@ def authenticate_cloud_credentials_in_job(
         job.command('set -x')
 
     # activate the google service account
-    job.command(f'gcloud -q auth activate-service-account --key-file=/gsa-key/key.json')
+    job.command(GCLOUD_AUTH_COMMAND)
