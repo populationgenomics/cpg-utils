@@ -4,13 +4,8 @@ import azure.identity
 import azure.keyvault.secrets as secrets
 import pytest
 from cpg_utils.auth import check_dataset_access
-from cpg_utils.config import set_deploy_config_from_env
-from cpg_utils.secrets import (
-    SecretManager,
-    SecretManagerGCP,
-    get_default_secret_manager,
-    set_default_secret_manager
-)
+from cpg_utils.config import get_deploy_config, get_server_config, set_deploy_config_from_env
+from cpg_utils.secrets import SecretManager
 from google.cloud import secretmanager
 
 TEST_SERVER_CONFIG = json.dumps({
@@ -56,20 +51,13 @@ def mock_get_client(*args, **kwargs):
     return MockSecretClient()
 
 
-def test_cloud_secret(monkeypatch):
-    monkeypatch.setattr(secretmanager, "SecretManagerServiceClient", mock_get_client)
-    monkeypatch.setenv("CLOUD", "gcp")
-    set_deploy_config_from_env()
-    sm = get_default_secret_manager()
-    assert isinstance(sm, SecretManagerGCP)
-
-
 def test_gcp_secret(monkeypatch):
     monkeypatch.setattr(secretmanager, "SecretManagerServiceClient", mock_get_client)
     sm = SecretManager.get_secret_manager("gcp")
     assert sm.read_secret("test_host", "test_name") == "supersecret in gcp"
 
-    set_default_secret_manager(sm)
+    monkeypatch.setenv("CLOUD", "gcp")
+    set_deploy_config_from_env()
     assert check_dataset_access("dataset1", "test1@test.com", "read") == True
     assert check_dataset_access("dataset1", "test2@test.com", "read") == False
     assert check_dataset_access("dataset2", "test2@test.com", "read") == False
@@ -81,7 +69,18 @@ def test_azure_secret(monkeypatch):
     sm = SecretManager.get_secret_manager("azure")
     assert sm.read_secret("test_host", "test_name") == "supersecret in azure"
 
-    set_default_secret_manager(sm)
+    monkeypatch.setenv("CLOUD", "azure")
+    set_deploy_config_from_env()
     assert check_dataset_access("dataset1", "test1@test.com", "read") == False
     assert check_dataset_access("dataset1", "test2@test.com", "read") == True
     assert check_dataset_access("dataset2", "test2@test.com", "read") == False
+
+
+def test_server_config(monkeypatch):
+    monkeypatch.setattr(secretmanager, "SecretManagerServiceClient", mock_get_client)
+    monkeypatch.setenv("CLOUD", "gcp")
+    set_deploy_config_from_env()
+
+    scfg1 = get_deploy_config().server_config
+    scfg2 = get_server_config()
+    assert scfg1 == scfg2

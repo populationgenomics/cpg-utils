@@ -7,34 +7,12 @@ import azure.identity
 import azure.keyvault.secrets as secrets
 from google.cloud import secretmanager
 
-from .config import get_deploy_config
-
-secret_manager: "SecretManager" = None
-
-
-def get_default_secret_manager() -> "SecretManager":
-    global secret_manager
-    if secret_manager is None:
-        secret_manager = SecretManager.get_secret_manager()
-    return secret_manager
-
-
-def set_default_secret_manager(sm: "SecretManager") -> None:
-    global secret_manager
-    secret_manager = sm
-
-
-def read_secret(secret_host: str, secret_name: str):
-    return get_default_secret_manager().read_secret(secret_host, secret_name)
-
 
 class SecretManager(ABC):
     """Multi-cloud abstraction for reading/writing cloud secrets."""
 
     @staticmethod
-    def get_secret_manager(cloud_type: Optional[str] = None) -> "SecretManager":
-        if cloud_type is None:
-            cloud_type = get_deploy_config().cloud
+    def get_secret_manager(cloud_type: str) -> "SecretManager":
         if cloud_type == "azure":
             return SecretManagerAzure()
         assert cloud_type == "gcp"

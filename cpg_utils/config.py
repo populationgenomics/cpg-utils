@@ -2,9 +2,9 @@ import json
 import logging
 from os import getenv
 from typing import Any, Dict, Optional
+from .secrets import SecretManager
 
 deploy_config: "DeployConfig" = None
-server_config: Dict[str, Any] = None
 DEFAULT_CONFIG = {
     "cloud": "gcp",
     "sample_metadata_project": "sample-metadata",
@@ -15,6 +15,10 @@ DEFAULT_CONFIG = {
 
 
 class DeployConfig:
+
+    _server_config: Dict[str, Any] = None
+    _secret_manager: SecretManager = None
+
     @staticmethod
     def from_dict(config: Dict[str, str]) -> "DeployConfig":
         return DeployConfig(**config)
@@ -45,6 +49,21 @@ class DeployConfig:
     def to_dict(self) -> Dict[str, str]:
         return self.__dict__.copy()
 
+    @property
+    def secret_manager(self) -> SecretManager:
+        if self._secret_manager is None:
+            self._secret_manager = SecretManager.get_secret_manager(self.cloud)
+        return self._secret_manager
+
+    @property
+    def server_config(self) -> Dict[str, Any]:
+        if self._server_config is None:
+            config = self.secret_manager.read_secret(self.analysis_runner_project, "server-config")
+            logging.info(f"setting deploy_config: {config}")
+            self._server_config = json.loads(config)
+        return self._server_config
+
+
 
 def get_deploy_config() -> DeployConfig:
     global deploy_config
@@ -55,7 +74,7 @@ def get_deploy_config() -> DeployConfig:
 
 def set_deploy_config(config: DeployConfig) -> None:
     global deploy_config
-    logging.info(f"setting deploy_config: {json.dumps(config.__dict__)}")
+    logging.info(f"setting deploy_config: {json.dumps(config.to_dict())}")
     deploy_config = config
 
 
@@ -64,9 +83,4 @@ def set_deploy_config_from_env() -> None:
 
 
 def get_server_config() -> Dict[str, Any]:
-    global server_config
-    if server_config is None:
-        from .secrets import read_secret
-        config_project = get_deploy_config().analysis_runner_project
-        server_config = json.loads(read_secret(config_project, "server-config"))
-    return server_config
+    return get_deploy_config().server_config
