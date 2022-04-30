@@ -30,6 +30,7 @@ jobs:
       - name: Test with pytest
         run: |
           pip install pytest
+          pip install pytest-cov
           pytest
 
       - name: Publish the wheel to PyPI
