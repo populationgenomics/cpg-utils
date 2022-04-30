@@ -27,8 +27,10 @@ jobs:
       - name: Test install
         run: pip install dist/*
 
-      - name: Test import
-        run: python -c "import cpg_utils.cloud"
+      - name: Test with pytest
+        run: |
+          pip install pytest
+          pytest
 
       - name: Publish the wheel to PyPI
         # Run when merging into main with a commit that starts with "Bump version:"
