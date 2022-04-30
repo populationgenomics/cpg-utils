@@ -3,7 +3,7 @@ import json
 import azure.identity
 import azure.keyvault.secrets as secrets
 import pytest
-from cpg_utils.auth import check_dataset_access
+from cpg_utils.auth import check_dataset_access, check_global_access
 from cpg_utils.config import get_deploy_config, get_server_config, set_deploy_config_from_env
 from cpg_utils.secrets import SecretManager
 from google.cloud import secretmanager
@@ -32,17 +32,23 @@ class MockSecretClient:
     def secret_path(self, secret_host, secret_name):
         return secret_host + "/" + secret_name
     def access_secret_version(self, request):
-        if "server-config" in request["name"]:
+        """GCP"""
+        if request["name"] == "analysis-runner/server-config/versions/latest":
             return MockSecretResponse(TEST_SERVER_CONFIG)
-        if "test_name" in request["name"]:
+        if request["name"] == "test_host/test_name/versions/latest":
             return MockSecretResponse("supersecret in gcp")
+        if request["name"] == "analysis-runner/project-creator-users/versions/latest":
+            return MockSecretResponse("you@example.com,admin1@test.com")
         assert request["name"] == "dataset1_id/dataset1-read-members-cache/versions/latest"
         return MockSecretResponse("me@example.com,test1@test.com")
     def get_secret(self, secret_name):
+        """AZURE"""
         if secret_name == "server-config":
             return MockSecretResponse(TEST_SERVER_CONFIG)
         if secret_name == "test_name":
             return MockSecretResponse("supersecret in azure")
+        if secret_name == "project-creator-users":
+            return MockSecretResponse("you@example.com,admin2@test.com")
         assert secret_name == "dataset1-read-members-cache"
         return MockSecretResponse("me@example.com,test2@test.com")
 
@@ -61,6 +67,8 @@ def test_gcp_secret(monkeypatch):
     assert check_dataset_access("dataset1", "test1@test.com", "read") == True
     assert check_dataset_access("dataset1", "test2@test.com", "read") == False
     assert check_dataset_access("dataset2", "test2@test.com", "read") == False
+    assert check_global_access("admin1@test.com", "project-creator-users") == True
+    assert check_global_access("admin2@test.com", "project-creator-users") == False
 
 
 def test_azure_secret(monkeypatch):
@@ -74,6 +82,8 @@ def test_azure_secret(monkeypatch):
     assert check_dataset_access("dataset1", "test1@test.com", "read") == False
     assert check_dataset_access("dataset1", "test2@test.com", "read") == True
     assert check_dataset_access("dataset2", "test2@test.com", "read") == False
+    assert check_global_access("admin1@test.com", "project-creator-users") == False
+    assert check_global_access("admin2@test.com", "project-creator-users") == True
 
 
 def test_server_config(monkeypatch):

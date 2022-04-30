@@ -58,11 +58,23 @@ class DeployConfig:
     @property
     def server_config(self) -> Dict[str, Any]:
         if self._server_config is None:
-            config = self.secret_manager.read_secret(self.analysis_runner_project, "server-config")
+            config = self.read_global_config("server-config")
             logging.info(f"setting deploy_config: {config}")
             self._server_config = json.loads(config)
         return self._server_config
 
+    def read_project_id_config(self, project_id: str, config_key: str) -> str:
+        config_host = project_id + "vault" if self.cloud == "azure" else project_id
+        return self.secret_manager.read_secret(config_host, config_key)
+
+    def read_global_config(self, config_key: str) -> str:
+        return self.read_project_id_config(self.analysis_runner_project, config_key)
+
+    def read_dataset_config(self, dataset: str, config_key: str) -> str:
+        if dataset not in self.server_config:
+            return ""
+        dataset_id = self.server_config[dataset]["projectId"]
+        return self.read_project_id_config(dataset_id, config_key)
 
 
 def get_deploy_config() -> DeployConfig:
