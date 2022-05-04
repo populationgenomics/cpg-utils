@@ -84,7 +84,7 @@ def get_azure_auth_token(scope: str) -> str:
     else:
         credential = azure.identity.DefaultAzureCredential()
 
-    return credential.get_token(scope)
+    return credential.get_token(scope).token
 
 
 def get_google_auth_token(audience: str) -> str:
@@ -109,6 +109,5 @@ def get_google_auth_token(audience: str) -> str:
             return credentials.token
     else:
         creds, _ = google.auth.default()
-        auth_req = google.auth.transport.requests.Request()
-        creds.refresh(auth_req)
+        creds.refresh(google.auth.transport.requests.Request())
         return creds.id_token

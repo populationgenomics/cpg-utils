@@ -51,12 +51,12 @@ class MockCredentials():
         assert kwargs.get("tenant", "TENANT") == "TENANT"
         assert kwargs.get("appId", "APPID") == "APPID"
         assert kwargs.get("password", "supersecret") == "supersecret"
-        self.token = "gcpcreds"
+        self.token = "creds"
         self.id_token = "gcpcredsdef"
 
     def get_token(self, scope):
         assert scope == "api://smapi-sample-metadata/.default"
-        return "azcreds"
+        return self
 
     def refresh(self, auth_req):
         pass
@@ -75,7 +75,7 @@ def test_az_default_token(monkeypatch):
     monkeypatch.setenv("CLOUD", "azure")
     monkeypatch.setattr(azure.identity, "DefaultAzureCredential", mock_get_creds)
     set_deploy_config_from_env()
-    assert get_sample_metadata_token() == "azcreds"
+    assert get_sample_metadata_token() == "creds"
 
 
 def test_az_file_token(monkeypatch, test_resources_path):
@@ -83,7 +83,7 @@ def test_az_file_token(monkeypatch, test_resources_path):
     set_deploy_config_from_env()
     monkeypatch.setattr(azure.identity, "ClientSecretCredential", mock_get_creds)
     monkeypatch.setenv("AZURE_APPLICATION_CREDENTIALS", os.path.join(test_resources_path, "azure_creds.json"))
-    assert get_sample_metadata_token() == "azcreds"
+    assert get_sample_metadata_token() == "creds"
 
 
 def test_gcp_default_token(monkeypatch):
@@ -98,4 +98,4 @@ def test_gcp_file_token(monkeypatch, test_resources_path):
     set_deploy_config_from_env()
     monkeypatch.setattr(service_account.IDTokenCredentials, "from_service_account_info", mock_get_creds)
     monkeypatch.setenv("GOOGLE_APPLICATION_CREDENTIALS", os.path.join(test_resources_path, "gcp_creds.json"))
-    assert get_sample_metadata_token() == "gcpcreds"
+    assert get_sample_metadata_token() == "creds"
