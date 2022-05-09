@@ -56,6 +56,7 @@ def copy_common_env(job: hb.batch.job.Job) -> None:
         'CPG_DATASET_PATH',
         'CPG_DRIVER_IMAGE',
         'CPG_IMAGE_REGISTRY_PREFIX',
+        'CPG_REFERENCE_PREFIX',
         'CPG_OUTPUT_PREFIX',
         'HAIL_BILLING_PROJECT',
         'HAIL_BUCKET',
