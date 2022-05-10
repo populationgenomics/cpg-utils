@@ -1,15 +1,26 @@
 """Convenience functions related to Hail."""
 
 import asyncio
+import inspect
 import os
-from typing import Optional
+import textwrap
+from pathlib import Path
+from typing import Optional, Union, List
+
 import hail as hl
 import hailtop.batch as hb
+from cloudpathlib import CloudPath
+from cloudpathlib.anypath import to_anypath
+
+
+GCLOUD_AUTH_COMMAND = (
+    'gcloud -q auth activate-service-account --key-file=/gsa-key/key.json'
+)
 
 
 def init_batch(**kwargs):
-    """Initializes the Hail Query Service from within Hail Batch.
-
+    """
+    Initializes the Hail Query Service from within Hail Batch.
     Requires the HAIL_BILLING_PROJECT and HAIL_BUCKET environment variables to be set.
 
     Parameters
@@ -30,7 +41,7 @@ def init_batch(**kwargs):
     )
 
 
-def copy_common_env(job: hb.job.Job) -> None:
+def copy_common_env(job: hb.batch.job.Job) -> None:
     """Copies common environment variables that we use to run Hail jobs.
 
     These variables are typically set up in the analysis-runner driver, but need to be
@@ -46,6 +57,7 @@ def copy_common_env(job: hb.job.Job) -> None:
         'CPG_DATASET_PATH',
         'CPG_DRIVER_IMAGE',
         'CPG_IMAGE_REGISTRY_PREFIX',
+        'CPG_REFERENCE_PREFIX',
         'CPG_OUTPUT_PREFIX',
         'HAIL_BILLING_PROJECT',
         'HAIL_BUCKET',
@@ -67,7 +79,8 @@ def remote_tmpdir(hail_bucket: Optional[str] = None) -> str:
 
 
 def dataset_path(suffix: str, category: Optional[str] = None) -> str:
-    """Returns a full path for the current dataset, given a category and path suffix.
+    """
+    Returns a full path for the current dataset, given a category and path suffix.
 
     This is useful for specifying input files, as in contrast to the output_path
     function, dataset_path does _not_ take the CPG_OUTPUT_PREFIX environment variable
@@ -78,10 +91,10 @@ def dataset_path(suffix: str, category: Optional[str] = None) -> str:
     Assuming that the analysis-runner has been invoked with
     `--dataset fewgenomes --access-level test --output 1kg_pca/v42`:
 
-    >>> from analysis_runner import bucket_path
-    >>> bucket_path('1kg_densified/combined.mt')
+    >>> from cpg_utils.hail_batch import dataset_path
+    >>> dataset_path('1kg_densified/combined.mt')
     'gs://cpg-fewgenomes-test/1kg_densified/combined.mt'
-    >>> bucket_path('1kg_densified/report.html', 'web')
+    >>> dataset_path('1kg_densified/report.html', 'web')
     'gs://cpg-fewgenomes-test-web/1kg_densified/report.html'
 
     Notes
@@ -130,10 +143,12 @@ def output_path(suffix: str, category: Optional[str] = None) -> str:
 
     Examples
     --------
-    Assuming that the analysis-runner has been invoked with
+    If using the analysis-runner, the CPG_OUTPUT_PREFIX would be set to the argument
+    provided using the --output argument, e.g.
     `--dataset fewgenomes --access-level test --output 1kg_pca/v42`:
+    will use '1kg_pca/v42' as the base path to build upon in this method
 
-    >>> from analysis_runner import output_path
+    >>> from cpg_utils.hail_batch import output_path
     >>> output_path('loadings.ht')
     'gs://cpg-fewgenomes-test/1kg_pca/v42/loadings.ht'
     >>> output_path('report.html', 'web')
@@ -189,6 +204,32 @@ def image_path(suffix: str) -> str:
     return f'{prefix}/{suffix}'
 
 
+def reference_path(suffix: str) -> Union[CloudPath, Path]:
+    """Returns a full path to a reference file.
+
+    Examples
+    --------
+    >>> reference_path('hg38/v0/wgs_calling_regions.hg38.interval_list')
+    'gs://cpg-reference/hg38/v0/wgs_calling_regions.hg38.interval_list'
+
+    Notes
+    -----
+    Requires the `CPG_REFERENCE_PREFIX` environment variable to be set.
+
+    Parameters
+    ----------
+    suffix : str
+        Describes path relative to CPG_REFERENCE_PREFIX.
+
+    Returns
+    -------
+    str
+    """
+    prefix = os.getenv('CPG_REFERENCE_PREFIX')
+    assert prefix
+    return to_anypath(prefix) / suffix
+
+
 def authenticate_cloud_credentials_in_job(
     job,
     print_all_statements: bool = True,
@@ -216,4 +257,57 @@ def authenticate_cloud_credentials_in_job(
         job.command('set -x')
 
     # activate the google service account
-    job.command(f'gcloud -q auth activate-service-account --key-file=/gsa-key/key.json')
+    job.command(GCLOUD_AUTH_COMMAND)
+
+
+def query_command(
+    module,
+    func_name: str,
+    *func_args,
+    setup_gcp: bool = False,
+    hail_billing_project: Optional[str] = None,
+    hail_bucket: Optional[str] = None,
+    default_reference: str = 'GRCh38',
+    packages: Optional[List[str]] = None,
+) -> str:
+    """
+    Run a Python Hail Query function inside a Hail Batch job.
+    Constructs a command string to use with job.command().
+    If hail_billing_project is provided, Hail Query will be initialised.
+    """
+    python_cmd = f"""
+import logging
+logger = logging.getLogger(__file__)
+logging.basicConfig(format='%(levelname)s (%(name)s %(lineno)s): %(message)s')
+logger.setLevel(logging.INFO)
+"""
+    if hail_billing_project:
+        assert hail_bucket
+        python_cmd += f"""
+import asyncio
+import hail as hl
+asyncio.get_event_loop().run_until_complete(
+    hl.init_batch(
+        default_reference='{default_reference}',
+        billing_project='{hail_billing_project}',
+        remote_tmpdir='{hail_bucket}',
+    )
+)
+"""
+        python_cmd += f"""
+{textwrap.dedent(inspect.getsource(module))}
+{func_name}{func_args}
+"""
+    cmd = f"""
+set -o pipefail
+set -ex
+{GCLOUD_AUTH_COMMAND if setup_gcp else ''}
+
+{('pip3 install ' + ' '.join(packages)) if packages else ''}
+
+cat << EOT >> script.py
+{python_cmd}
+EOT
+python3 script.py
+"""
+    return cmd

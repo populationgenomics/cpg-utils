@@ -11,7 +11,16 @@ pip install cpg-utils-ms
 To use the library, import functions like this:
 
 ```python
-from cpg_utils.config import get_deploy_config
+from cpg_utils.cloud import email_from_id_token
+
+_email_string = email_from_id_token(id_token='TOKEN_STRING')
 ```
 
-We use `bumpversion` for incrementing the library's semantic version. A new PyPi package gets published automatically whenever a version bump commit is merged with the `main` branch.
+We use `bumpversion` for incrementing the library's semantic version. A new conda package gets published automatically in the `cpg` conda channel whenever a version bump commit is merged with the `main` branch.
+
+
+## Contents
+
+- [Methods to facilitate cloud computing](documentation/cloud.md)
+- [Helper functions for Hail Batch jobs](documentation/hail_batch.md)
+- [Cloning git repositories inside Hail Batch jobs](documentation/git.md)

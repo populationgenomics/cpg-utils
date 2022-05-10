@@ -120,6 +120,61 @@ def get_repo_name_from_current_directory() -> str:
     return get_repo_name_from_remote(get_git_default_remote())
 
 
+def get_organisation_name_from_current_directory() -> str:
+    """
+    Gets the organisation name from the default remote
+    Returns
+    -------
+
+    """
+    return get_organisation_name_from_remote(get_git_default_remote())
+
+
+def get_organisation_name_from_remote(remote_name: str) -> str:
+    """
+    Takes the GitHub repo path and obtains the source organisation
+    based on its remote URL e.g.:
+    >>> get_repo_name_from_remote(\
+        'git@github.com:populationgenomics/cpg-utils.git'\
+    )
+    'populationgenomics'
+    >>> get_repo_name_from_remote(\
+        'https://github.com/populationgenomics/cpg-utils.git'\
+    )
+    'populationgenomics'
+
+    Parameters
+    ----------
+    remote_name
+
+    Returns
+    -------
+    the organisation name
+    """
+
+    organisation = None
+
+    try:
+        if remote_name.startswith('http'):
+            match = re.match(
+                r'http[s]?:\/\/[A-z0-9\.]+?\/(?P<org>.+?)\/.+$', remote_name
+            )
+            if match:
+                organisation = match.group('org')
+
+        elif remote_name.startswith('git@'):
+            match = re.match(r'git@[A-z0-9\.]+?:(?P<org>.+?)\/.+$', remote_name)
+            if match:
+                organisation = match.group('org')
+    except AttributeError as ae:
+        raise Exception(f'Unsupported remote format: "{remote_name}"') from ae
+
+    if organisation is None:
+        raise Exception(f'Unsupported remote format: "{remote_name}"')
+
+    return organisation
+
+
 def get_repo_name_from_remote(remote_name: str) -> str:
     """
     Get the name of a GitHub repo from a supported organization
@@ -141,7 +196,9 @@ def get_repo_name_from_remote(remote_name: str) -> str:
     repo = None
     try:
         if remote_name.startswith('http'):
-            match = re.match(r'https:\/\/[A-z0-9\.]+?\/.+?\/(?P<repo>.+)$', remote_name)
+            match = re.match(
+                r'http[s]?:\/\/[A-z0-9\.]+?\/.+?\/(?P<repo>.+)$', remote_name
+            )
             if match:
                 repo = match.group('repo')
 
