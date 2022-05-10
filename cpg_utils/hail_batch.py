@@ -12,6 +12,7 @@ import hailtop.batch as hb
 from cloudpathlib import CloudPath
 from cloudpathlib.anypath import to_anypath
 
+
 GCLOUD_AUTH_COMMAND = (
     'gcloud -q auth activate-service-account --key-file=/gsa-key/key.json'
 )
