@@ -1,12 +1,16 @@
 """Convenience functions related to Hail."""
 
 import asyncio
+import inspect
 import os
-from typing import Optional
+import textwrap
+from pathlib import Path
+from typing import Optional, Union, List
 
 import hail as hl
 import hailtop.batch as hb
-
+from cloudpathlib import CloudPath
+from cloudpathlib.anypath import to_anypath
 
 GCLOUD_AUTH_COMMAND = (
     'gcloud -q auth activate-service-account --key-file=/gsa-key/key.json'
@@ -52,6 +56,7 @@ def copy_common_env(job: hb.batch.job.Job) -> None:
         'CPG_DATASET_PATH',
         'CPG_DRIVER_IMAGE',
         'CPG_IMAGE_REGISTRY_PREFIX',
+        'CPG_REFERENCE_PREFIX',
         'CPG_OUTPUT_PREFIX',
         'HAIL_BILLING_PROJECT',
         'HAIL_BUCKET',
@@ -198,6 +203,32 @@ def image_path(suffix: str) -> str:
     return f'{prefix}/{suffix}'
 
 
+def reference_path(suffix: str) -> Union[CloudPath, Path]:
+    """Returns a full path to a reference file.
+
+    Examples
+    --------
+    >>> reference_path('hg38/v0/wgs_calling_regions.hg38.interval_list')
+    'gs://cpg-reference/hg38/v0/wgs_calling_regions.hg38.interval_list'
+
+    Notes
+    -----
+    Requires the `CPG_REFERENCE_PREFIX` environment variable to be set.
+
+    Parameters
+    ----------
+    suffix : str
+        Describes path relative to CPG_REFERENCE_PREFIX.
+
+    Returns
+    -------
+    str
+    """
+    prefix = os.getenv('CPG_REFERENCE_PREFIX')
+    assert prefix
+    return to_anypath(prefix) / suffix
+
+
 def authenticate_cloud_credentials_in_job(
     job,
     print_all_statements: bool = True,
@@ -226,3 +257,56 @@ def authenticate_cloud_credentials_in_job(
 
     # activate the google service account
     job.command(GCLOUD_AUTH_COMMAND)
+
+
+def query_command(
+    module,
+    func_name: str,
+    *func_args,
+    setup_gcp: bool = False,
+    hail_billing_project: Optional[str] = None,
+    hail_bucket: Optional[str] = None,
+    default_reference: str = 'GRCh38',
+    packages: Optional[List[str]] = None,
+) -> str:
+    """
+    Run a Python Hail Query function inside a Hail Batch job.
+    Constructs a command string to use with job.command().
+    If hail_billing_project is provided, Hail Query will be initialised.
+    """
+    python_cmd = f"""
+import logging
+logger = logging.getLogger(__file__)
+logging.basicConfig(format='%(levelname)s (%(name)s %(lineno)s): %(message)s')
+logger.setLevel(logging.INFO)
+"""
+    if hail_billing_project:
+        assert hail_bucket
+        python_cmd += f"""
+import asyncio
+import hail as hl
+asyncio.get_event_loop().run_until_complete(
+    hl.init_batch(
+        default_reference='{default_reference}',
+        billing_project='{hail_billing_project}',
+        remote_tmpdir='{hail_bucket}',
+    )
+)
+"""
+        python_cmd += f"""
+{textwrap.dedent(inspect.getsource(module))}
+{func_name}{func_args}
+"""
+    cmd = f"""
+set -o pipefail
+set -ex
+{GCLOUD_AUTH_COMMAND if setup_gcp else ''}
+
+{('pip3 install ' + ' '.join(packages)) if packages else ''}
+
+cat << EOT >> script.py
+{python_cmd}
+EOT
+python3 script.py
+"""
+    return cmd
