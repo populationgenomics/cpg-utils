@@ -227,6 +227,7 @@ def reference_path(suffix: str) -> Union[CloudPath, Path]:
     """
     prefix = os.getenv('CPG_REFERENCE_PREFIX')
     assert prefix
+    suffix = suffix.strip('/')  # leading slash results in `prefix` entirely ignored
     return to_anypath(prefix) / suffix
 
 
