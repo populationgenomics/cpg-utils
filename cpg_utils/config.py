@@ -36,8 +36,8 @@ def get_config(config_path: Optional[str] = None) -> MutableMapping[str, Any]:
     ----------
     config_path: str, optional
         A cloudpathlib-compatible path to a TOML file containing the configuration. If
-        this parameter not provided, the CPG_CONFIG_PATH environment variable is used
-        instead.
+        this parameter not provided, the CPG_CONFIG_PATH environment variable must be
+        set instead.
 
     Returns
     -------
