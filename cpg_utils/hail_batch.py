@@ -62,7 +62,9 @@ def remote_tmpdir(hail_bucket: Optional[str] = None) -> str:
 
     If `hail_bucket` is not specified explicitly, requires the `hail/bucket` config variable to be set.
     """
-    return f'gs://{hail_bucket or get_config()["hail"]["bucket"]}/batch-tmp'
+    bucket = hail_bucket or get_config().get('hail', {}).get('bucket')
+    assert bucket, f'hail_bucket was not set by argument or configuration'
+    return f'gs://{bucket}/batch-tmp'
 
 
 def dataset_path(suffix: str, category: Optional[str] = None) -> str:
