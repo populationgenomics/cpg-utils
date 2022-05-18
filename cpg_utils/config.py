@@ -64,7 +64,7 @@ def get_config() -> MutableMapping[str, Any]:
     MutableMapping[str, Any]
     """
 
-    global _config_path, _config
+    global _config
     if _config is None:  # Lazily initialize the config.
         assert (
             _config_path
