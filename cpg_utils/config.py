@@ -41,7 +41,7 @@ def get_config(config_path: Optional[str] = None) -> MutableMapping[str, Any]:
 
     Returns
     -------
-    dict
+    MutableMapping[str, Any]
     """
 
     if config_path is None:
