@@ -19,8 +19,6 @@ GCLOUD_AUTH_COMMAND = (
     'gcloud -q auth activate-service-account --key-file=/gsa-key/key.json'
 )
 
-_config = get_config()
-
 
 def init_batch(**kwargs):
     """
@@ -35,7 +33,7 @@ def init_batch(**kwargs):
     return asyncio.get_event_loop().run_until_complete(
         hl.init_batch(
             default_reference='GRCh38',
-            billing_project=_config['hail']['billing_project'],
+            billing_project=get_config()['hail']['billing_project'],
             remote_tmpdir=remote_tmpdir(),
             **kwargs,
         )
@@ -64,7 +62,7 @@ def remote_tmpdir(hail_bucket: Optional[str] = None) -> str:
 
     If `hail_bucket` is not specified explicitly, requires the `hail/bucket` config variable to be set.
     """
-    return f'gs://{hail_bucket or _config["hail"]["bucket"]}/batch-tmp'
+    return f'gs://{hail_bucket or get_config()["hail"]["bucket"]}/batch-tmp'
 
 
 def dataset_path(suffix: str, category: Optional[str] = None) -> str:
@@ -107,8 +105,9 @@ def dataset_path(suffix: str, category: Optional[str] = None) -> str:
     -------
     str
     """
-    dataset = _config['workflow'].get('dataset')
-    access_level = _config['workflow'].get('access_level')
+    config = get_config()
+    dataset = config['workflow'].get('dataset')
+    access_level = config['workflow'].get('access_level')
 
     if dataset and access_level:
         namespace = 'test' if access_level == 'test' else 'main'
@@ -118,7 +117,7 @@ def dataset_path(suffix: str, category: Optional[str] = None) -> str:
             category = f'{namespace}-{category}'
         prefix = f'cpg-{dataset}-{category}'
     else:
-        prefix = _config['workflow']['dataset_path']
+        prefix = config['workflow']['dataset_path']
 
     return os.path.join('gs://', prefix, suffix)
 
@@ -162,7 +161,7 @@ def output_path(suffix: str, category: Optional[str] = None) -> str:
     str
     """
     return dataset_path(
-        os.path.join(_config['workflow']['output_prefix'], suffix), category
+        os.path.join(get_config()['workflow']['output_prefix'], suffix), category
     )
 
 
@@ -187,7 +186,7 @@ def image_path(suffix: str) -> str:
     -------
     str
     """
-    return f'{_config["workflow"]["image_registry_prefix"]}/{suffix}'
+    return f'{get_config()["workflow"]["image_registry_prefix"]}/{suffix}'
 
 
 def reference_path(suffix: str) -> Union[CloudPath, Path]:
@@ -212,7 +211,7 @@ def reference_path(suffix: str) -> Union[CloudPath, Path]:
     str
     """
     # A leading slash results in the prefix being ignored, therefore use strip below.
-    return to_anypath(_config['workflow']['reference_prefix']) / suffix.strip('/')
+    return to_anypath(get_config()['workflow']['reference_prefix']) / suffix.strip('/')
 
 
 def authenticate_cloud_credentials_in_job(
