@@ -17,6 +17,8 @@ GCLOUD_AUTH_COMMAND = (
     'gcloud -q auth activate-service-account --key-file=/gsa-key/key.json'
 )
 
+WEB_URL_FORMAT = 'https://{namespace}-web.populationgenomics.org.au/{dataset}'
+
 
 def init_batch(**kwargs):
     """
@@ -133,6 +135,21 @@ def dataset_path(suffix: str, category: Optional[str] = None) -> str:
         assert prefix
 
     return os.path.join('gs://', prefix, suffix)
+
+
+def web_url(
+    suffix: str,
+    dataset: Optional[str] = None,
+    access_level: Optional[str] = None,
+) -> str:
+    """Returns URL corresponding to a dataset path of category 'web',
+    assuming other arguments are the same.
+    """
+    dataset = dataset or os.getenv('CPG_DATASET')
+    access_level = access_level or os.getenv('CPG_ACCESS_LEVEL')
+    namespace = 'test' if access_level == 'test' else 'main'
+    url = WEB_URL_FORMAT.format(dataset=dataset, namespace=namespace)
+    return os.path.join(url, suffix)
 
 
 def output_path(suffix: str, category: Optional[str] = None) -> str:
