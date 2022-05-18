@@ -13,9 +13,43 @@ from cloudpathlib import CloudPath
 from cloudpathlib.anypath import to_anypath
 
 
+# template commands strings
 GCLOUD_AUTH_COMMAND = (
     'gcloud -q auth activate-service-account --key-file=/gsa-key/key.json'
 )
+BASE_CMD = """
+import logging
+logger = logging.getLogger(__file__)
+logging.basicConfig(format='%(levelname)s (%(name)s %(lineno)s): %(message)s')
+logger.setLevel(logging.INFO)
+"""
+HAIL_STARTUP = """
+import asyncio
+import hail as hl
+asyncio.get_event_loop().run_until_complete(
+    hl.init_batch(
+        default_reference='{default_reference}',
+        billing_project='{hail_billing_project}',
+        remote_tmpdir='{hail_bucket}',
+    )
+)
+"""
+CMD_MODULE = """
+{source_module}
+{func_name}{func_args}
+"""
+CMD_SCRIPT = """
+set -o pipefail
+set -ex
+{gcloud_auth}
+
+{packages}
+
+cat << EOT >> script.py
+{command}
+EOT
+python3 script.py
+"""
 
 
 def init_batch(**kwargs):
@@ -276,39 +310,22 @@ def query_command(
     Constructs a command string to use with job.command().
     If hail_billing_project is provided, Hail Query will be initialised.
     """
-    python_cmd = f"""
-import logging
-logger = logging.getLogger(__file__)
-logging.basicConfig(format='%(levelname)s (%(name)s %(lineno)s): %(message)s')
-logger.setLevel(logging.INFO)
-"""
+    python_cmd = BASE_CMD
     if hail_billing_project:
         assert hail_bucket
-        python_cmd += f"""
-import asyncio
-import hail as hl
-asyncio.get_event_loop().run_until_complete(
-    hl.init_batch(
-        default_reference='{default_reference}',
-        billing_project='{hail_billing_project}',
-        remote_tmpdir='{hail_bucket}',
+        python_cmd += HAIL_STARTUP.format(
+            default_reference=default_reference,
+            hail_billing_project=hail_billing_project,
+            hail_bucket=hail_bucket,
+        )
+    python_cmd += CMD_MODULE.format(
+        source_module=textwrap.dedent(inspect.getsource(module)),
+        func_name=func_name,
+        func_args=func_args,
     )
-)
-"""
-    python_cmd += f"""
-{textwrap.dedent(inspect.getsource(module))}
-{func_name}{func_args}
-"""
-    cmd = f"""
-set -o pipefail
-set -ex
-{GCLOUD_AUTH_COMMAND if setup_gcp else ''}
 
-{('pip3 install ' + ' '.join(packages)) if packages else ''}
-
-cat << EOT >> script.py
-{python_cmd}
-EOT
-python3 script.py
-"""
-    return cmd
+    return CMD_SCRIPT.format(
+        gcloud_auth=GCLOUD_AUTH_COMMAND if setup_gcp else '',
+        packages=('pip3 install ' + ' '.join(packages)) if packages else '',
+        python_cmd=python_cmd,
+    )
