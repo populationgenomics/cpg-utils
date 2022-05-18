@@ -201,7 +201,7 @@ def image_path(suffix: str) -> str:
     """
     prefix = os.getenv('CPG_IMAGE_REGISTRY_PREFIX')
     assert prefix
-    return f'{prefix}/{suffix}'
+    return os.path.join(prefix, suffix)
 
 
 def reference_path(suffix: str) -> Union[CloudPath, Path]:
@@ -295,7 +295,7 @@ asyncio.get_event_loop().run_until_complete(
     )
 )
 """
-        python_cmd += f"""
+    python_cmd += f"""
 {textwrap.dedent(inspect.getsource(module))}
 {func_name}{func_args}
 """
