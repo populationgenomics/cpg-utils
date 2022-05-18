@@ -1,15 +1,38 @@
 """Provides access to config variables."""
 
 import os
-from typing import Any, Dict, Optional, MutableMapping
+from typing import Any, MutableMapping, Optional
 from cloudpathlib import AnyPath
 import toml
 
-_config_cache: Dict[str, MutableMapping[str, Any]] = dict()
+# We use these globals for lazy initialization, but pylint doesn't like that.
+# pylint: disable=global-statement, invalid-name
+_config_path = os.getenv('CPG_CONFIG_PATH')  # See set_config_path.
+_config: Optional[MutableMapping[str, Any]] = None  # Cached config, initialized lazily.
 
 
-def get_config(config_path: Optional[str] = None) -> MutableMapping[str, Any]:
-    """Returns a configuration dictionary.
+def set_config_path(config_path: str) -> None:
+    """Sets the config path that's used by subsequent calls to get_config.
+
+    If this isn't called, the value of the CPG_CONFIG_PATH environment variable is used
+    instead.
+
+    Parameters
+    ----------
+    config_path: str
+        A cloudpathlib-compatible path to a TOML file containing the configuration.
+    """
+
+    global _config_path, _config
+    if _config_path != config_path:
+        _config_path = config_path
+        _config = None  # Make sure the config gets reloaded.
+
+
+def get_config() -> MutableMapping[str, Any]:
+    """Returns the configuration dictionary.
+
+    Call set_config_path beforehand to override the default path.
 
     Examples
     --------
@@ -28,35 +51,30 @@ def get_config(config_path: Optional[str] = None) -> MutableMapping[str, Any]:
     reference_prefix = "gs://cpg-reference"
     output_prefix = "plasma/chr22/v6"
 
+    >>> from cpg_utils.config import get_config
+    >>> get_config()['workflow']['dataset']
+    'tob-wgs'
+
     Notes
     -----
     Caches the result based on the config path alone.
-
-    Parameters
-    ----------
-    config_path: str, optional
-        A cloudpathlib-compatible path to a TOML file containing the configuration. If
-        this parameter not provided, the CPG_CONFIG_PATH environment variable must be
-        set instead.
 
     Returns
     -------
     MutableMapping[str, Any]
     """
 
-    if config_path is None:
-        config_path = os.getenv('CPG_CONFIG_PATH')
-    assert config_path
+    global _config_path, _config
+    if _config is None:  # Lazily initialize the config.
+        assert (
+            _config_path
+        ), 'Either set the CPG_CONFIG_PATH environment variable or call set_config_path'
 
-    cached = _config_cache.get(config_path)
-    if cached is not None:
-        return cached
+        with AnyPath(_config_path).open() as f:
+            config_str = f.read()
 
-    with AnyPath(config_path).open() as f:
-        config_str = f.read()
+        # Print the config content, which is helpful for debugging.
+        print(f'Configuration at {_config_path}:\n{config_str}')
+        _config = toml.loads(config_str)
 
-    # Print the config content, which is helpful for debugging.
-    print(f'Configuration at {config_path}:\n{config_str}')
-    config = _config_cache[config_path] = toml.loads(config_str)
-
-    return config
+    return _config
