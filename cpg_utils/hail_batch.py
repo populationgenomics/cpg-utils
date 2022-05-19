@@ -58,6 +58,7 @@ def copy_common_env(job: hb.batch.job.Job) -> None:
         'CPG_DRIVER_IMAGE',
         'CPG_IMAGE_REGISTRY_PREFIX',
         'CPG_REFERENCE_PREFIX',
+        'CPG_WEB_URL_TEMPLATE',
         'CPG_OUTPUT_PREFIX',
         'HAIL_BILLING_PROJECT',
         'HAIL_BUCKET',
@@ -133,6 +134,28 @@ def dataset_path(suffix: str, category: Optional[str] = None) -> str:
         assert prefix
 
     return os.path.join('gs://', prefix, suffix)
+
+
+def web_url(
+    suffix: str,
+    dataset: Optional[str] = None,
+    access_level: Optional[str] = None,
+) -> str:
+    """Returns URL corresponding to a dataset path of category 'web',
+    assuming other arguments are the same.
+    """
+    dataset = dataset or os.environ['CPG_DATASET']
+    access_level = access_level or os.environ['CPG_ACCESS_LEVEL']
+    namespace = 'test' if access_level == 'test' else 'main'
+    web_url_template = os.environ['CPG_WEB_URL_TEMPLATE']
+    try:
+        url = web_url_template.format(dataset=dataset, namespace=namespace)
+    except KeyError as e:
+        raise ValueError(
+            f'CPG_WEB_URL_TEMPLATE should be parametrised by "dataset" and "namespace" in curly braces, '
+            f'e.g. https://{{namespace}}-web.populationgenomics.org.au/{{dataset}}. Got: {web_url_template}'
+        ) from e
+    return os.path.join(url, suffix)
 
 
 def output_path(suffix: str, category: Optional[str] = None) -> str:
