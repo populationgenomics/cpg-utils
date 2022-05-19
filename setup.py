@@ -5,7 +5,7 @@ import setuptools
 setuptools.setup(
     name='cpg-utils-ms',
     # This tag is automatically updated by bumpversion
-    version='0.6.1',
+    version='0.7.0',
     description='Library of convenience functions specific to the CPG (MS version)',
     long_description=open('README.md').read(),
     long_description_content_type='text/markdown',
