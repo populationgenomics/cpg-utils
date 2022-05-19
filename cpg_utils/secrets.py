@@ -49,9 +49,7 @@ class SecretManagerAzure(SecretManager):
     _credential = None
 
     def __init__(self):
-        # EnvironmentCredential
-        # ManagedIdentityCredential
-        # AzureCliCredential
+        # EnvironmentCredential, ManagedIdentityCredential, AzureCliCredential
         self._credential = azure.identity.DefaultAzureCredential(
             exclude_powershell_credential = True,
             exclude_visual_studio_code_credential = True,

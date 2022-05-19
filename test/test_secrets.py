@@ -28,21 +28,10 @@ class MockSecretResponse:
         self.value = secret_value
 
 
-class MockSecretClient:
-    def secret_path(self, secret_host, secret_name):
-        return secret_host + "/" + secret_name
-    def access_secret_version(self, request):
-        """GCP"""
-        if request["name"] == "analysis-runner/server-config/versions/latest":
-            return MockSecretResponse(TEST_SERVER_CONFIG)
-        if request["name"] == "test_host/test_name/versions/latest":
-            return MockSecretResponse("supersecret in gcp")
-        if request["name"] == "analysis-runner/project-creator-users/versions/latest":
-            return MockSecretResponse("you@example.com,admin1@test.com")
-        assert request["name"] == "dataset1_id/dataset1-read-members-cache/versions/latest"
-        return MockSecretResponse("me@example.com,test1@test.com")
+class MockSecretClientAzure:
+    def __init__(self, *args, **kwargs):
+        pass
     def get_secret(self, secret_name):
-        """AZURE"""
         if secret_name == "server-config":
             return MockSecretResponse(TEST_SERVER_CONFIG)
         if secret_name == "test_name":
@@ -53,12 +42,22 @@ class MockSecretClient:
         return MockSecretResponse("me@example.com,test2@test.com")
 
 
-def mock_get_client(*args, **kwargs):
-    return MockSecretClient()
+class MockSecretClientGCP:
+    def secret_path(self, secret_host, secret_name):
+        return secret_host + "/" + secret_name
+    def access_secret_version(self, request):
+        if request["name"] == "analysis-runner/server-config/versions/latest":
+            return MockSecretResponse(TEST_SERVER_CONFIG)
+        if request["name"] == "test_host/test_name/versions/latest":
+            return MockSecretResponse("supersecret in gcp")
+        if request["name"] == "analysis-runner/project-creator-users/versions/latest":
+            return MockSecretResponse("you@example.com,admin1@test.com")
+        assert request["name"] == "dataset1_id/dataset1-read-members-cache/versions/latest"
+        return MockSecretResponse("me@example.com,test1@test.com")
 
 
 def test_gcp_secret(monkeypatch):
-    monkeypatch.setattr(secretmanager, "SecretManagerServiceClient", mock_get_client)
+    monkeypatch.setattr(secretmanager, "SecretManagerServiceClient", MockSecretClientGCP)
     sm = SecretManager.get_secret_manager("gcp")
     assert sm.read_secret("test_host", "test_name") == "supersecret in gcp"
 
@@ -72,8 +71,8 @@ def test_gcp_secret(monkeypatch):
 
 
 def test_azure_secret(monkeypatch):
-    monkeypatch.setattr(azure.identity, "DefaultAzureCredential", mock_get_client)
-    monkeypatch.setattr(secrets, "SecretClient", mock_get_client)
+    monkeypatch.setattr(azure.identity, "DefaultAzureCredential", MockSecretClientAzure)
+    monkeypatch.setattr(secrets, "SecretClient", MockSecretClientAzure)
     sm = SecretManager.get_secret_manager("azure")
     assert sm.read_secret("test_host", "test_name") == "supersecret in azure"
 
@@ -87,7 +86,7 @@ def test_azure_secret(monkeypatch):
 
 
 def test_server_config(monkeypatch):
-    monkeypatch.setattr(secretmanager, "SecretManagerServiceClient", mock_get_client)
+    monkeypatch.setattr(secretmanager, "SecretManagerServiceClient", MockSecretClientGCP)
     monkeypatch.setenv("CLOUD", "gcp")
     set_deploy_config_from_env()
 

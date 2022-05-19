@@ -17,6 +17,7 @@ setuptools.setup(
         'google-cloud-secret-manager',
         'azure-identity',
         'azure-keyvault-secrets'
+        'azure-storage-blob',
         'cloudpathlib[all]',
     ],
     python_requires=">=3.8",
