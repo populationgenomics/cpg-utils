@@ -3,9 +3,10 @@
 import asyncio
 import inspect
 import os
+import pathlib
 import textwrap
-from pathlib import Path
 from typing import Optional, Union, List
+from abc import ABC, abstractmethod
 
 import hail as hl
 import hailtop.batch as hb
@@ -50,6 +51,13 @@ cat << EOT >> script.py
 EOT
 python3 script.py
 """
+
+
+# Path can be either a cloud URL or a local posix file path.
+Path = Union[CloudPath, pathlib.Path]
+
+# Using convenience method from cloudpathlib to parse a path string.
+to_path = to_anypath
 
 
 def init_batch(**kwargs):
@@ -113,7 +121,72 @@ def remote_tmpdir(hail_bucket: Optional[str] = None) -> str:
     return f'gs://{hail_bucket}/batch-tmp'
 
 
-def dataset_path(suffix: str, category: Optional[str] = None) -> str:
+class PathProtocol(ABC):
+    """
+    Cloud storage path protocol, used to parse and construct object URLs.
+    """
+
+    @abstractmethod
+    def path_prefix(self, dataset: str, category: str) -> str:
+        """Build path prefix used in dataset_path"""
+
+    @abstractmethod
+    def full_path(self, prefix: str, suffix: str) -> str:
+        """Build full path from prefix and suffix"""
+
+    @staticmethod
+    def parse(val: str) -> 'PathProtocol':
+        """Parse subclass name from string"""
+        if val == 'gs':
+            return GSPathProtocol()
+        if val == 'az':
+            return AzurePathProtocol()
+        raise ValueError(f'Unsupported path protocol: {val}')
+
+
+class GSPathProtocol(PathProtocol):
+    """
+    Google Cloud Storage path.
+    """
+
+    def __init__(self):
+        self.scheme = 'gs'
+        self.prefix = 'cpg'
+
+    def path_prefix(self, dataset: str, category: str) -> str:
+        """Build path prefix used in dataset_path"""
+        return f'{self.prefix}-{dataset}-{category}'
+
+    def full_path(self, prefix: str, suffix: str) -> str:
+        """Build full path from prefix and suffix"""
+        return os.path.join(f'{self.scheme}://', prefix, suffix)
+
+
+class AzurePathProtocol(PathProtocol):
+    """
+    Azure Blob Storage path, scheme as defined by Hail.
+    """
+
+    def __init__(self, account: Optional[str] = 'cpg'):
+        self.scheme = 'hail-az'
+        self.account = os.getenv('CPG_AZURE_ACCOUNT', account)
+
+    def path_prefix(self, dataset: str, category: str) -> str:
+        """Build path prefix used in dataset_path"""
+        return f'{self.account}/{dataset}-{category}'
+
+    def full_path(self, prefix: str, suffix: str) -> str:
+        """Build full path from prefix and suffix"""
+        return os.path.join(f'{self.scheme}://', prefix, suffix)
+
+
+def dataset_path(
+    suffix: str,
+    category: Optional[str] = None,
+    dataset: Optional[str] = None,
+    access_level: Optional[str] = None,
+    path_protocol: Optional[PathProtocol] = None,
+) -> str:
     """
     Returns a full path for the current dataset, given a category and path suffix.
 
@@ -131,6 +204,8 @@ def dataset_path(suffix: str, category: Optional[str] = None) -> str:
     'gs://cpg-fewgenomes-test/1kg_densified/combined.mt'
     >>> dataset_path('1kg_densified/report.html', 'web')
     'gs://cpg-fewgenomes-test-web/1kg_densified/report.html'
+    >>> dataset_path('1kg_densified/report.html', path_protocol=AzurePathProtocol())
+    'hail-az://cpg/fewgenomes-test/1kg_densified/report.html'
 
     Notes
     -----
@@ -148,26 +223,40 @@ def dataset_path(suffix: str, category: Optional[str] = None) -> str:
         "test" buckets based on the access level. See
         https://github.com/populationgenomics/team-docs/tree/main/storage_policies
         for a full list of categories and their use cases.
+    dataset : str, optional
+        Dataset name, takes precedence over the `CPG_DATASET` environment variable
+    access_level : str, optional
+        Access level, takes precedence over the `CPG_ACCESS_LEVEL` environment variable
+    path_protocol: Type[PathProtocol], optional
+        Cloud storage path protocol, should be a subclass of PathProtocol.
+        Takes precedence over the `CPG_PATH_PROTOCOL` environment variable
 
     Returns
     -------
     str
     """
-    dataset = os.getenv('CPG_DATASET')
-    access_level = os.getenv('CPG_ACCESS_LEVEL')
+    if path_protocol is None:
+        if not (val := os.getenv('CPG_PATH_PROTOCOL')):
+            raise ValueError(
+                'Either path_protocol parameter, or CPG_PATH_PROTOCOL '
+                'environment variable should be defined.'
+            )
+        path_protocol = PathProtocol.parse(val)
 
+    dataset = dataset or os.getenv('CPG_DATASET')
+    access_level = access_level or os.getenv('CPG_ACCESS_LEVEL')
     if dataset and access_level:
         namespace = 'test' if access_level == 'test' else 'main'
         if category is None:
             category = namespace
         elif category not in ('archive', 'upload'):
             category = f'{namespace}-{category}'
-        prefix = f'cpg-{dataset}-{category}'
+        prefix = path_protocol.path_prefix(dataset, category)
     else:
         prefix = os.getenv('CPG_DATASET_PATH') or ''  # coerce to str
-        assert prefix
+    assert prefix
 
-    return os.path.join('gs://', prefix, suffix)
+    return path_protocol.full_path(prefix, suffix)
 
 
 def web_url(
