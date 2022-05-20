@@ -139,9 +139,9 @@ class PathProtocol(ABC):
         """Parse subclass name from string"""
         if val == 'gs':
             return GSPathProtocol()
-        if val == 'az':
+        if val in ['az', 'hail-az']:
             return AzurePathProtocol()
-        raise ValueError(f'Unsupported path protocol: {val}')
+        raise ValueError(f'Unsupported path protocol: {val}. Available: gs, hail-az')
 
 
 class GSPathProtocol(PathProtocol):
@@ -185,7 +185,7 @@ def dataset_path(
     category: Optional[str] = None,
     dataset: Optional[str] = None,
     access_level: Optional[str] = None,
-    path_protocol: Optional[PathProtocol] = None,
+    path_protocol: str = 'gs',
 ) -> str:
     """
     Returns a full path for the current dataset, given a category and path suffix.
@@ -204,7 +204,7 @@ def dataset_path(
     'gs://cpg-fewgenomes-test/1kg_densified/combined.mt'
     >>> dataset_path('1kg_densified/report.html', 'web')
     'gs://cpg-fewgenomes-test-web/1kg_densified/report.html'
-    >>> dataset_path('1kg_densified/report.html', path_protocol=AzurePathProtocol())
+    >>> dataset_path('1kg_densified/report.html', path_protocol='hail-az')
     'hail-az://cpg/fewgenomes-test/1kg_densified/report.html'
 
     Notes
@@ -227,21 +227,21 @@ def dataset_path(
         Dataset name, takes precedence over the `CPG_DATASET` environment variable
     access_level : str, optional
         Access level, takes precedence over the `CPG_ACCESS_LEVEL` environment variable
-    path_protocol: Type[PathProtocol], optional
-        Cloud storage path protocol, should be a subclass of PathProtocol.
-        Takes precedence over the `CPG_PATH_PROTOCOL` environment variable
+    path_protocol: str, optional
+        Cloud storage path protocol, Takes precedence over the `CPG_PATH_PROTOCOL`
+        environment variable
 
     Returns
     -------
     str
     """
-    if path_protocol is None:
-        if not (val := os.getenv('CPG_PATH_PROTOCOL')):
-            raise ValueError(
-                'Either path_protocol parameter, or CPG_PATH_PROTOCOL '
-                'environment variable should be defined.'
-            )
-        path_protocol = PathProtocol.parse(val)
+    path_protocol = os.getenv('CPG_PATH_PROTOCOL', path_protocol)
+    if not path_protocol:
+        raise ValueError(
+            'Either path_protocol parameter, or CPG_PATH_PROTOCOL '
+            'environment variable should be defined.'
+        )
+    path_protocol_ = PathProtocol.parse(path_protocol)
 
     dataset = dataset or os.getenv('CPG_DATASET')
     access_level = access_level or os.getenv('CPG_ACCESS_LEVEL')
@@ -251,12 +251,12 @@ def dataset_path(
             category = namespace
         elif category not in ('archive', 'upload'):
             category = f'{namespace}-{category}'
-        prefix = path_protocol.path_prefix(dataset, category)
+        prefix = path_protocol_.path_prefix(dataset, category)
     else:
         prefix = os.getenv('CPG_DATASET_PATH') or ''  # coerce to str
     assert prefix
 
-    return path_protocol.full_path(prefix, suffix)
+    return path_protocol_.full_path(prefix, suffix)
 
 
 def web_url(
