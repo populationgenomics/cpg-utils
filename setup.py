@@ -16,6 +16,7 @@ setuptools.setup(
         'google-auth',
         'google-cloud-secret-manager',
         'cloudpathlib[all]',
+        'toml',
     ],
     include_package_data=True,
     keywords='bioinformatics',
