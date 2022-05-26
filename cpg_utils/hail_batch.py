@@ -13,6 +13,8 @@ import hailtop.batch as hb
 from cloudpathlib import CloudPath
 from cloudpathlib.anypath import to_anypath
 
+from cpg_utils.config import get_config
+
 
 # template commands strings
 GCLOUD_AUTH_COMMAND = (
@@ -63,7 +65,7 @@ to_path = to_anypath
 def init_batch(**kwargs):
     """
     Initializes the Hail Query Service from within Hail Batch.
-    Requires the HAIL_BILLING_PROJECT and HAIL_BUCKET environment variables to be set.
+    Requires the `hail/billing_project` and `hail/bucket` config variables to be set.
 
     Parameters
     ----------
@@ -76,7 +78,7 @@ def init_batch(**kwargs):
     return asyncio.get_event_loop().run_until_complete(
         hl.init_batch(
             default_reference='GRCh38',
-            billing_project=billing_project,
+            billing_project=get_config()['hail']['billing_project'],
             remote_tmpdir=remote_tmpdir(),
             **kwargs,
         )
@@ -90,21 +92,11 @@ def copy_common_env(job: hb.batch.job.Job) -> None:
     passed through for "batch-in-batch" use cases.
 
     The environment variable values are extracted from the current process and
-    copied to the environment dictionary of the given Hail Batch job."""
-
-    for key in (
-        'CPG_ACCESS_LEVEL',
-        'CPG_DATASET',
-        'CPG_DATASET_GCP_PROJECT',
-        'CPG_DATASET_PATH',
-        'CPG_DRIVER_IMAGE',
-        'CPG_IMAGE_REGISTRY_PREFIX',
-        'CPG_REFERENCE_PREFIX',
-        'CPG_WEB_URL_TEMPLATE',
-        'CPG_OUTPUT_PREFIX',
-        'HAIL_BILLING_PROJECT',
-        'HAIL_BUCKET',
-    ):
+    copied to the environment dictionary of the given Hail Batch job.
+    """
+    # If possible, please don't add new environment variables here, but instead add
+    # config variables.
+    for key in ('CPG_CONFIG_PATH',):
         val = os.getenv(key)
         if val:
             job.env(key, val)
@@ -113,17 +105,16 @@ def copy_common_env(job: hb.batch.job.Job) -> None:
 def remote_tmpdir(hail_bucket: Optional[str] = None) -> str:
     """Returns the remote_tmpdir to use for Hail initialization.
 
-    If `hail_bucket` is not specified explicitly, requires the HAIL_BUCKET environment variable to be set."""
-
-    if not hail_bucket:
-        hail_bucket = os.getenv('HAIL_BUCKET')
-        assert hail_bucket
-    return f'gs://{hail_bucket}/batch-tmp'
-
-
-class PathProtocol(ABC):
+    If `hail_bucket` is not specified explicitly, requires the `hail/bucket` config variable to be set.
     """
-    Cloud storage path protocol, used to parse and construct object URLs.
+    bucket = hail_bucket or get_config().get('hail', {}).get('bucket')
+    assert bucket, f'hail_bucket was not set by argument or configuration'
+    return f'gs://{bucket}/batch-tmp'
+
+
+class PathFormat(ABC):
+    """
+    Cloud storage path format, used to parse and construct paths to objects.
     """
 
     @abstractmethod
@@ -135,16 +126,16 @@ class PathProtocol(ABC):
         """Build full path from prefix and suffix"""
 
     @staticmethod
-    def parse(val: str) -> 'PathProtocol':
+    def parse(val: str) -> 'PathFormat':
         """Parse subclass name from string"""
         if val == 'gs':
-            return GSPathProtocol()
+            return GSPathFormat()
         if val in ['az', 'hail-az']:
-            return AzurePathProtocol()
-        raise ValueError(f'Unsupported path protocol: {val}. Available: gs, hail-az')
+            return AzurePathFormat()
+        raise ValueError(f'Unsupported path format: {val}. Available: gs, hail-az')
 
 
-class GSPathProtocol(PathProtocol):
+class GSPathFormat(PathFormat):
     """
     Google Cloud Storage path.
     """
@@ -162,7 +153,7 @@ class GSPathProtocol(PathProtocol):
         return os.path.join(f'{self.scheme}://', prefix, suffix)
 
 
-class AzurePathProtocol(PathProtocol):
+class AzurePathFormat(PathFormat):
     """
     Azure Blob Storage path, scheme as defined by Hail.
     """
@@ -185,13 +176,13 @@ def dataset_path(
     category: Optional[str] = None,
     dataset: Optional[str] = None,
     access_level: Optional[str] = None,
-    path_protocol: str = 'gs',
+    path_format: Optional[str] = None,
 ) -> str:
     """
     Returns a full path for the current dataset, given a category and path suffix.
 
     This is useful for specifying input files, as in contrast to the output_path
-    function, dataset_path does _not_ take the CPG_OUTPUT_PREFIX environment variable
+    function, dataset_path does _not_ take the `workflow/output_prefix` config variable
     into account.
 
     Examples
@@ -204,14 +195,14 @@ def dataset_path(
     'gs://cpg-fewgenomes-test/1kg_densified/combined.mt'
     >>> dataset_path('1kg_densified/report.html', 'web')
     'gs://cpg-fewgenomes-test-web/1kg_densified/report.html'
-    >>> dataset_path('1kg_densified/report.html', path_protocol='hail-az')
+    >>> dataset_path('1kg_densified/report.html', path_format='hail-az')
     'hail-az://cpg/fewgenomes-test/1kg_densified/report.html'
 
     Notes
     -----
     Requires either the
-    * `CPG_DATASET` and `CPG_ACCESS_LEVEL` environment variables, or the
-    * `CPG_DATASET_PATH` environment variable
+    * `workflow/dataset` and `workflow/access_level` config variables, or the
+    * `workflow/dataset_path` config variable
     to be set, where the former takes precedence.
 
     Parameters
@@ -224,39 +215,33 @@ def dataset_path(
         https://github.com/populationgenomics/team-docs/tree/main/storage_policies
         for a full list of categories and their use cases.
     dataset : str, optional
-        Dataset name, takes precedence over the `CPG_DATASET` environment variable
+        Dataset name, takes precedence over the `workflow/dataset` config variable
     access_level : str, optional
-        Access level, takes precedence over the `CPG_ACCESS_LEVEL` environment variable
-    path_protocol: str, optional
-        Cloud storage path protocol, Takes precedence over the `CPG_PATH_PROTOCOL`
-        environment variable
+        Access level, takes precedence over the `workflow/access_level` config variable
+    path_format: str, optional
+        Cloud storage path protocol, Takes precedence over the `workflow/path_format`
+        config variable
 
     Returns
     -------
     str
     """
-    path_protocol = os.getenv('CPG_PATH_PROTOCOL', path_protocol)
-    if not path_protocol:
-        raise ValueError(
-            'Either path_protocol parameter, or CPG_PATH_PROTOCOL '
-            'environment variable should be defined.'
-        )
-    path_protocol_ = PathProtocol.parse(path_protocol)
+    config = get_config()
+    dataset = dataset or config['workflow'].get('dataset')
+    access_level = access_level or config['workflow'].get('access_level')
+    path_format = path_format or config['workflow'].get('path_format', 'gs')
 
-    dataset = dataset or os.getenv('CPG_DATASET')
-    access_level = access_level or os.getenv('CPG_ACCESS_LEVEL')
     if dataset and access_level:
         namespace = 'test' if access_level == 'test' else 'main'
         if category is None:
             category = namespace
         elif category not in ('archive', 'upload'):
             category = f'{namespace}-{category}'
-        prefix = path_protocol_.path_prefix(dataset, category)
+        prefix = PathFormat.parse(path_format).path_prefix(dataset, category)
     else:
-        prefix = os.getenv('CPG_DATASET_PATH') or ''  # coerce to str
-    assert prefix
+        prefix = config['workflow']['dataset_path']
 
-    return path_protocol_.full_path(prefix, suffix)
+    return PathFormat.parse(path_format).full_path(prefix, suffix)
 
 
 def web_url(
@@ -284,12 +269,12 @@ def web_url(
 def output_path(suffix: str, category: Optional[str] = None) -> str:
     """Returns a full path for the given category and path suffix.
 
-    In contrast to the dataset_path function, output_path takes the CPG_OUTPUT_PREFIX
-    environment variable into account.
+    In contrast to the dataset_path function, output_path takes the `workflow/output_prefix`
+    config variable into account.
 
     Examples
     --------
-    If using the analysis-runner, the CPG_OUTPUT_PREFIX would be set to the argument
+    If using the analysis-runner, the `workflow/output_prefix` would be set to the argument
     provided using the --output argument, e.g.
     `--dataset fewgenomes --access-level test --output 1kg_pca/v42`:
     will use '1kg_pca/v42' as the base path to build upon in this method
@@ -302,7 +287,7 @@ def output_path(suffix: str, category: Optional[str] = None) -> str:
 
     Notes
     -----
-    Requires the `CPG_OUTPUT_PREFIX` environment variable to be set, in addition to the
+    Requires the `workflow/output_prefix` config variable to be set, in addition to the
     requirements for `dataset_path`.
 
     Parameters
@@ -319,9 +304,9 @@ def output_path(suffix: str, category: Optional[str] = None) -> str:
     -------
     str
     """
-    output = os.getenv('CPG_OUTPUT_PREFIX')
-    assert output
-    return dataset_path(os.path.join(output, suffix), category)
+    return dataset_path(
+        os.path.join(get_config()['workflow']['output_prefix'], suffix), category
+    )
 
 
 def image_path(suffix: str) -> str:
@@ -334,7 +319,7 @@ def image_path(suffix: str) -> str:
 
     Notes
     -----
-    Requires the `CPG_IMAGE_REGISTRY_PREFIX` environment variable to be set.
+    Requires the `workflow/image_registry_prefix` config variable to be set.
 
     Parameters
     ----------
@@ -345,9 +330,7 @@ def image_path(suffix: str) -> str:
     -------
     str
     """
-    prefix = os.getenv('CPG_IMAGE_REGISTRY_PREFIX')
-    assert prefix
-    return os.path.join(prefix, suffix)
+    return os.path.join(get_config()['workflow']['image_registry_prefix'], suffix)
 
 
 def reference_path(suffix: str) -> Union[CloudPath, Path]:
@@ -360,21 +343,19 @@ def reference_path(suffix: str) -> Union[CloudPath, Path]:
 
     Notes
     -----
-    Requires the `CPG_REFERENCE_PREFIX` environment variable to be set.
+    Requires the `workflow/reference_prefix` config variable to be set.
 
     Parameters
     ----------
     suffix : str
-        Describes path relative to CPG_REFERENCE_PREFIX.
+        Describes path relative to the reference prefix.
 
     Returns
     -------
     str
     """
-    prefix = os.getenv('CPG_REFERENCE_PREFIX')
-    assert prefix
-    suffix = suffix.strip('/')  # leading slash results in `prefix` entirely ignored
-    return to_anypath(prefix) / suffix
+    # A leading slash results in the prefix being ignored, therefore use strip below.
+    return to_anypath(get_config()['workflow']['reference_prefix']) / suffix.strip('/')
 
 
 def authenticate_cloud_credentials_in_job(
