@@ -12,7 +12,7 @@ import hailtop.batch as hb
 from cloudpathlib import CloudPath
 from cloudpathlib.anypath import to_anypath
 
-from config import get_config
+from cpg_utils.config import get_config
 
 
 # template commands strings
