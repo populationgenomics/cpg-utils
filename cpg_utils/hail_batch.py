@@ -112,9 +112,9 @@ def remote_tmpdir(hail_bucket: Optional[str] = None) -> str:
     return f'gs://{bucket}/batch-tmp'
 
 
-class PathFormat(ABC):
+class PathScheme(ABC):
     """
-    Cloud storage path format, used to parse and construct paths to objects.
+    Cloud storage path scheme. Constructs full paths to buckets and files.
     """
 
     @abstractmethod
@@ -126,18 +126,18 @@ class PathFormat(ABC):
         """Build full path from prefix and suffix"""
 
     @staticmethod
-    def parse(val: str) -> 'PathFormat':
+    def parse(val: str) -> 'PathScheme':
         """Parse subclass name from string"""
         if val == 'gs':
-            return GSPathFormat()
+            return GSPathScheme()
         if val in ['az', 'hail-az']:
-            return AzurePathFormat()
+            return AzurePathScheme()
         raise ValueError(f'Unsupported path format: {val}. Available: gs, hail-az')
 
 
-class GSPathFormat(PathFormat):
+class GSPathScheme(PathScheme):
     """
-    Google Cloud Storage path.
+    Google Cloud Storage path scheme.
     """
 
     def __init__(self):
@@ -153,9 +153,9 @@ class GSPathFormat(PathFormat):
         return os.path.join(f'{self.scheme}://', prefix, suffix)
 
 
-class AzurePathFormat(PathFormat):
+class AzurePathScheme(PathScheme):
     """
-    Azure Blob Storage path, scheme as defined by Hail.
+    Azure Blob Storage path scheme, following the Hail Batch hail-az format.
     """
 
     def __init__(self, account: Optional[str] = 'cpg'):
@@ -176,7 +176,7 @@ def dataset_path(
     category: Optional[str] = None,
     dataset: Optional[str] = None,
     access_level: Optional[str] = None,
-    path_format: Optional[str] = None,
+    path_scheme: Optional[str] = None,
 ) -> str:
     """
     Returns a full path for the current dataset, given a category and path suffix.
@@ -195,7 +195,7 @@ def dataset_path(
     'gs://cpg-fewgenomes-test/1kg_densified/combined.mt'
     >>> dataset_path('1kg_densified/report.html', 'web')
     'gs://cpg-fewgenomes-test-web/1kg_densified/report.html'
-    >>> dataset_path('1kg_densified/report.html', path_format='hail-az')
+    >>> dataset_path('1kg_densified/report.html', path_scheme='hail-az')
     'hail-az://cpg/fewgenomes-test/1kg_densified/report.html'
 
     Notes
@@ -218,8 +218,8 @@ def dataset_path(
         Dataset name, takes precedence over the `workflow/dataset` config variable
     access_level : str, optional
         Access level, takes precedence over the `workflow/access_level` config variable
-    path_format: str, optional
-        Cloud storage path protocol, Takes precedence over the `workflow/path_format`
+    path_scheme: str, optional
+        Cloud storage path scheme, takes precedence over the `workflow/path_scheme`
         config variable
 
     Returns
@@ -229,7 +229,7 @@ def dataset_path(
     config = get_config()
     dataset = dataset or config['workflow'].get('dataset')
     access_level = access_level or config['workflow'].get('access_level')
-    path_format = path_format or config['workflow'].get('path_format', 'gs')
+    path_scheme = path_scheme or config['workflow'].get('path_scheme', 'gs')
 
     if dataset and access_level:
         namespace = 'test' if access_level == 'test' else 'main'
@@ -237,11 +237,11 @@ def dataset_path(
             category = namespace
         elif category not in ('archive', 'upload'):
             category = f'{namespace}-{category}'
-        prefix = PathFormat.parse(path_format).path_prefix(dataset, category)
+        prefix = PathScheme.parse(path_scheme).path_prefix(dataset, category)
     else:
         prefix = config['workflow']['dataset_path']
 
-    return PathFormat.parse(path_format).full_path(prefix, suffix)
+    return PathScheme.parse(path_scheme).full_path(prefix, suffix)
 
 
 def web_url(
