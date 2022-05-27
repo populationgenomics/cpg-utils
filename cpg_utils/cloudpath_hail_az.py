@@ -47,7 +47,7 @@ class HailAzureBlobPath(AzureBlobPath):
                 flags=re.IGNORECASE,
             )
             if m is None:
-                raise ValueError(f"Bad Azure path '{cloud_path}'")
+                raise ValueError(f'Bad Azure path "{cloud_path}"')
             account = m.group('account')
             fstype = m.group('type') or 'blob'
             account_url = f'https://{account}.{fstype}.core.windows.net/'
