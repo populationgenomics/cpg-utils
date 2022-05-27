@@ -80,7 +80,6 @@ def init_batch(**kwargs):
     kwargs : keyword arguments
         Forwarded directly to `hl.init_batch`.
     """
-
     return asyncio.get_event_loop().run_until_complete(
         hl.init_batch(
             default_reference='GRCh38',
