@@ -7,7 +7,7 @@ import google.auth
 import google.auth.exceptions
 import google.auth.transport.requests
 
-from .config import get_deploy_config
+from .deploy_config import get_deploy_config
 
 
 def get_dataset_access_list(dataset: str, access_type: str) -> List[str]:

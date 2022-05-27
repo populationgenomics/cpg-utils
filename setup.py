@@ -19,6 +19,7 @@ setuptools.setup(
         'azure-keyvault-secrets',
         'azure-storage-blob',
         'cloudpathlib[all]',
+        'toml',
     ],
     python_requires=">=3.8",
     include_package_data=True,

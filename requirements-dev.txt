@@ -3,3 +3,4 @@ pylint
 bumpversion
 pytest
 pytest-cov
+toml

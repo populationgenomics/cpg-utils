@@ -4,7 +4,7 @@ import azure.identity
 import azure.keyvault.secrets as secrets
 import pytest
 from cpg_utils.auth import check_dataset_access, check_global_access
-from cpg_utils.config import get_deploy_config, get_server_config, set_deploy_config_from_env
+from cpg_utils.deploy_config import get_deploy_config, get_server_config, set_deploy_config_from_env
 from cpg_utils.secrets import SecretManager
 from google.cloud import secretmanager
 

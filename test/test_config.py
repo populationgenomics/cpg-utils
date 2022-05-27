@@ -2,7 +2,7 @@ import os
 import json
 
 import pytest
-from cpg_utils.config import (
+from cpg_utils.deploy_config import (
     DEFAULT_CONFIG,
     DeployConfig,
     get_deploy_config,

@@ -1,98 +1,80 @@
-import json
-import logging
-from os import getenv
-from typing import Any, Dict, Optional
-from .secrets import SecretManager
+"""Provides access to config variables."""
 
-deploy_config: "DeployConfig" = None
-DEFAULT_CONFIG = {
-    "cloud": "gcp",
-    "sample_metadata_project": "sample-metadata",
-    "sample_metadata_host": "http://localhost:8000",
-    "analysis_runner_project": "analysis-runner",
-    "analysis_runner_host": "http://localhost:8001",
-}
+import os
+from typing import Any, MutableMapping, Optional
+from cloudpathlib import AnyPath
+import toml
+
+# We use these globals for lazy initialization, but pylint doesn't like that.
+# pylint: disable=global-statement, invalid-name
+_config_path = os.getenv('CPG_CONFIG_PATH')  # See set_config_path.
+_config: Optional[MutableMapping[str, Any]] = None  # Cached config, initialized lazily.
 
 
-class DeployConfig:
+def set_config_path(config_path: str) -> None:
+    """Sets the config path that's used by subsequent calls to get_config.
 
-    _server_config: Dict[str, Any] = None
-    _secret_manager: SecretManager = None
+    If this isn't called, the value of the CPG_CONFIG_PATH environment variable is used
+    instead.
 
-    @staticmethod
-    def from_dict(config: Dict[str, str]) -> "DeployConfig":
-        return DeployConfig(**config)
+    Parameters
+    ----------
+    config_path: str
+        A cloudpathlib-compatible path to a TOML file containing the configuration.
+    """
 
-    @staticmethod
-    def from_environment() -> "DeployConfig":
-        deploy_config = json.loads(getenv("CPG_DEPLOY_CONFIG", json.dumps(DEFAULT_CONFIG)))
-        # Allow individual field overrides.
-        deploy_config["cloud"] = getenv("CLOUD", deploy_config["cloud"])
-        deploy_config["sample_metadata_host"] = getenv("SM_HOST_URL", deploy_config["sample_metadata_host"])
-        return DeployConfig.from_dict(deploy_config)
-
-    def __init__(
-        self,
-        cloud: Optional[str],
-        sample_metadata_project: Optional[str],
-        sample_metadata_host: Optional[str],
-        analysis_runner_project: Optional[str],
-        analysis_runner_host: Optional[str],
-    ):
-        self.cloud = cloud or DEFAULT_CONFIG["cloud"]
-        self.sample_metadata_project = sample_metadata_project or DEFAULT_CONFIG["sample_metadata_project"]
-        self.sample_metadata_host = sample_metadata_host or DEFAULT_CONFIG["sample_metadata_host"]
-        self.analysis_runner_project = analysis_runner_project or DEFAULT_CONFIG["analysis_runner_project"]
-        self.analysis_runner_host = analysis_runner_host or DEFAULT_CONFIG["analysis_runner_host"]
-        assert self.cloud in ("gcp", "azure"), f"Invalid cloud specification '{self.cloud}'"
-
-    def to_dict(self) -> Dict[str, str]:
-        return self.__dict__.copy()
-
-    @property
-    def secret_manager(self) -> SecretManager:
-        if self._secret_manager is None:
-            self._secret_manager = SecretManager.get_secret_manager(self.cloud)
-        return self._secret_manager
-
-    @property
-    def server_config(self) -> Dict[str, Any]:
-        if self._server_config is None:
-            config = self.read_global_config("server-config")
-            logging.info(f"setting deploy_config: {config}")
-            self._server_config = json.loads(config)
-        return self._server_config
-
-    def read_project_id_config(self, project_id: str, config_key: str) -> str:
-        config_host = project_id + "vault" if self.cloud == "azure" else project_id
-        return self.secret_manager.read_secret(config_host, config_key)
-
-    def read_global_config(self, config_key: str) -> str:
-        return self.read_project_id_config(self.analysis_runner_project, config_key)
-
-    def read_dataset_config(self, dataset: str, config_key: str) -> str:
-        if dataset not in self.server_config:
-            return ""
-        dataset_id = self.server_config[dataset]["projectId"]
-        return self.read_project_id_config(dataset_id, config_key)
+    global _config_path, _config
+    if _config_path != config_path:
+        _config_path = config_path
+        _config = None  # Make sure the config gets reloaded.
 
 
-def get_deploy_config() -> DeployConfig:
-    global deploy_config
-    if deploy_config is None:
-        set_deploy_config_from_env()
-    return deploy_config
+def get_config() -> MutableMapping[str, Any]:
+    """Returns the configuration dictionary.
 
+    Call set_config_path beforehand to override the default path.
 
-def set_deploy_config(config: DeployConfig) -> None:
-    global deploy_config
-    logging.info(f"setting deploy_config: {json.dumps(config.to_dict())}")
-    deploy_config = config
+    Examples
+    --------
+    Here's a typical configuration file in TOML format:
 
+    [hail]
+    billing_project = "tob-wgs"
+    bucket = "cpg-tob-wgs-hail"
 
-def set_deploy_config_from_env() -> None:
-    set_deploy_config(DeployConfig.from_environment())
+    [workflow]
+    access_level = "test"
+    dataset = "tob-wgs"
+    dataset_gcp_project = "tob-wgs"
+    driver_image = "australia-southeast1-docker.pkg.dev/analysis-runner/images/driver:36c6d4548ef347f14fd34a5b58908057effcde82-hail-ad1fc0e2a30f67855aee84ae9adabc3f3135bd47"
+    image_registry_prefix = "australia-southeast1-docker.pkg.dev/cpg-common/images"
+    reference_prefix = "gs://cpg-reference"
+    output_prefix = "plasma/chr22/v6"
 
+    >>> from cpg_utils.config import get_config
+    >>> get_config()['workflow']['dataset']
+    'tob-wgs'
 
-def get_server_config() -> Dict[str, Any]:
-    return get_deploy_config().server_config
+    Notes
+    -----
+    Caches the result based on the config path alone.
+
+    Returns
+    -------
+    MutableMapping[str, Any]
+    """
+
+    global _config
+    if _config is None:  # Lazily initialize the config.
+        assert (
+            _config_path
+        ), 'Either set the CPG_CONFIG_PATH environment variable or call set_config_path'
+
+        with AnyPath(_config_path).open() as f:
+            config_str = f.read()
+
+        # Print the config content, which is helpful for debugging.
+        print(f'Configuration at {_config_path}:\n{config_str}')
+        _config = toml.loads(config_str)
+
+    return _config

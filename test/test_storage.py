@@ -1,5 +1,5 @@
 import pytest
-from cpg_utils.config import set_deploy_config_from_env
+from cpg_utils.deploy_config import set_deploy_config_from_env
 from cpg_utils.storage import DataManager, get_data_manager
 import azure.core.exceptions
 import azure.identity

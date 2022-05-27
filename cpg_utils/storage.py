@@ -8,7 +8,7 @@ import azure.identity
 import google.cloud.storage
 import azure.storage.blob
 
-from .config import get_deploy_config, get_server_config
+from .deploy_config import get_deploy_config, get_server_config
 
 data_manager: "DataManager" = None
 
