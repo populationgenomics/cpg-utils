@@ -5,18 +5,54 @@ import inspect
 import os
 import pathlib
 import textwrap
-from enum import Enum
 from typing import Optional, Union, List
+from abc import ABC, abstractmethod
 
 import hail as hl
 import hailtop.batch as hb
 from cloudpathlib import CloudPath
 from cloudpathlib.anypath import to_anypath
 
+from cpg_utils.config import get_config
 
+
+# template commands strings
 GCLOUD_AUTH_COMMAND = (
     'gcloud -q auth activate-service-account --key-file=/gsa-key/key.json'
 )
+BASE_CMD = """
+import logging
+logger = logging.getLogger(__file__)
+logging.basicConfig(format='%(levelname)s (%(name)s %(lineno)s): %(message)s')
+logger.setLevel(logging.INFO)
+"""
+HAIL_STARTUP = """
+import asyncio
+import hail as hl
+asyncio.get_event_loop().run_until_complete(
+    hl.init_batch(
+        default_reference='{default_reference}',
+        billing_project='{hail_billing_project}',
+        remote_tmpdir='{hail_bucket}',
+    )
+)
+"""
+CMD_MODULE = """
+{source_module}
+{func_name}{func_args}
+"""
+CMD_SCRIPT = """
+set -o pipefail
+set -ex
+{gcloud_auth}
+
+{packages}
+
+cat << EOT >> script.py
+{command}
+EOT
+python3 script.py
+"""
 
 
 # Path can be either a cloud URL or a local posix file path.
@@ -29,7 +65,7 @@ to_path = to_anypath
 def init_batch(**kwargs):
     """
     Initializes the Hail Query Service from within Hail Batch.
-    Requires the HAIL_BILLING_PROJECT and HAIL_BUCKET environment variables to be set.
+    Requires the `hail/billing_project` and `hail/bucket` config variables to be set.
 
     Parameters
     ----------
@@ -37,10 +73,12 @@ def init_batch(**kwargs):
         Forwarded directly to `hl.init_batch`.
     """
 
+    billing_project = os.getenv('HAIL_BILLING_PROJECT')
+    assert billing_project
     return asyncio.get_event_loop().run_until_complete(
         hl.init_batch(
             default_reference='GRCh38',
-            billing_project=billing_project,
+            billing_project=get_config()['hail']['billing_project'],
             remote_tmpdir=remote_tmpdir(),
             **kwargs,
         )
@@ -54,21 +92,11 @@ def copy_common_env(job: hb.batch.job.Job) -> None:
     passed through for "batch-in-batch" use cases.
 
     The environment variable values are extracted from the current process and
-    copied to the environment dictionary of the given Hail Batch job."""
-
-    for key in (
-        'CPG_ACCESS_LEVEL',
-        'CPG_DATASET',
-        'CPG_DATASET_GCP_PROJECT',
-        'CPG_DATASET_PATH',
-        'CPG_DRIVER_IMAGE',
-        'CPG_IMAGE_REGISTRY_PREFIX',
-        'CPG_REFERENCE_PREFIX',
-        'cpg_pipes/pipeline/cli_opts.py',
-        'CPG_OUTPUT_PREFIX',
-        'HAIL_BILLING_PROJECT',
-        'HAIL_BUCKET',
-    ):
+    copied to the environment dictionary of the given Hail Batch job.
+    """
+    # If possible, please don't add new environment variables here, but instead add
+    # config variables.
+    for key in ('CPG_CONFIG_PATH',):
         val = os.getenv(key)
         if val:
             job.env(key, val)
@@ -77,21 +105,70 @@ def copy_common_env(job: hb.batch.job.Job) -> None:
 def remote_tmpdir(hail_bucket: Optional[str] = None) -> str:
     """Returns the remote_tmpdir to use for Hail initialization.
 
-    If `hail_bucket` is not specified explicitly, requires the HAIL_BUCKET environment variable to be set."""
-
-    if not hail_bucket:
-        hail_bucket = os.getenv('HAIL_BUCKET')
-        assert hail_bucket
-    return f'gs://{hail_bucket}/batch-tmp'
-
-
-class CloudPathProtocol(Enum):
+    If `hail_bucket` is not specified explicitly, requires the `hail/bucket` config variable to be set.
     """
-    Cloud storage path protocol to parse and construct object URLs.
+    bucket = hail_bucket or get_config().get('hail', {}).get('bucket')
+    assert bucket, f'hail_bucket was not set by argument or configuration'
+    return f'gs://{bucket}/batch-tmp'
+
+
+class PathScheme(ABC):
+    """
+    Cloud storage path scheme. Constructs full paths to buckets and files.
     """
 
-    GS = 'gs'
-    HAIL_AZ = 'hail-az'
+    @abstractmethod
+    def path_prefix(self, dataset: str, category: str) -> str:
+        """Build path prefix used in dataset_path"""
+
+    @abstractmethod
+    def full_path(self, prefix: str, suffix: str) -> str:
+        """Build full path from prefix and suffix"""
+
+    @staticmethod
+    def parse(val: str) -> 'PathScheme':
+        """Parse subclass name from string"""
+        if val == 'gs':
+            return GSPathScheme()
+        if val in ['az', 'hail-az']:
+            return AzurePathScheme()
+        raise ValueError(f'Unsupported path format: {val}. Available: gs, hail-az')
+
+
+class GSPathScheme(PathScheme):
+    """
+    Google Cloud Storage path scheme.
+    """
+
+    def __init__(self):
+        self.scheme = 'gs'
+        self.prefix = 'cpg'
+
+    def path_prefix(self, dataset: str, category: str) -> str:
+        """Build path prefix used in dataset_path"""
+        return f'{self.prefix}-{dataset}-{category}'
+
+    def full_path(self, prefix: str, suffix: str) -> str:
+        """Build full path from prefix and suffix"""
+        return os.path.join(f'{self.scheme}://', prefix, suffix)
+
+
+class AzurePathScheme(PathScheme):
+    """
+    Azure Blob Storage path scheme, following the Hail Batch hail-az format.
+    """
+
+    def __init__(self, account: Optional[str] = 'cpg'):
+        self.scheme = 'hail-az'
+        self.account = os.getenv('CPG_AZURE_ACCOUNT', account)
+
+    def path_prefix(self, dataset: str, category: str) -> str:
+        """Build path prefix used in dataset_path"""
+        return f'{self.account}/{dataset}-{category}'
+
+    def full_path(self, prefix: str, suffix: str) -> str:
+        """Build full path from prefix and suffix"""
+        return os.path.join(f'{self.scheme}://', prefix, suffix)
 
 
 def dataset_path(
@@ -99,13 +176,13 @@ def dataset_path(
     category: Optional[str] = None,
     dataset: Optional[str] = None,
     access_level: Optional[str] = None,
-    cloud_path_protocol: Optional[CloudPathProtocol] = None,
+    path_scheme: Optional[str] = None,
 ) -> str:
     """
     Returns a full path for the current dataset, given a category and path suffix.
 
     This is useful for specifying input files, as in contrast to the output_path
-    function, dataset_path does _not_ take the CPG_OUTPUT_PREFIX environment variable
+    function, dataset_path does _not_ take the `workflow/output_prefix` config variable
     into account.
 
     Examples
@@ -118,14 +195,14 @@ def dataset_path(
     'gs://cpg-fewgenomes-test/1kg_densified/combined.mt'
     >>> dataset_path('1kg_densified/report.html', 'web')
     'gs://cpg-fewgenomes-test-web/1kg_densified/report.html'
-    >>> dataset_path('1kg_densified/report.html', cloud_path_protocol=CloudPathProtocol.HAIL_AZ)
+    >>> dataset_path('1kg_densified/report.html', path_scheme='hail-az')
     'hail-az://cpg/fewgenomes-test/1kg_densified/report.html'
 
     Notes
     -----
     Requires either the
-    * `CPG_DATASET` and `CPG_ACCESS_LEVEL` environment variables, or the
-    * `CPG_DATASET_PATH` environment variable
+    * `workflow/dataset` and `workflow/access_level` config variables, or the
+    * `workflow/dataset_path` config variable
     to be set, where the former takes precedence.
 
     Parameters
@@ -138,22 +215,21 @@ def dataset_path(
         https://github.com/populationgenomics/team-docs/tree/main/storage_policies
         for a full list of categories and their use cases.
     dataset : str, optional
-        Dataset name, takes precedence over the `CPG_DATASET` environment variable 
+        Dataset name, takes precedence over the `workflow/dataset` config variable
     access_level : str, optional
-        Access level, takes precedence over the `CPG_ACCESS_LEVEL` environment variable 
-    cloud_path_protocol: str, optional
-        Cloud storage path protocol, takes precedence over `CPG_CLOUD_PATH_PROTOCOL`
+        Access level, takes precedence over the `workflow/access_level` config variable
+    path_scheme: str, optional
+        Cloud storage path scheme, takes precedence over the `workflow/path_scheme`
+        config variable
 
     Returns
     -------
     str
     """
-    dataset = dataset or os.getenv('CPG_DATASET')
-    access_level = access_level or os.getenv('CPG_ACCESS_LEVEL')
-    cloud_path_protocol = cloud_path_protocol or os.getenv('CPG_CLOUD_PATH_PROTOCOL') or CloudPathProtocol.GS
-
-    cpg_prefix = 'cpg'
-    azure_account = os.getenv('CPG_AZURE_ACCOUNT', 'cpg')
+    config = get_config()
+    dataset = dataset or config['workflow'].get('dataset')
+    access_level = access_level or config['workflow'].get('access_level')
+    path_scheme = path_scheme or config['workflow'].get('path_scheme', 'gs')
 
     if dataset and access_level:
         namespace = 'test' if access_level == 'test' else 'main'
@@ -161,24 +237,11 @@ def dataset_path(
             category = namespace
         elif category not in ('archive', 'upload'):
             category = f'{namespace}-{category}'
-
-        if cloud_path_protocol == CloudPathProtocol.GS:
-            prefix = f'{cpg_prefix}-{dataset}-{category}'
-        elif cloud_path_protocol == CloudPathProtocol.HAIL_AZ:
-            prefix = f'{azure_account}/{dataset}-{category}'
-        else:
-            raise ValueError(f'Unsupported path protocol {cloud_path_protocol}')
+        prefix = PathScheme.parse(path_scheme).path_prefix(dataset, category)
     else:
-        prefix = os.getenv('CPG_DATASET_PATH') or ''  # coerce to str
-        assert prefix
+        prefix = config['workflow']['dataset_path']
 
-    if cloud_path_protocol == CloudPathProtocol.GS:
-        return os.path.join('gs://', prefix, suffix)
-    elif cloud_path_protocol == CloudPathProtocol.HAIL_AZ:
-        return os.path.join('hail-az://', prefix, suffix)
-    else:
-        raise ValueError(f'Unsupported path protocol {cloud_path_protocol}')
-
+    return PathScheme.parse(path_scheme).full_path(prefix, suffix)
 
 
 def web_url(
@@ -206,12 +269,12 @@ def web_url(
 def output_path(suffix: str, category: Optional[str] = None) -> str:
     """Returns a full path for the given category and path suffix.
 
-    In contrast to the dataset_path function, output_path takes the CPG_OUTPUT_PREFIX
-    environment variable into account.
+    In contrast to the dataset_path function, output_path takes the `workflow/output_prefix`
+    config variable into account.
 
     Examples
     --------
-    If using the analysis-runner, the CPG_OUTPUT_PREFIX would be set to the argument
+    If using the analysis-runner, the `workflow/output_prefix` would be set to the argument
     provided using the --output argument, e.g.
     `--dataset fewgenomes --access-level test --output 1kg_pca/v42`:
     will use '1kg_pca/v42' as the base path to build upon in this method
@@ -224,7 +287,7 @@ def output_path(suffix: str, category: Optional[str] = None) -> str:
 
     Notes
     -----
-    Requires the `CPG_OUTPUT_PREFIX` environment variable to be set, in addition to the
+    Requires the `workflow/output_prefix` config variable to be set, in addition to the
     requirements for `dataset_path`.
 
     Parameters
@@ -241,9 +304,9 @@ def output_path(suffix: str, category: Optional[str] = None) -> str:
     -------
     str
     """
-    output = os.getenv('CPG_OUTPUT_PREFIX')
-    assert output
-    return dataset_path(os.path.join(output, suffix), category)
+    return dataset_path(
+        os.path.join(get_config()['workflow']['output_prefix'], suffix), category
+    )
 
 
 def image_path(suffix: str) -> str:
@@ -256,7 +319,7 @@ def image_path(suffix: str) -> str:
 
     Notes
     -----
-    Requires the `CPG_IMAGE_REGISTRY_PREFIX` environment variable to be set.
+    Requires the `workflow/image_registry_prefix` config variable to be set.
 
     Parameters
     ----------
@@ -267,9 +330,7 @@ def image_path(suffix: str) -> str:
     -------
     str
     """
-    prefix = os.getenv('CPG_IMAGE_REGISTRY_PREFIX')
-    assert prefix
-    return os.path.join(prefix, suffix)
+    return os.path.join(get_config()['workflow']['image_registry_prefix'], suffix)
 
 
 def reference_path(suffix: str) -> Union[CloudPath, Path]:
@@ -282,21 +343,19 @@ def reference_path(suffix: str) -> Union[CloudPath, Path]:
 
     Notes
     -----
-    Requires the `CPG_REFERENCE_PREFIX` environment variable to be set.
+    Requires the `workflow/reference_prefix` config variable to be set.
 
     Parameters
     ----------
     suffix : str
-        Describes path relative to CPG_REFERENCE_PREFIX.
+        Describes path relative to the reference prefix.
 
     Returns
     -------
     str
     """
-    prefix = os.getenv('CPG_REFERENCE_PREFIX')
-    assert prefix
-    suffix = suffix.strip('/')  # leading slash results in `prefix` entirely ignored
-    return to_anypath(prefix) / suffix
+    # A leading slash results in the prefix being ignored, therefore use strip below.
+    return to_anypath(get_config()['workflow']['reference_prefix']) / suffix.strip('/')
 
 
 def authenticate_cloud_credentials_in_job(
@@ -344,39 +403,22 @@ def query_command(
     Constructs a command string to use with job.command().
     If hail_billing_project is provided, Hail Query will be initialised.
     """
-    python_cmd = f"""
-import logging
-logger = logging.getLogger(__file__)
-logging.basicConfig(format='%(levelname)s (%(name)s %(lineno)s): %(message)s')
-logger.setLevel(logging.INFO)
-"""
+    python_cmd = BASE_CMD
     if hail_billing_project:
         assert hail_bucket
-        python_cmd += f"""
-import asyncio
-import hail as hl
-asyncio.get_event_loop().run_until_complete(
-    hl.init_batch(
-        default_reference='{default_reference}',
-        billing_project='{hail_billing_project}',
-        remote_tmpdir='{hail_bucket}',
+        python_cmd += HAIL_STARTUP.format(
+            default_reference=default_reference,
+            hail_billing_project=hail_billing_project,
+            hail_bucket=hail_bucket,
+        )
+    python_cmd += CMD_MODULE.format(
+        source_module=textwrap.dedent(inspect.getsource(module)),
+        func_name=func_name,
+        func_args=func_args,
     )
-)
-"""
-    python_cmd += f"""
-{textwrap.dedent(inspect.getsource(module))}
-{func_name}{func_args}
-"""
-    cmd = f"""
-set -o pipefail
-set -ex
-{GCLOUD_AUTH_COMMAND if setup_gcp else ''}
 
-{('pip3 install ' + ' '.join(packages)) if packages else ''}
-
-cat << EOT >> script.py
-{python_cmd}
-EOT
-python3 script.py
-"""
-    return cmd
+    return CMD_SCRIPT.format(
+        gcloud_auth=GCLOUD_AUTH_COMMAND if setup_gcp else '',
+        packages=('pip3 install ' + ' '.join(packages)) if packages else '',
+        python_cmd=python_cmd,
+    )
