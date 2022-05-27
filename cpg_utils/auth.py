@@ -54,6 +54,19 @@ def get_user_from_headers(headers: Mapping[str, str]) -> Optional[str]:
     return None
 
 
+def get_analysis_runner_token() -> str:
+    """Get analysis-runner Bearer auth token for Azure or GCP depending on deployment config."""
+    deploy_config = get_deploy_config()
+
+    if deploy_config.cloud == "azure":
+        scope = f"api://arapi-{deploy_config.analysis_runner_project}/.default"
+        return get_azure_auth_token(scope)
+
+    assert deploy_config.cloud == "gcp"
+    audience = deploy_config.analysis_runner_host
+    return get_google_auth_token(audience)
+
+
 def get_sample_metadata_token() -> str:
     """Get sample-metadata Bearer auth token for Azure or GCP depending on deployment config."""
     deploy_config = get_deploy_config()
