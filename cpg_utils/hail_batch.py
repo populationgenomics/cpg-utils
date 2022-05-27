@@ -3,9 +3,10 @@
 import asyncio
 import inspect
 import os
+import pathlib
 import textwrap
-from pathlib import Path
 from typing import Optional, Union, List
+from abc import ABC, abstractmethod
 
 import hail as hl
 import hailtop.batch as hb
@@ -52,6 +53,21 @@ cat << EOT >> script.py
 EOT
 python3 script.py
 """
+
+
+# The AnyPath class https://cloudpathlib.drivendata.org/stable/anypath-polymorphism/
+# is very handy to parse a string that can be either a cloud URL or a local posix path.
+# However, AnyPath can't be used for type hinting, because neither CloudPath nor
+# pathlib.Path derive from it. The AnyPath's constructor method doesn't actually return
+# an instance of AnyPath class, but rather Union[CloudPath, pathlib.Path], and it's
+# designed to dynamically pick a specific CloudPath or pathlib.Path subclass.
+# Here we create an alias for such union to allow using simple "Path" in type hints:
+Path = Union[CloudPath, pathlib.Path]
+
+# We would still need to call AnyPath() to parse a string, which might be confusing.
+# Something like to_path() would look better, so we are aliasing a handy method
+# to_anypath to to_path, which returns exactly the Union type we are looking for:
+to_path = to_anypath
 
 
 def init_batch(**kwargs):
@@ -101,7 +117,75 @@ def remote_tmpdir(hail_bucket: Optional[str] = None) -> str:
     return f'gs://{bucket}/batch-tmp'
 
 
-def dataset_path(suffix: str, category: Optional[str] = None) -> str:
+class PathScheme(ABC):
+    """
+    Cloud storage path scheme. Constructs full paths to buckets and files.
+    """
+
+    @abstractmethod
+    def path_prefix(self, dataset: str, category: str) -> str:
+        """Build path prefix used in dataset_path"""
+
+    @abstractmethod
+    def full_path(self, prefix: str, suffix: str) -> str:
+        """Build full path from prefix and suffix"""
+
+    @staticmethod
+    def parse(val: str) -> 'PathScheme':
+        """Parse subclass name from string"""
+        match val:
+            case 'gs':
+                return GSPathScheme()
+            case 'hail-az':
+                return AzurePathScheme()
+            case _:
+                raise ValueError(f'Unsupported path format: {val}. Available: gs, hail-az')
+
+
+class GSPathScheme(PathScheme):
+    """
+    Google Cloud Storage path scheme.
+    """
+
+    def __init__(self):
+        self.scheme = 'gs'
+        self.prefix = 'cpg'
+
+    def path_prefix(self, dataset: str, category: str) -> str:
+        """Build path prefix used in dataset_path"""
+        return f'{self.prefix}-{dataset}-{category}'
+
+    def full_path(self, prefix: str, suffix: str) -> str:
+        """Build full path from prefix and suffix"""
+        return os.path.join(f'{self.scheme}://', prefix, suffix)
+
+
+class AzurePathScheme(PathScheme):
+    """
+    Azure Blob Storage path scheme, following the Hail Batch hail-az format.
+    """
+
+    def __init__(self, account: Optional[str] = 'cpg'):
+        config = get_config()
+        self.scheme = 'hail-az'
+        self.account = config['workflow'].get('azure_account', account)
+
+    def path_prefix(self, dataset: str, category: str) -> str:
+        """Build path prefix used in dataset_path"""
+        return f'{self.account}/{dataset}-{category}'
+
+    def full_path(self, prefix: str, suffix: str) -> str:
+        """Build full path from prefix and suffix"""
+        return os.path.join(f'{self.scheme}://', prefix, suffix)
+
+
+def dataset_path(
+    suffix: str,
+    category: Optional[str] = None,
+    dataset: Optional[str] = None,
+    access_level: Optional[str] = None,
+    path_scheme: Optional[str] = None,
+) -> str:
     """
     Returns a full path for the current dataset, given a category and path suffix.
 
@@ -119,6 +203,8 @@ def dataset_path(suffix: str, category: Optional[str] = None) -> str:
     'gs://cpg-fewgenomes-test/1kg_densified/combined.mt'
     >>> dataset_path('1kg_densified/report.html', 'web')
     'gs://cpg-fewgenomes-test-web/1kg_densified/report.html'
+    >>> dataset_path('1kg_densified/report.html', path_scheme='hail-az')
+    'hail-az://cpg/fewgenomes-test/1kg_densified/report.html'
 
     Notes
     -----
@@ -136,14 +222,22 @@ def dataset_path(suffix: str, category: Optional[str] = None) -> str:
         "test" buckets based on the access level. See
         https://github.com/populationgenomics/team-docs/tree/main/storage_policies
         for a full list of categories and their use cases.
+    dataset : str, optional
+        Dataset name, takes precedence over the `workflow/dataset` config variable
+    access_level : str, optional
+        Access level, takes precedence over the `workflow/access_level` config variable
+    path_scheme: str, optional
+        Cloud storage path scheme, takes precedence over the `workflow/path_scheme`
+        config variable
 
     Returns
     -------
     str
     """
     config = get_config()
-    dataset = config['workflow'].get('dataset')
-    access_level = config['workflow'].get('access_level')
+    dataset = dataset or config['workflow'].get('dataset')
+    access_level = access_level or config['workflow'].get('access_level')
+    path_scheme = path_scheme or config['workflow'].get('path_scheme', 'gs')
 
     if dataset and access_level:
         namespace = 'test' if access_level == 'test' else 'main'
@@ -151,11 +245,11 @@ def dataset_path(suffix: str, category: Optional[str] = None) -> str:
             category = namespace
         elif category not in ('archive', 'upload'):
             category = f'{namespace}-{category}'
-        prefix = f'cpg-{dataset}-{category}'
+        prefix = PathScheme.parse(path_scheme).path_prefix(dataset, category)
     else:
         prefix = config['workflow']['dataset_path']
 
-    return os.path.join('gs://', prefix, suffix)
+    return PathScheme.parse(path_scheme).full_path(prefix, suffix)
 
 
 def web_url(
@@ -166,16 +260,19 @@ def web_url(
     """Returns URL corresponding to a dataset path of category 'web',
     assuming other arguments are the same.
     """
-    dataset = dataset or os.environ['CPG_DATASET']
-    access_level = access_level or os.environ['CPG_ACCESS_LEVEL']
+    config = get_config()
+    dataset = dataset or config['workflow'].get('dataset')
+    access_level = access_level or config['workflow'].get('access_level')
     namespace = 'test' if access_level == 'test' else 'main'
-    web_url_template = os.environ['CPG_WEB_URL_TEMPLATE']
+    web_url_template = config['workflow'].get('web_url_template')
     try:
         url = web_url_template.format(dataset=dataset, namespace=namespace)
     except KeyError as e:
         raise ValueError(
-            f'CPG_WEB_URL_TEMPLATE should be parametrised by "dataset" and "namespace" in curly braces, '
-            f'e.g. https://{{namespace}}-web.populationgenomics.org.au/{{dataset}}. Got: {web_url_template}'
+            f'`workflow/web_url_template` should be parametrised by "dataset" and '
+            f'"namespace" in curly braces, for example: '
+            f'https://{{namespace}}-web.populationgenomics.org.au/{{dataset}}. '
+            f'Got: {web_url_template}'
         ) from e
     return os.path.join(url, suffix)
 
