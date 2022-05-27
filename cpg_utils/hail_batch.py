@@ -55,10 +55,18 @@ python3 script.py
 """
 
 
-# Path can be either a cloud URL or a local posix file path.
+# The AnyPath class https://cloudpathlib.drivendata.org/stable/anypath-polymorphism/
+# is very handy to parse a string that can be either a cloud URL or a local posix path.
+# However, AnyPath can't be used for type hinting, because neither CloudPath nor
+# pathlib.Path derive from it. The AnyPath's constructor method doesn't actually return
+# an instance of AnyPath class, but rather Union[CloudPath, pathlib.Path], and it's
+# designed to dynamically pick a specific CloudPath or pathlib.Path subclass.
+# Here we create an alias for such union to allow using simple "Path" in type hints:
 Path = Union[CloudPath, pathlib.Path]
 
-# Using convenience method from cloudpathlib to parse a path string.
+# We would still need to call AnyPath() to parse a string, which might be confusing.
+# Something like to_path() would look better, so we are aliasing a handy method
+# to_anypath to to_path, which returns exactly the Union type we are looking for:
 to_path = to_anypath
 
 
@@ -73,8 +81,6 @@ def init_batch(**kwargs):
         Forwarded directly to `hl.init_batch`.
     """
 
-    billing_project = os.getenv('HAIL_BILLING_PROJECT')
-    assert billing_project
     return asyncio.get_event_loop().run_until_complete(
         hl.init_batch(
             default_reference='GRCh38',
@@ -159,8 +165,9 @@ class AzurePathScheme(PathScheme):
     """
 
     def __init__(self, account: Optional[str] = 'cpg'):
+        config = get_config()
         self.scheme = 'hail-az'
-        self.account = os.getenv('CPG_AZURE_ACCOUNT', account)
+        self.account = config['workflow'].get('azure_account', account)
 
     def path_prefix(self, dataset: str, category: str) -> str:
         """Build path prefix used in dataset_path"""
@@ -252,16 +259,19 @@ def web_url(
     """Returns URL corresponding to a dataset path of category 'web',
     assuming other arguments are the same.
     """
-    dataset = dataset or os.environ['CPG_DATASET']
-    access_level = access_level or os.environ['CPG_ACCESS_LEVEL']
+    config = get_config()
+    dataset = dataset or config['workflow'].get('dataset')
+    access_level = access_level or config['workflow'].get('access_level')
     namespace = 'test' if access_level == 'test' else 'main'
-    web_url_template = os.environ['CPG_WEB_URL_TEMPLATE']
+    web_url_template = config['workflow'].get('web_url_template')
     try:
         url = web_url_template.format(dataset=dataset, namespace=namespace)
     except KeyError as e:
         raise ValueError(
-            f'CPG_WEB_URL_TEMPLATE should be parametrised by "dataset" and "namespace" in curly braces, '
-            f'e.g. https://{{namespace}}-web.populationgenomics.org.au/{{dataset}}. Got: {web_url_template}'
+            f'`workflow/web_url_template` should be parametrised by "dataset" and '
+            f'"namespace" in curly braces, for example: '
+            f'https://{{namespace}}-web.populationgenomics.org.au/{{dataset}}. '
+            f'Got: {web_url_template}'
         ) from e
     return os.path.join(url, suffix)
 
