@@ -139,7 +139,9 @@ class PathScheme(ABC):
             case 'hail-az':
                 return AzurePathScheme()
             case _:
-                raise ValueError(f'Unsupported path format: {val}. Available: gs, hail-az')
+                raise ValueError(
+                    f'Unsupported path format: {val}. Available: gs, hail-az'
+                )
 
 
 class GSPathScheme(PathScheme):
