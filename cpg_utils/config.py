@@ -1,14 +1,14 @@
 """Provides access to config variables."""
 
 import os
-from typing import Any, MutableMapping, Optional
+from typing import Optional
 from cloudpathlib import AnyPath
 import toml
 
 # We use these globals for lazy initialization, but pylint doesn't like that.
 # pylint: disable=global-statement, invalid-name
 _config_path = os.getenv('CPG_CONFIG_PATH')  # See set_config_path.
-_config: Optional[MutableMapping[str, Any]] = None  # Cached config, initialized lazily.
+_config: Optional[dict] = None  # Cached config, initialized lazily.
 
 
 def set_config_path(config_path: str) -> None:
@@ -29,7 +29,7 @@ def set_config_path(config_path: str) -> None:
         _config = None  # Make sure the config gets reloaded.
 
 
-def get_config() -> MutableMapping[str, Any]:
+def get_config() -> dict:
     """Returns the configuration dictionary.
 
     Call set_config_path beforehand to override the default path.
@@ -61,7 +61,7 @@ def get_config() -> MutableMapping[str, Any]:
 
     Returns
     -------
-    MutableMapping[str, Any]
+    dict
     """
 
     global _config
