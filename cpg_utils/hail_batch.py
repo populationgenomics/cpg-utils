@@ -5,6 +5,7 @@ import inspect
 import os
 import pathlib
 import textwrap
+from enum import Enum
 from typing import Optional, Union, List
 from abc import ABC, abstractmethod
 
@@ -181,8 +182,37 @@ class AzurePathScheme(PathScheme):
         return os.path.join(f'{self.scheme}://', prefix, suffix)
 
 
+class Namespace(Enum):
+    """
+    Storage namespace.
+    https://github.com/populationgenomics/team-docs/tree/main/storage_policies#main-vs-test
+    """
+
+    MAIN = 'main'
+    TEST = 'test'
+
+    @staticmethod
+    def parse(str_val: str) -> 'Namespace':
+        """
+        Parse value from a string.
+        >>> Namespace.parse('test')
+        Namespace.TEST
+        >>> Namespace.parse('main')
+        Namespace.MAIN
+        >>> Namespace.parse('standard')
+        Namespace.MAIN
+        """
+        for val, str_vals in {
+            Namespace.MAIN: ['main', 'standard', 'full'],
+            Namespace.TEST: ['test'],
+        }.items():
+            if str_val in str_vals:
+                return val
+        raise ValueError(f'Cannot parse namespace or access level {str_val}')
+
+
 def dataset_path(
-    suffix: str,
+    suffix: str = '',
     category: Optional[str] = None,
     dataset: Optional[str] = None,
     access_level: Optional[str] = None,
@@ -242,11 +272,11 @@ def dataset_path(
     path_scheme = path_scheme or config['workflow'].get('path_scheme', 'gs')
 
     if dataset and access_level:
-        namespace = 'test' if access_level == 'test' else 'main'
+        namespace = Namespace.parse(access_level)
         if category is None:
-            category = namespace
+            category = namespace.value
         elif category not in ('archive', 'upload'):
-            category = f'{namespace}-{category}'
+            category = f'{namespace.value}-{category}'
         prefix = PathScheme.parse(path_scheme).path_prefix(dataset, category)
     else:
         prefix = config['workflow']['dataset_path']
@@ -255,7 +285,7 @@ def dataset_path(
 
 
 def web_url(
-    suffix: str,
+    suffix: str = '',
     dataset: Optional[str] = None,
     access_level: Optional[str] = None,
 ) -> str:
@@ -265,10 +295,10 @@ def web_url(
     config = get_config()
     dataset = dataset or config['workflow'].get('dataset')
     access_level = access_level or config['workflow'].get('access_level')
-    namespace = 'test' if access_level == 'test' else 'main'
+    namespace = Namespace.parse(access_level)
     web_url_template = config['workflow'].get('web_url_template')
     try:
-        url = web_url_template.format(dataset=dataset, namespace=namespace)
+        url = web_url_template.format(dataset=dataset, namespace=namespace.value)
     except KeyError as e:
         raise ValueError(
             f'`workflow/web_url_template` should be parametrised by "dataset" and '
@@ -322,7 +352,7 @@ def output_path(suffix: str, category: Optional[str] = None) -> str:
     )
 
 
-def image_path(suffix: str) -> str:
+def image_path(suffix: str = '') -> str:
     """Returns a full path to a container image in the default registry.
 
     Examples
@@ -337,16 +367,19 @@ def image_path(suffix: str) -> str:
     Parameters
     ----------
     suffix : str
-        Describes the location within the registry.
+        Describes the location within the registry, or key in the `images` config
+        section.
 
     Returns
     -------
     str
     """
+    if (d := get_config().get('images')) and suffix and suffix in d:
+        suffix = d[suffix]
     return os.path.join(get_config()['workflow']['image_registry_prefix'], suffix)
 
 
-def reference_path(suffix: str) -> Union[CloudPath, Path]:
+def reference_path(suffix: str = '', section: Optional[str] = None) -> Path:
     """Returns a full path to a reference file.
 
     Examples
@@ -361,14 +394,54 @@ def reference_path(suffix: str) -> Union[CloudPath, Path]:
     Parameters
     ----------
     suffix : str
-        Describes path relative to the reference prefix.
+        Describes path relative to the reference prefix. Can be a key in the
+        `references` config section.
+    section : str, optional
+        Subsection name inside the references config section.
 
     Returns
     -------
     str
     """
+    prefix = to_path(get_config()['workflow']['reference_prefix'])
+
+    if d := get_config().get('references'):
+        if suffix and suffix in d:
+            suffix = d[suffix]
+        if section:
+            if section not in d:
+                raise ValueError(
+                    f'No subsection {section} in the "references" config section'
+                )
+            d = d[section]
+            if extra_prefix := d.get('prefix'):
+                prefix /= extra_prefix
+
     # A leading slash results in the prefix being ignored, therefore use strip below.
-    return to_anypath(get_config()['workflow']['reference_prefix']) / suffix.strip('/')
+    suffix = suffix.strip('/')
+    return prefix / suffix
+
+
+def genome_build() -> str:
+    """Return the genome build name"""
+    return get_config()['references'].get('genome_build', 'GRCh38')
+
+
+def fasta_res_group(b, indices: list | None = None):
+    """
+    Hail Batch resource group for fasta reference files.
+    @param b: Hail Batch object.
+    @param indices: list of extensions to add to the base fasta file path.
+    """
+    ref_fasta = reference_path('ref_fasta', section='broad')
+    d = dict(
+        base=str(ref_fasta),
+        fai=str(ref_fasta) + '.fai',
+        dict=str(ref_fasta.with_suffix('.dict')),
+    )
+    if indices:
+        d |= {ext: f'{ref_fasta}.{ext}' for ext in indices}
+    return b.read_input_group(**d)
 
 
 def authenticate_cloud_credentials_in_job(
