@@ -359,8 +359,6 @@ def reference_path(suffix: str = '', section: Optional[str] = None) -> Path:
     prefix = to_path(get_config()['workflow']['reference_prefix'])
 
     if d := get_config().get('references'):
-        if suffix and suffix in d:
-            suffix = d[suffix]
         if section:
             if section not in d:
                 raise ValueError(
@@ -369,6 +367,8 @@ def reference_path(suffix: str = '', section: Optional[str] = None) -> Path:
             d = d[section]
             if extra_prefix := d.get('prefix'):
                 prefix /= extra_prefix
+        if suffix and suffix in d:
+            suffix = d[suffix]
 
     # A leading slash results in the prefix being ignored, therefore use strip below.
     suffix = suffix.strip('/')
