@@ -3,11 +3,8 @@
 import os
 from typing import Optional
 
-import yaml
 from cloudpathlib import AnyPath
 import toml
-
-from cpg_utils import to_path
 
 
 # We use these globals for lazy initialization, but pylint doesn't like that.
@@ -82,9 +79,6 @@ def get_config() -> dict:
         print(f'Configuration at {_config_path}:\n{config_str}')
         _config = toml.loads(config_str)
 
-        # Add images and references YML configs as extra sections:
-        _load_images_and_references(_config)
-
     return _config
 
 
@@ -96,17 +90,3 @@ def update_dict(d1: dict, d2: dict) -> None:
             update_dict(v1, v2)
         else:
             d1[k] = v2
-
-
-def _load_images_and_references(_config):
-    for section in ['images', 'references']:
-        with (to_path(__file__).parent / f'{section}.yml').open() as f:
-            defaults = yaml.safe_load(f)
-            if section in _config:
-                update_dict(defaults, _config[section])
-            _config[section] = defaults
-
-        # If user specified a custom config, overriding defaults:
-        if user_yml := _config['workflow'].get(f'{section}_config_path'):
-            with to_path(user_yml).open() as f:
-                update_dict(_config[section], yaml.safe_load(f))
