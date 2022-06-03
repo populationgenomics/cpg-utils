@@ -175,14 +175,14 @@ class Namespace(Enum):
     TEST = 'test'
 
     @staticmethod
-    def parse(str_val: str) -> 'Namespace':
+    def from_access_level(val: str) -> 'Namespace':
         """
-        Parse value from a string.
-        >>> Namespace.parse('test')
+        Parse value from a access level string.
+        >>> Namespace.from_access_level('test')
         Namespace.TEST
-        >>> Namespace.parse('main')
+        >>> Namespace.from_access_level('standard')
         Namespace.MAIN
-        >>> Namespace.parse('standard')
+        >>> Namespace.from_access_level('main')
         Namespace.MAIN
         """
         for val, str_vals in {
@@ -255,16 +255,16 @@ def dataset_path(
     path_scheme = path_scheme or config['workflow'].get('path_scheme', 'gs')
 
     if dataset and access_level:
-        namespace = Namespace.parse(access_level)
+        namespace = Namespace.from_access_level(access_level)
         if category is None:
             category = namespace.value
         elif category not in ('archive', 'upload'):
             category = f'{namespace.value}-{category}'
-        prefix = PathScheme.parse(path_scheme).path_prefix(dataset, category)
+        prefix = PathScheme.from_access_level(path_scheme).path_prefix(dataset, category)
     else:
         prefix = config['workflow']['dataset_path']
 
-    return PathScheme.parse(path_scheme).full_path(prefix, suffix)
+    return PathScheme.from_access_level(path_scheme).full_path(prefix, suffix)
 
 
 def web_url(
@@ -278,7 +278,7 @@ def web_url(
     config = get_config()
     dataset = dataset or config['workflow'].get('dataset')
     access_level = access_level or config['workflow'].get('access_level')
-    namespace = Namespace.parse(access_level)
+    namespace = Namespace.from_access_level(access_level)
     web_url_template = config['workflow'].get('web_url_template')
     try:
         url = web_url_template.format(dataset=dataset, namespace=namespace.value)
