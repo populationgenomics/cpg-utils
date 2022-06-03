@@ -4,6 +4,7 @@ import asyncio
 import inspect
 import os
 import textwrap
+from enum import Enum
 from typing import Optional, List
 from abc import ABC, abstractmethod
 
@@ -164,6 +165,35 @@ class AzurePathScheme(PathScheme):
         return os.path.join(f'{self.scheme}://', prefix, suffix)
 
 
+class Namespace(Enum):
+    """
+    Storage namespace.
+    https://github.com/populationgenomics/team-docs/tree/main/storage_policies#main-vs-test
+    """
+
+    MAIN = 'main'
+    TEST = 'test'
+
+    @staticmethod
+    def from_access_level(val: str) -> 'Namespace':
+        """
+        Parse value from a access level string.
+        >>> Namespace.from_access_level('test')
+        Namespace.TEST
+        >>> Namespace.from_access_level('standard')
+        Namespace.MAIN
+        >>> Namespace.from_access_level('main')
+        Namespace.MAIN
+        """
+        for val, str_vals in {
+            Namespace.MAIN: ['main', 'standard', 'full'],
+            Namespace.TEST: ['test'],
+        }.items():
+            if str_val in str_vals:
+                return val
+        raise ValueError(f'Cannot parse namespace or access level {str_val}')
+
+
 def dataset_path(
     suffix: str = '',
     category: Optional[str] = None,
@@ -225,16 +255,16 @@ def dataset_path(
     path_scheme = path_scheme or config['workflow'].get('path_scheme', 'gs')
 
     if dataset and access_level:
-        namespace = 'test' if access_level == 'test' else 'main'
+        namespace = Namespace.from_access_level(access_level)
         if category is None:
-            category = namespace
+            category = namespace.value
         elif category not in ('archive', 'upload'):
-            category = f'{namespace}-{category}'
-        prefix = PathScheme.parse(path_scheme).path_prefix(dataset, category)
+            category = f'{namespace.value}-{category}'
+        prefix = PathScheme.from_access_level(path_scheme).path_prefix(dataset, category)
     else:
         prefix = config['workflow']['dataset_path']
 
-    return PathScheme.parse(path_scheme).full_path(prefix, suffix)
+    return PathScheme.from_access_level(path_scheme).full_path(prefix, suffix)
 
 
 def web_url(
@@ -248,10 +278,10 @@ def web_url(
     config = get_config()
     dataset = dataset or config['workflow'].get('dataset')
     access_level = access_level or config['workflow'].get('access_level')
-    namespace = 'test' if access_level == 'test' else 'main'
+    namespace = Namespace.from_access_level(access_level)
     web_url_template = config['workflow'].get('web_url_template')
     try:
-        url = web_url_template.format(dataset=dataset, namespace=namespace)
+        url = web_url_template.format(dataset=dataset, namespace=namespace.value)
     except KeyError as e:
         raise ValueError(
             f'`workflow/web_url_template` should be parametrised by "dataset" and '
