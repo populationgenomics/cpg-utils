@@ -34,6 +34,10 @@ def get_config() -> dict:
 
     Call set_config_path beforehand to override the default path.
 
+    If the path is a list of comma-separated file names ("base.toml,override.toml"), the
+    configurations get applied from left to right. I.e. the first config gets updated by
+    values of the second config, etc.
+
     Examples
     --------
     Here's a typical configuration file in TOML format:
@@ -70,11 +74,23 @@ def get_config() -> dict:
             _config_path
         ), 'Either set the CPG_CONFIG_PATH environment variable or call set_config_path'
 
-        with AnyPath(_config_path).open() as f:
-            config_str = f.read()
+        _config = {}
+        for path in _config_path.split(','):
+            with AnyPath(path).open() as f:
+                config_str = f.read()
+                update_dict(_config, toml.loads(config_str))
 
         # Print the config content, which is helpful for debugging.
-        print(f'Configuration at {_config_path}:\n{config_str}')
-        _config = toml.loads(config_str)
+        print(f'Configuration at {_config_path}:\n{toml.dumps(_config)}')
 
     return _config
+
+
+def update_dict(d1: dict, d2: dict) -> None:
+    """Updates the d1 dict with the values from the d2 dict recursively in-place."""
+    for k, v2 in d2.items():
+        v1 = d1.get(k)
+        if isinstance(v1, dict) and isinstance(v2, dict):
+            update_dict(v1, v2)
+        else:
+            d1[k] = v2
