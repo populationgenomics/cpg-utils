@@ -191,7 +191,7 @@ class Namespace(Enum):
         }.items():
             if val in str_vals:
                 return val
-        raise ValueError(f'Cannot parse namespace or access level {str_val}')
+        raise ValueError(f'Cannot parse namespace or access level {val}')
 
 
 def dataset_path(
