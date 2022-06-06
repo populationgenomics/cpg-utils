@@ -189,7 +189,7 @@ class Namespace(Enum):
             Namespace.MAIN: ['main', 'standard', 'full'],
             Namespace.TEST: ['test'],
         }.items():
-            if str_val in str_vals:
+            if val in str_vals:
                 return val
         raise ValueError(f'Cannot parse namespace or access level {str_val}')
 
