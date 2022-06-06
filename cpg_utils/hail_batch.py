@@ -264,7 +264,7 @@ def dataset_path(
     else:
         prefix = config['workflow']['dataset_path']
 
-    return PathScheme.from_access_level(path_scheme).full_path(prefix, suffix)
+    return PathScheme.parse(path_scheme).full_path(prefix, suffix)
 
 
 def web_url(
