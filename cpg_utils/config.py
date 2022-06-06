@@ -9,34 +9,64 @@ import toml
 
 # We use these globals for lazy initialization, but pylint doesn't like that.
 # pylint: disable=global-statement, invalid-name
-from hail.utils import frozendict
-_config_path = os.getenv('CPG_CONFIG_PATH')  # See set_config_path.
+_config_paths = (os.getenv('CPG_CONFIG_PATH') or '').split(',')  # See set_config_paths.
 _config: Optional[dict] = None  # Cached config, initialized lazily.
 
 
-def set_config_path(config_path: str) -> None:
-    """Sets the config path that's used by subsequent calls to get_config.
+def set_config_paths(config_paths: list[str]) -> None:
+    """Sets the config paths that are used by subsequent calls to get_config.
 
     If this isn't called, the value of the CPG_CONFIG_PATH environment variable is used
     instead.
 
     Parameters
     ----------
-    config_path: str
-        A cloudpathlib-compatible path to a TOML file containing the configuration.
+    config_paths: list[str]
+        A list of cloudpathlib-compatible paths to TOML files containing configurations.
     """
 
-    global _config_path, _config
-    if _config_path != config_path:
-        _config_path = config_path
-        os.environ['CPG_CONFIG_PATH'] = config_path
+    global _config_paths, _config
+    if _config_paths != config_paths:
+        _config_paths = config_paths
+        os.environ['CPG_CONFIG_PATH'] = ','.join(_config_paths)
         _config = None  # Make sure the config gets reloaded.
 
 
-def get_config() -> frozendict:
+def get_config() -> dict:
     """Returns the configuration dictionary.
 
-    Call set_config_path beforehand to override the default path.
+    Call `set_config_paths` beforehand to override the default path.
+    See `read_configs` for the path value semantics.
+
+    Notes
+    -----
+    Caches the result based on the config paths alone.
+
+    Returns
+    -------
+    dict
+    """
+
+    global _config
+    if _config is None:  # Lazily initialize the config.
+        assert (
+            _config_paths
+        ), 'Either set the CPG_CONFIG_PATH environment variable or call set_config_paths'
+
+        _config = read_configs(_config_paths)
+
+        # Print the config content, which is helpful for debugging.
+        print(f'Configuration at {",".join(_config_paths)}:\n{toml.dumps(_config)}')
+
+    return _config
+
+
+def read_configs(config_paths: list[str]) -> dict:
+    """Creates a merged configuration from the given config paths.
+
+    For a list of configurations (e.g. ['base.toml', 'override.toml']), the
+    configurations get applied from left to right. I.e. the first config gets updated by
+    values of the second config, etc.
 
     Examples
     --------
@@ -59,29 +89,17 @@ def get_config() -> frozendict:
     >>> get_config()['workflow']['dataset']
     'tob-wgs'
 
-    Notes
-    -----
-    Caches the result based on the config path alone.
-
     Returns
     -------
     dict
     """
 
-    global _config
-    if _config is None:  # Lazily initialize the config.
-        assert (
-            _config_path
-        ), 'Either set the CPG_CONFIG_PATH environment variable or call set_config_path'
-
-        with AnyPath(_config_path).open() as f:
+    config: dict = {}
+    for path in config_paths:
+        with AnyPath(path).open() as f:
             config_str = f.read()
-
-        # Print the config content, which is helpful for debugging.
-        print(f'Configuration at {_config_path}:\n{config_str}')
-        _config = toml.loads(config_str)
-
-    return _config
+            update_dict(config, toml.loads(config_str))
+    return config
 
 
 def update_dict(d1: dict, d2: dict) -> None:
