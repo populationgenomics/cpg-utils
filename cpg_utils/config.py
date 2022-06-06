@@ -9,6 +9,7 @@ import toml
 
 # We use these globals for lazy initialization, but pylint doesn't like that.
 # pylint: disable=global-statement, invalid-name
+from hail.utils import frozendict
 _config_path = os.getenv('CPG_CONFIG_PATH')  # See set_config_path.
 _config: Optional[dict] = None  # Cached config, initialized lazily.
 
@@ -32,7 +33,7 @@ def set_config_path(config_path: str) -> None:
         _config = None  # Make sure the config gets reloaded.
 
 
-def get_config() -> dict:
+def get_config() -> frozendict:
     """Returns the configuration dictionary.
 
     Call set_config_path beforehand to override the default path.
