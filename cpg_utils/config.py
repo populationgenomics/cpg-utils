@@ -32,11 +32,8 @@ def set_config_path(config_path: str) -> None:
 def get_config() -> dict:
     """Returns the configuration dictionary.
 
-    Call set_config_path beforehand to override the default path.
-
-    If the path is a list of comma-separated file names ("base.toml,override.toml"), the
-    configurations get applied from left to right. I.e. the first config gets updated by
-    values of the second config, etc.
+    Call `set_config_path` beforehand to override the default path.
+    See `read_config` for the path value semantics.
 
     Examples
     --------
@@ -74,16 +71,32 @@ def get_config() -> dict:
             _config_path
         ), 'Either set the CPG_CONFIG_PATH environment variable or call set_config_path'
 
-        _config = {}
-        for path in _config_path.split(','):
-            with AnyPath(path).open() as f:
-                config_str = f.read()
-                update_dict(_config, toml.loads(config_str))
+        _config = read_config(_config_path)
 
         # Print the config content, which is helpful for debugging.
         print(f'Configuration at {_config_path}:\n{toml.dumps(_config)}')
 
     return _config
+
+
+def read_config(config_path: str) -> dict:
+    """Reads a configuration from the given config path.
+
+    If the path is a list of comma-separated file names ("base.toml,override.toml"), the
+    configurations get applied from left to right. I.e. the first config gets updated by
+    values of the second config, etc.
+
+    Returns
+    -------
+    dict
+    """
+
+    config: dict = {}
+    for path in config_path.split(','):
+        with AnyPath(path).open() as f:
+            config_str = f.read()
+            update_dict(config, toml.loads(config_str))
+    return config
 
 
 def update_dict(d1: dict, d2: dict) -> None:
