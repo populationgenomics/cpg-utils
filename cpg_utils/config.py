@@ -57,7 +57,9 @@ def get_config() -> frozendict:
         _config = read_configs(_config_paths)
 
         # Print the config content, which is helpful for debugging.
-        print(f'Configuration at {",".join(_config_paths)}:\n{toml.dumps(_config)}')
+        print(
+            f'Configuration at {",".join(_config_paths)}:\n{toml.dumps(dict(_config))}'
+        )
 
     return _config
 

@@ -175,7 +175,7 @@ class Namespace(Enum):
     TEST = 'test'
 
     @staticmethod
-    def from_access_level(val: str) -> 'Namespace':
+    def from_access_level(str_val: str) -> 'Namespace':
         """
         Parse value from a access level string.
         >>> Namespace.from_access_level('test')
@@ -189,9 +189,9 @@ class Namespace(Enum):
             Namespace.MAIN: ['main', 'standard', 'full'],
             Namespace.TEST: ['test'],
         }.items():
-            if val in str_vals:
+            if str_val in str_vals:
                 return val
-        raise ValueError(f'Cannot parse namespace or access level {val}')
+        raise ValueError(f'Cannot parse namespace or access level {str_val}')
 
 
 def dataset_path(
@@ -260,7 +260,7 @@ def dataset_path(
             category = namespace.value
         elif category not in ('archive', 'upload'):
             category = f'{namespace.value}-{category}'
-        prefix = PathScheme.from_access_level(path_scheme).path_prefix(dataset, category)
+        prefix = PathScheme.parse(path_scheme).path_prefix(dataset, category)
     else:
         prefix = config['workflow']['dataset_path']
 
