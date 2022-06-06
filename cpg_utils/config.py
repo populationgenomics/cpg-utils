@@ -1,7 +1,6 @@
 """Provides access to config variables."""
 
 import os
-import uuid
 from typing import Optional
 
 from cloudpathlib import AnyPath
@@ -82,25 +81,6 @@ def get_config() -> dict:
         _config = toml.loads(config_str)
 
     return _config
-
-
-def write_config(config: dict, prefix: str, path: Optional[str] = None) -> None:
-    """Writes config to a file, and sets the path to that file as a new config path.
-
-    Parameters
-    ----------
-    config: dict
-        Config object
-    prefix: str
-        Path prefix (directory) where the TOML file will be written
-    path: str, optional
-        Path to write the config, takes precedence over prefix
-    """
-    if not path:
-        path = os.path.join(prefix, f'{uuid.uuid4()}.toml')
-    with AnyPath(path).open('w') as f:
-        toml.dump(config, f)
-    set_config_path(path)
 
 
 def update_dict(d1: dict, d2: dict) -> None:
