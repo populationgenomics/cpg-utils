@@ -35,27 +35,6 @@ def get_config() -> dict:
     Call `set_config_path` beforehand to override the default path.
     See `read_config` for the path value semantics.
 
-    Examples
-    --------
-    Here's a typical configuration file in TOML format:
-
-    [hail]
-    billing_project = "tob-wgs"
-    bucket = "cpg-tob-wgs-hail"
-
-    [workflow]
-    access_level = "test"
-    dataset = "tob-wgs"
-    dataset_gcp_project = "tob-wgs"
-    driver_image = "australia-southeast1-docker.pkg.dev/analysis-runner/images/driver:36c6d4548ef347f14fd34a5b58908057effcde82-hail-ad1fc0e2a30f67855aee84ae9adabc3f3135bd47"
-    image_registry_prefix = "australia-southeast1-docker.pkg.dev/cpg-common/images"
-    reference_prefix = "gs://cpg-reference"
-    output_prefix = "plasma/chr22/v6"
-
-    >>> from cpg_utils.config import get_config
-    >>> get_config()['workflow']['dataset']
-    'tob-wgs'
-
     Notes
     -----
     Caches the result based on the config path alone.
@@ -85,6 +64,27 @@ def read_config(config_path: str) -> dict:
     If the path is a list of comma-separated file names ("base.toml,override.toml"), the
     configurations get applied from left to right. I.e. the first config gets updated by
     values of the second config, etc.
+
+    Examples
+    --------
+    Here's a typical configuration file in TOML format:
+
+    [hail]
+    billing_project = "tob-wgs"
+    bucket = "cpg-tob-wgs-hail"
+
+    [workflow]
+    access_level = "test"
+    dataset = "tob-wgs"
+    dataset_gcp_project = "tob-wgs"
+    driver_image = "australia-southeast1-docker.pkg.dev/analysis-runner/images/driver:36c6d4548ef347f14fd34a5b58908057effcde82-hail-ad1fc0e2a30f67855aee84ae9adabc3f3135bd47"
+    image_registry_prefix = "australia-southeast1-docker.pkg.dev/cpg-common/images"
+    reference_prefix = "gs://cpg-reference"
+    output_prefix = "plasma/chr22/v6"
+
+    >>> from cpg_utils.config import get_config
+    >>> get_config()['workflow']['dataset']
+    'tob-wgs'
 
     Returns
     -------
