@@ -17,6 +17,7 @@ setuptools.setup(
         'google-cloud-secret-manager',
         'cloudpathlib[all]',
         'toml',
+        'frozendict',
     ],
     include_package_data=True,
     keywords='bioinformatics',
