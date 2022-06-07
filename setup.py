@@ -19,7 +19,9 @@ setuptools.setup(
         'toml',
         'frozendict',
     ],
-    include_package_data=True,
+    package_data={
+        'cpg_utils': ['config-template.toml'],
+    },
     keywords='bioinformatics',
     classifiers=[
         'Environment :: Console',
