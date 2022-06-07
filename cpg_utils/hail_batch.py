@@ -335,40 +335,42 @@ def output_path(suffix: str, category: Optional[str] = None) -> str:
     )
 
 
-def image_path(suffix: str = '') -> str:
-    """Returns a full path to a container image in the default registry.
+def image_path(key: str) -> str:
+    """Returns a path to a container image in the default registry using the
+    key in the config's images section.
 
     Examples
     --------
-    >>> image_path('bcftools:1.10.2')
+    >>> image_path('bcftools')
     'australia-southeast1-docker.pkg.dev/cpg-common/images/bcftools:1.10.2'
 
     Notes
     -----
-    Requires the `workflow/image_registry_prefix` config variable to be set.
+    Requires config variables `workflow/image_registry_prefix` and `images/<key>`.
 
     Parameters
     ----------
-    suffix : str
-        Describes the location within the registry, or key in the `images` config
-        section.
+    key : str
+        Describes the key within the `images` config section.
 
     Returns
     -------
     str
     """
-    if (d := get_config().get('images')) and suffix and suffix in d:
-        suffix = d[suffix]
+    suffix = get_config()['images'][key]
     return os.path.join(get_config()['workflow']['image_registry_prefix'], suffix)
 
 
-def reference_path(suffix: str = '', section: Optional[str] = None) -> Path:
-    """Returns a full path to a reference file.
+def reference_path(key: str) -> Path:
+    """Returns a path to a file in the references bucket using the key in
+    the config's references section.
 
     Examples
     --------
-    >>> reference_path('hg38/v0/wgs_calling_regions.hg38.interval_list')
-    'gs://cpg-reference/hg38/v0/wgs_calling_regions.hg38.interval_list'
+    >>> reference_path('vep_loftee')
+    CloudPath('gs://cpg-reference/vep/loftee_GRCh38.tar')
+    >>> reference_path('broad/genome_calling_interval_lists')
+    CloudPath('gs://cpg-reference/hg38/v0/wgs_calling_regions.hg38.interval_list')
 
     Notes
     -----
@@ -376,32 +378,24 @@ def reference_path(suffix: str = '', section: Optional[str] = None) -> Path:
 
     Parameters
     ----------
-    suffix : str
-        Describes path relative to the reference prefix. Can be a key in the
-        `references` config section.
-    section : str, optional
-        Subsection name inside the references config section.
+    key : str
+        Describes the key within the `references` config section. Can specify
+        nested sections with a "/" separator.
 
     Returns
     -------
     str
     """
     prefix = to_path(get_config()['workflow']['reference_prefix'])
-
-    if d := get_config().get('references'):
-        if section:
-            if section not in d:
-                raise ValueError(
-                    f'No subsection {section} in the "references" config section'
-                )
-            d = d[section]
-            if extra_prefix := d.get('prefix'):
-                prefix /= extra_prefix
-        if suffix and suffix in d:
-            suffix = d[suffix]
-
-    # A leading slash results in the prefix being ignored, therefore use strip below.
-    suffix = suffix.strip('/')
+    d = get_config()['references']
+    sections = key.strip('/').split('/')
+    for section in sections[:-1]:
+        if section not in d:
+            raise ValueError(f'No subsection {section} in {str(d)}')
+        d = d[section]
+        if extra_prefix := d.get('prefix'):
+            prefix /= extra_prefix
+    suffix = d[sections[-1]]
     return prefix / suffix
 
 
@@ -416,7 +410,7 @@ def fasta_res_group(b, indices: list | None = None):
     @param b: Hail Batch object.
     @param indices: list of extensions to add to the base fasta file path.
     """
-    ref_fasta = reference_path('ref_fasta', section='broad')
+    ref_fasta = reference_path('broad/ref_fasta')
     d = dict(
         base=str(ref_fasta),
         fai=str(ref_fasta) + '.fai',
