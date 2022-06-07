@@ -2,13 +2,16 @@
 
 import os
 from typing import Optional
-from cloudpathlib import AnyPath
+
 import toml
+from cloudpathlib import AnyPath
+from frozendict import frozendict
+
 
 # We use these globals for lazy initialization, but pylint doesn't like that.
 # pylint: disable=global-statement, invalid-name
 _config_paths = (os.getenv('CPG_CONFIG_PATH') or '').split(',')  # See set_config_paths.
-_config: Optional[dict] = None  # Cached config, initialized lazily.
+_config: Optional[frozendict] = None  # Cached config, initialized lazily.
 
 
 def set_config_paths(config_paths: list[str]) -> None:
@@ -26,10 +29,11 @@ def set_config_paths(config_paths: list[str]) -> None:
     global _config_paths, _config
     if _config_paths != config_paths:
         _config_paths = config_paths
+        os.environ['CPG_CONFIG_PATH'] = ','.join(_config_paths)
         _config = None  # Make sure the config gets reloaded.
 
 
-def get_config() -> dict:
+def get_config() -> frozendict:
     """Returns the configuration dictionary.
 
     Call `set_config_paths` beforehand to override the default path.
@@ -53,17 +57,21 @@ def get_config() -> dict:
         _config = read_configs(_config_paths)
 
         # Print the config content, which is helpful for debugging.
-        print(f'Configuration at {",".join(_config_paths)}:\n{toml.dumps(_config)}')
+        print(
+            f'Configuration at {",".join(_config_paths)}:\n{toml.dumps(dict(_config))}'
+        )
 
     return _config
 
 
-def read_configs(config_paths: list[str]) -> dict:
+def read_configs(config_paths: list[str]) -> frozendict:
     """Creates a merged configuration from the given config paths.
 
     For a list of configurations (e.g. ['base.toml', 'override.toml']), the
     configurations get applied from left to right. I.e. the first config gets updated by
     values of the second config, etc.
+
+    Loads `config-template.toml` first as a baseline config.
 
     Examples
     --------
@@ -92,11 +100,12 @@ def read_configs(config_paths: list[str]) -> dict:
     """
 
     config: dict = {}
-    for path in config_paths:
+    template_path = os.path.join(os.path.dirname(__file__), 'config-template.toml')
+    for path in [template_path] + config_paths:
         with AnyPath(path).open() as f:
             config_str = f.read()
             update_dict(config, toml.loads(config_str))
-    return config
+    return frozendict(config)
 
 
 def update_dict(d1: dict, d2: dict) -> None:

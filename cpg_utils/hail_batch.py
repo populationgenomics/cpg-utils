@@ -3,17 +3,16 @@
 import asyncio
 import inspect
 import os
-import pathlib
 import textwrap
-from typing import Optional, Union, List
+from enum import Enum
+from typing import Optional, List
 from abc import ABC, abstractmethod
 
 import hail as hl
 import hailtop.batch as hb
-from cloudpathlib import CloudPath
-from cloudpathlib.anypath import to_anypath
 
 from cpg_utils.config import get_config
+from cpg_utils import to_path, Path
 
 
 # template commands strings
@@ -55,21 +54,6 @@ python3 script.py
 """
 
 
-# The AnyPath class https://cloudpathlib.drivendata.org/stable/anypath-polymorphism/
-# is very handy to parse a string that can be either a cloud URL or a local posix path.
-# However, AnyPath can't be used for type hinting, because neither CloudPath nor
-# pathlib.Path derive from it. The AnyPath's constructor method doesn't actually return
-# an instance of AnyPath class, but rather Union[CloudPath, pathlib.Path], and it's
-# designed to dynamically pick a specific CloudPath or pathlib.Path subclass.
-# Here we create an alias for such union to allow using simple "Path" in type hints:
-Path = Union[CloudPath, pathlib.Path]
-
-# We would still need to call AnyPath() to parse a string, which might be confusing.
-# Something like to_path() would look better, so we are aliasing a handy method
-# to_anypath to to_path, which returns exactly the Union type we are looking for:
-to_path = to_anypath
-
-
 def init_batch(**kwargs):
     """
     Initializes the Hail Query Service from within Hail Batch.
@@ -82,7 +66,7 @@ def init_batch(**kwargs):
     """
     return asyncio.get_event_loop().run_until_complete(
         hl.init_batch(
-            default_reference='GRCh38',
+            default_reference=genome_build(),
             billing_project=get_config()['hail']['billing_project'],
             remote_tmpdir=remote_tmpdir(),
             **kwargs,
@@ -181,6 +165,35 @@ class AzurePathScheme(PathScheme):
         return os.path.join(f'{self.scheme}://', prefix, suffix)
 
 
+class Namespace(Enum):
+    """
+    Storage namespace.
+    https://github.com/populationgenomics/team-docs/tree/main/storage_policies#main-vs-test
+    """
+
+    MAIN = 'main'
+    TEST = 'test'
+
+    @staticmethod
+    def from_access_level(str_val: str) -> 'Namespace':
+        """
+        Parse value from a access level string.
+        >>> Namespace.from_access_level('test')
+        Namespace.TEST
+        >>> Namespace.from_access_level('standard')
+        Namespace.MAIN
+        >>> Namespace.from_access_level('main')
+        Namespace.MAIN
+        """
+        for val, str_vals in {
+            Namespace.MAIN: ['main', 'standard', 'full'],
+            Namespace.TEST: ['test'],
+        }.items():
+            if str_val in str_vals:
+                return val
+        raise ValueError(f'Cannot parse namespace or access level {str_val}')
+
+
 def dataset_path(
     suffix: str,
     category: Optional[str] = None,
@@ -242,11 +255,11 @@ def dataset_path(
     path_scheme = path_scheme or config['workflow'].get('path_scheme', 'gs')
 
     if dataset and access_level:
-        namespace = 'test' if access_level == 'test' else 'main'
+        namespace = Namespace.from_access_level(access_level)
         if category is None:
-            category = namespace
+            category = namespace.value
         elif category not in ('archive', 'upload'):
-            category = f'{namespace}-{category}'
+            category = f'{namespace.value}-{category}'
         prefix = PathScheme.parse(path_scheme).path_prefix(dataset, category)
     else:
         prefix = config['workflow']['dataset_path']
@@ -255,7 +268,7 @@ def dataset_path(
 
 
 def web_url(
-    suffix: str,
+    suffix: str = '',
     dataset: Optional[str] = None,
     access_level: Optional[str] = None,
 ) -> str:
@@ -265,10 +278,10 @@ def web_url(
     config = get_config()
     dataset = dataset or config['workflow'].get('dataset')
     access_level = access_level or config['workflow'].get('access_level')
-    namespace = 'test' if access_level == 'test' else 'main'
+    namespace = Namespace.from_access_level(access_level)
     web_url_template = config['workflow'].get('web_url_template')
     try:
-        url = web_url_template.format(dataset=dataset, namespace=namespace)
+        url = web_url_template.format(dataset=dataset, namespace=namespace.value)
     except KeyError as e:
         raise ValueError(
             f'`workflow/web_url_template` should be parametrised by "dataset" and '
@@ -322,37 +335,42 @@ def output_path(suffix: str, category: Optional[str] = None) -> str:
     )
 
 
-def image_path(suffix: str) -> str:
-    """Returns a full path to a container image in the default registry.
+def image_path(key: str) -> str:
+    """Returns a path to a container image in the default registry using the
+    key in the config's images section.
 
     Examples
     --------
-    >>> image_path('bcftools:1.10.2')
+    >>> image_path('bcftools')
     'australia-southeast1-docker.pkg.dev/cpg-common/images/bcftools:1.10.2'
 
     Notes
     -----
-    Requires the `workflow/image_registry_prefix` config variable to be set.
+    Requires config variables `workflow/image_registry_prefix` and `images/<key>`.
 
     Parameters
     ----------
-    suffix : str
-        Describes the location within the registry.
+    key : str
+        Describes the key within the `images` config section.
 
     Returns
     -------
     str
     """
+    suffix = get_config()['images'][key]
     return os.path.join(get_config()['workflow']['image_registry_prefix'], suffix)
 
 
-def reference_path(suffix: str) -> Union[CloudPath, Path]:
-    """Returns a full path to a reference file.
+def reference_path(key: str) -> Path:
+    """Returns a path to a file in the references bucket using the key in
+    the config's references section.
 
     Examples
     --------
-    >>> reference_path('hg38/v0/wgs_calling_regions.hg38.interval_list')
-    'gs://cpg-reference/hg38/v0/wgs_calling_regions.hg38.interval_list'
+    >>> reference_path('vep_loftee')
+    CloudPath('gs://cpg-reference/vep/loftee_GRCh38.tar')
+    >>> reference_path('broad/genome_calling_interval_lists')
+    CloudPath('gs://cpg-reference/hg38/v0/wgs_calling_regions.hg38.interval_list')
 
     Notes
     -----
@@ -360,15 +378,47 @@ def reference_path(suffix: str) -> Union[CloudPath, Path]:
 
     Parameters
     ----------
-    suffix : str
-        Describes path relative to the reference prefix.
+    key : str
+        Describes the key within the `references` config section. Can specify
+        nested sections with a "/" separator.
 
     Returns
     -------
     str
     """
-    # A leading slash results in the prefix being ignored, therefore use strip below.
-    return to_anypath(get_config()['workflow']['reference_prefix']) / suffix.strip('/')
+    prefix = to_path(get_config()['workflow']['reference_prefix'])
+    d = get_config()['references']
+    sections = key.strip('/').split('/')
+    for section in sections[:-1]:
+        if section not in d:
+            raise ValueError(f'No subsection {section} in {str(d)}')
+        d = d[section]
+        if extra_prefix := d.get('prefix'):
+            prefix /= extra_prefix
+    suffix = d[sections[-1]]
+    return prefix / suffix
+
+
+def genome_build() -> str:
+    """Return the genome build name"""
+    return get_config()['references'].get('genome_build', 'GRCh38')
+
+
+def fasta_res_group(b, indices: list | None = None):
+    """
+    Hail Batch resource group for fasta reference files.
+    @param b: Hail Batch object.
+    @param indices: list of extensions to add to the base fasta file path.
+    """
+    ref_fasta = reference_path('broad/ref_fasta')
+    d = dict(
+        base=str(ref_fasta),
+        fai=str(ref_fasta) + '.fai',
+        dict=str(ref_fasta.with_suffix('.dict')),
+    )
+    if indices:
+        d |= {ext: f'{ref_fasta}.{ext}' for ext in indices}
+    return b.read_input_group(**d)
 
 
 def authenticate_cloud_credentials_in_job(

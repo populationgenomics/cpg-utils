@@ -22,12 +22,11 @@ def read_secret(project_id: str, secret_name: str) -> Optional[str]:
     Returns None if the secret doesn't exist."""
 
     secret_manager = secretmanager.SecretManagerServiceClient()
-    secret_path = secret_manager.secret_path(project_id, secret_name)
+    secret_path = secret_manager.secret_version_path(project_id, secret_name, 'latest')
 
     try:
-        response = secret_manager.access_secret_version(
-            request={'name': f'{secret_path}/versions/latest'}
-        )
+        # noinspection PyTypeChecker
+        response = secret_manager.access_secret_version(request={'name': secret_path})
         return response.payload.data.decode('UTF-8')
     except google.api_core.exceptions.ClientError:
         # Fail gracefully if there's no secret version yet.
