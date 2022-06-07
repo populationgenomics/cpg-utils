@@ -71,6 +71,8 @@ def read_configs(config_paths: list[str]) -> frozendict:
     configurations get applied from left to right. I.e. the first config gets updated by
     values of the second config, etc.
 
+    Loads `config-template.toml` first as a baseline config.
+
     Examples
     --------
     Here's a typical configuration file in TOML format:
@@ -98,7 +100,8 @@ def read_configs(config_paths: list[str]) -> frozendict:
     """
 
     config: dict = {}
-    for path in config_paths:
+    template_path = os.path.join(os.path.dirname(__file__), 'config-template.toml')
+    for path in [template_path] + config_paths:
         with AnyPath(path).open() as f:
             config_str = f.read()
             update_dict(config, toml.loads(config_str))
