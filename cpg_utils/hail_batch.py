@@ -85,7 +85,7 @@ def copy_common_env(job: hb.batch.job.Job) -> None:
     """
     # If possible, please don't add new environment variables here, but instead add
     # config variables.
-    for key in 'CPG_CONFIG_PATH':
+    for key in ('CPG_CONFIG_PATH',):
         val = os.getenv(key)
         if val:
             job.env(key, val)
