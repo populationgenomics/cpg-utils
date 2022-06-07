@@ -10,10 +10,20 @@ from frozendict import frozendict
 
 # We use these globals for lazy initialization, but pylint doesn't like that.
 # pylint: disable=global-statement, invalid-name
-_config_paths = (
-    _val.split(',') if (_val := os.getenv('CPG_CONFIG_PATH')) else []
-)  # See set_config_paths.
+_config_paths = _val.split(',') if (_val := os.getenv('CPG_CONFIG_PATH')) else []
 _config: Optional[frozendict] = None  # Cached config, initialized lazily.
+
+
+def _validate_configs(config_paths: list[str]) -> None:
+    if [p for p in config_paths if not p.endswith('.toml')]:
+        raise ValueError(
+            f'All config files must have ".toml" extensions, got: {config_paths}'
+        )
+    if bad_files := [p for p in config_paths if not AnyPath(p).exists()]:
+        raise ValueError(f'Some config files do not exist: {bad_files}')
+
+
+_validate_configs(_config_paths)
 
 
 def set_config_paths(config_paths: list[str]) -> None:
@@ -27,15 +37,9 @@ def set_config_paths(config_paths: list[str]) -> None:
     config_paths: list[str]
         A list of cloudpathlib-compatible paths to TOML files containing configurations.
     """
-
     global _config_paths, _config
     if _config_paths != config_paths:
-        if [p for p in config_paths if not p.endswith('.toml')]:
-            raise ValueError(
-                f'All config files must have .toml extensions, got: {config_paths}'
-            )
-        if bad_files := [p for p in config_paths if not AnyPath(p).exists()]:
-            raise ValueError(f'Some config files do not exist: {bad_files}')
+        _validate_configs(config_paths)
         _config_paths = config_paths
         os.environ['CPG_CONFIG_PATH'] = ','.join(_config_paths)
         _config = None  # Make sure the config gets reloaded.
