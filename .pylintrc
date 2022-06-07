@@ -5,10 +5,6 @@
 # 2. inherit-non-class ("Inheriting 'NamedTuple', which is not a class" false
 #    positive, see: https://github.com/PyCQA/pylint/issues/3876)
 # 3. too-few-public-methods (produces false positives)
-# 4. inspections incompatible with Black (see
-     https://github.com/psf/black/blob/master/docs/compatible_configs.md#why-those-options-above-2):
-#    C0330: Wrong hanging indentation before block (add 4 spaces)
-#    C0326: Bad whitespace
 # 5. fixme (left 'TODO' lines)
 # 6. logging-fstring-interpolation (forbids f-strings in logging functions)
 # 7. The following require installing the python modules imported in the source code.
@@ -21,7 +17,7 @@
 # 10. C0301: Line too long (covered by black)
 # 11. C0302: Too many lines in module
 
-disable=f-string-without-interpolation,inherit-non-class,too-few-public-methods,C0330,C0326,fixme,logging-fstring-interpolation,import-error,no-member,c-extension-no-member,unsubscriptable-object,R0801,C0301,C0302
+disable=f-string-without-interpolation,inherit-non-class,too-few-public-methods,fixme,logging-fstring-interpolation,import-error,no-member,c-extension-no-member,unsubscriptable-object,R0801,C0301,C0302
 
 # Overriding variable name patterns to allow short 1- or 2-letter variables
 attr-rgx=[a-z_][a-z0-9_]{0,50}$
