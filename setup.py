@@ -20,9 +20,11 @@ setuptools.setup(
         'azure-storage-blob',
         'cloudpathlib[all]',
         'toml',
+        'frozendict',
     ],
-    python_requires=">=3.8",
-    include_package_data=True,
+    package_data={
+        'cpg_utils': ['config-template.toml'],
+    },
     keywords='bioinformatics',
     classifiers=[
         'Environment :: Console',
