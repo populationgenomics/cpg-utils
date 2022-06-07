@@ -195,7 +195,7 @@ class Namespace(Enum):
 
 
 def dataset_path(
-    suffix: str = '',
+    suffix: str,
     category: Optional[str] = None,
     dataset: Optional[str] = None,
     access_level: Optional[str] = None,
