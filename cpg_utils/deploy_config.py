@@ -82,6 +82,13 @@ class DeployConfig:
         dataset_id = self.server_config[dataset]["projectId"]
         return self.read_project_id_config(dataset_id, config_key)
 
+    def get_config_prefix(self) -> str:
+        if self.cloud == "azure":
+            # Need to use hail-az prefix for now because of cloudpathlib AnyPath usage.
+            return f"hail-az://{self.analysis_runner_project}tfsa.blob.core.windows.net/config"
+        # TODO GRS need deployment-specific location.
+        return "gs://cpg-config"
+
 
 def get_deploy_config() -> DeployConfig:
     global deploy_config
