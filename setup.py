@@ -5,7 +5,7 @@ import setuptools
 setuptools.setup(
     name='cpg-utils',
     # This tag is automatically updated by bumpversion
-    version='4.3.3',
+    version='4.3.4',
     description='Library of convenience functions specific to the CPG',
     long_description=open('README.md').read(),
     long_description_content_type='text/markdown',
