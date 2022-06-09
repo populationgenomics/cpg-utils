@@ -1,5 +1,5 @@
 """Convenience functions related to cloud infrastructure."""
-
+import traceback
 from typing import Optional
 from google.auth import jwt
 from google.cloud import secretmanager
@@ -16,10 +16,15 @@ def email_from_id_token(id_token: str) -> str:
     return jwt.decode(id_token, verify=False)['email']
 
 
-def read_secret(project_id: str, secret_name: str) -> Optional[str]:
+def read_secret(
+    project_id: str,
+    secret_name: str,
+    fail_gracefully: bool = True,
+) -> Optional[str]:
     """Reads the latest version of a GCP Secret Manager secret.
 
-    Returns None if the secret doesn't exist."""
+    Returns None if the secret doesn't exist or there was a problem retrieving it,
+    unless `fail_gracefully` is set to False."""
 
     secret_manager = secretmanager.SecretManagerServiceClient()
     secret_path = secret_manager.secret_version_path(project_id, secret_name, 'latest')
@@ -30,13 +35,19 @@ def read_secret(project_id: str, secret_name: str) -> Optional[str]:
         return response.payload.data.decode('UTF-8')
     except google.api_core.exceptions.ClientError:
         # Fail gracefully if there's no secret version yet.
-        return None
+        if fail_gracefully:
+            traceback.print_exc()
+            return None
+        raise
     except AttributeError:
         # Sometimes the google API fails when no version is present, with:
         #   File "{site-packages}/google/api_core/exceptions.py",
         #   line 532, in from_grpc_error if isinstance(rpc_exc, grpc.Call) or _is_informative_grpc_error(rpc_exc):
         #   AttributeError: 'NoneType' object has no attribute 'Call'
-        return None
+        if fail_gracefully:
+            traceback.print_exc()
+            return None
+        raise
 
 
 def write_secret(project_id: str, secret_name: str, secret_value: str) -> None:
