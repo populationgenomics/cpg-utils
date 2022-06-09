@@ -17,7 +17,7 @@ def test_default_config(monkeypatch):
     set_deploy_config_from_env()
     dc = get_deploy_config()
     assert dc.to_dict() == DEFAULT_CONFIG
-    assert dc.get_config_prefix() == "gs://cpg-config"
+
 
 def test_env_config(monkeypatch, json_load):
     cfg1 = json_load("config_01.json")
@@ -26,7 +26,6 @@ def test_env_config(monkeypatch, json_load):
     dc = get_deploy_config()
     print(json.dumps(dc.to_dict(), indent=4))
     assert dc.to_dict() == cfg1
-    assert dc.get_config_prefix() == "hail-az://cpgar01tfsa.blob.core.windows.net/config"
 
 
 def test_env_override_config(monkeypatch):

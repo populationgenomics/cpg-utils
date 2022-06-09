@@ -1,10 +1,10 @@
-import pytest
-from cpg_utils.deploy_config import set_deploy_config_from_env
-from cpg_utils.storage import DataManager, get_data_manager
 import azure.core.exceptions
 import azure.identity
 import azure.storage.blob
 import google.cloud.storage
+import pytest
+from cpg_utils.deploy_config import set_deploy_config_from_env
+from cpg_utils.storage import DataManager, get_data_manager, get_job_config, set_job_config
 
 
 class MockStorageResponse:
@@ -26,11 +26,20 @@ class MockStorageResponse:
 
 class MockStorageClientGCP:
     def bucket(self, bucket_name):
-        assert bucket_name == "cpg-dataset0-main-read"
+        assert bucket_name in ["cpg-dataset0-main-read", "cpg-config"]
         return self
     def get_blob(self, blob_path):
         if blob_path == "missing.json":
             return None
+        if blob_path == "config.toml":
+            return MockStorageResponse(
+                """[hail]
+                billing_project = "tob-wgs"
+                bucket = "cpg-tob-wgs-hail"
+                [workflow]
+                access_level = "pytestgcp"
+                """
+            )
         assert blob_path == "exists.json"
         return MockStorageResponse("GCP BLOB CONTENTS")
     def blob(self, blob_path):
@@ -39,12 +48,21 @@ class MockStorageClientGCP:
 class MockStorageClientAzure:
     def __init__(self, *args, **kwargs):
         if len(args) > 2:
-            assert args[0] == "https://dataset1_idsa.blob.core.windows.net"
-            assert args[1] == "cpg-dataset1-main-read"
+            assert args[0] in ["https://dataset1_idsa.blob.core.windows.net", "https://analysis-runnertfsa.blob.core.windows.net"]
+            assert args[1] in ["cpg-dataset1-main-read", "config"]
             self.path = args[2]
     def download_blob(self):
         if self.path == "missing.json":
             raise azure.core.exceptions.ResourceNotFoundError()
+        if self.path == "config.toml":
+            return MockStorageResponse(
+                """[hail]
+                billing_project = "tob-wgs"
+                bucket = "cpg-tob-wgs-hail"
+                [workflow]
+                access_level = "pytestaz"
+                """
+            )
         assert self.path == "exists.json"
         return MockStorageResponse("AZURE BLOB CONTENTS")
     def upload_blob(self, data: bytes, overwrite: bool):
@@ -65,6 +83,8 @@ def test_gcp_storage(monkeypatch):
     assert sm.get_blob("dataset0", "main-read", "exists.json").decode("UTF-8") == "GCP BLOB CONTENTS"
     assert sm.get_blob("dataset0", "main-read", "missing.json") == None
     sm.set_blob("dataset0", "main-read", "exists.json", bytes("GCP BLOB CONTENTS", "UTF-8"))
+    assert get_job_config("config.toml")["workflow"]["access_level"] == "pytestgcp"
+    set_job_config({"workflow":{"access_level":"pytestgcp"}})
 
 
 def test_azure_storage(monkeypatch, mock_config_fixture):
@@ -83,3 +103,5 @@ def test_azure_storage(monkeypatch, mock_config_fixture):
     with pytest.raises(ValueError) as e:
         sm.set_blob("dataset0", "main-read", "exists.json", bytes("AZURE BLOB CONTENTS", "UTF-8"))
         assert "No such dataset in server config" in str(e.value)
+    assert sm.get_job_config("config.toml")["workflow"]["access_level"] == "pytestaz"
+    sm.set_job_config({"workflow":{"access_level":"pytestaz"}})
