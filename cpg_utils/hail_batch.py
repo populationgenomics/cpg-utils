@@ -359,7 +359,7 @@ def image_path(key: str) -> str:
     """
     suffix = get_config()['images'][key]
     if any(
-        suffix.statswith(prefix)
+        suffix.startswith(prefix)
         for prefix in ['gcr.io/', 'australia-southeast1-docker.pkg.dev/']
     ):  # absolute path:
         return suffix
