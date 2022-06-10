@@ -30,9 +30,8 @@ access_level = 'standard'
 #last_stage =
 
 # Map of stages to lists of samples, to skip for specific stages
-# skip_samples_stages = {
-#   VerifyBamId = ['CPG13409']  # https://batch.hail.populationgenomics.org.au/batches/56236/jobs/372
-# }
+#[workflow.skip_samples_stages]
+#VerifyBamId = ['CPG13409']  # https://batch.hail.populationgenomics.org.au/batches/56236/jobs/372
 
 # Name of the pipeline (to prefix output paths)
 #name =
@@ -72,9 +71,6 @@ check_expected_outputs = true
 # Local directory for temporary files. Usually takes a few kB.
 # If not provided, a temp folder will be created
 #local_tmp_dir =
-
-# Slack channel to send status reports with the CPG status reporter:
-#slack_channel = 'seqr-loader'
 
 # When the sample-metadata database API returns an error from the
 # database, only show the error and continue, instead of crashing
@@ -132,12 +128,12 @@ cram_qc = true
 
 [elasticsearch]
 # Configure access to ElasticSearch server
-es_port = 9243
-es_host = 'elasticsearch.es.australia-southeast1.gcp.elastic-cloud.com'
-es_username = 'seqr'
-# Load ElasticSearch password from a secret, unless SEQR_ES_PASSWORD is set
-es_password_secret_id = 'seqr-es-password'
-es_password_project_id = 'seqr-308602'
+port = 9243
+host = 'elasticsearch.es.australia-southeast1.gcp.elastic-cloud.com'
+username = 'seqr'
+# to load ElasticSearch password from a secret:
+password_secret_id = 'seqr-es-password'
+password_project_id = 'seqr-308602'
 
 [hail]
 #billing_project =
@@ -150,8 +146,7 @@ dry_run = false
 # Docker image URLs. Can be absolute or relative to `workflow.image_registry_prefix`.
 gatk = 'gatk:4.2.6.1'
 bcftools = 'bcftools:1.10.2--h4f4756c_2'
-sm-api = 'australia-southeast1-docker.pkg.dev/analysis-runner/images/driver:7d00c4871b2e96f50bae208e4184c3c4789a2fa4-hail-83056327f288917537531475ba475287b413db1c'
-bwa ='bwa:v0'
+bwa = 'bwa:v0'
 bwamem2 = 'bwamem2:v0'
 dragmap = 'dragmap:1.3.0'
 samtools = 'picard_samtools:v0'
@@ -159,11 +154,12 @@ picard = 'picard_samtools:v0'
 picard_samtools = 'picard_samtools:v0'
 somalier = 'somalier:v0.2.15'
 peddy = 'peddy:v0'
-vep ='vep:105'
+vep = 'vep:105'
 verify-bam-id = 'verify-bam-id:1.0.1'
 multiqc = 'multiqc:v1.12'
 fastqc = 'fastqc:v0.11.9_cv8'
 hail = 'australia-southeast1-docker.pkg.dev/analysis-runner/images/driver:7d00c4871b2e96f50bae208e4184c3c4789a2fa4-hail-83056327f288917537531475ba475287b413db1c'
+sm-api = 'australia-southeast1-docker.pkg.dev/analysis-runner/images/driver:7d00c4871b2e96f50bae208e4184c3c4789a2fa4-hail-83056327f288917537531475ba475287b413db1c'
 
 [references]
 # Genome build. Only GRCh38 is currently supported.

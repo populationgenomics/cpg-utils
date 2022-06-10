@@ -358,6 +358,12 @@ def image_path(key: str) -> str:
     str
     """
     suffix = get_config()['images'][key]
+    if any(
+        suffix.statswith(prefix)
+        for prefix in ['gcr.io/', 'australia-southeast1-docker.pkg.dev/']
+    ):  # absolute path:
+        return suffix
+    # path relative to prefix:
     return os.path.join(get_config()['workflow']['image_registry_prefix'], suffix)
 
 
