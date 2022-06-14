@@ -258,7 +258,7 @@ def dataset_path(
         namespace = Namespace.from_access_level(access_level)
         if category is None:
             category = namespace.value
-        elif category not in ('archive', 'upload'):
+        elif category != 'archive':
             category = f'{namespace.value}-{category}'
         prefix = PathScheme.parse(path_scheme).path_prefix(dataset, category)
     else:
