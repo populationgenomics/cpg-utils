@@ -45,6 +45,14 @@ class DataManager(ABC):
             config = toml.loads(base_config.read())
         return config
 
+    @abstractmethod
+    def get_job_config(self, config_name: str) -> frozendict:
+        """Reads a job configuration file."""
+
+    @abstractmethod
+    def set_job_config(self, config: dict) -> str:
+        """Writes a job configuration file."""
+
 
 class DataManagerGCP(DataManager):
     """GCP Storage wrapper for reading/writing cloud dataset blobs."""
