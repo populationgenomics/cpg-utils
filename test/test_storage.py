@@ -4,7 +4,8 @@ import azure.storage.blob
 import google.cloud.storage
 import pytest
 from cpg_utils.deploy_config import set_deploy_config_from_env
-from cpg_utils.storage import DataManager, get_data_manager, get_job_config, set_job_config
+from cpg_utils.storage import DataManager, get_data_manager, get_hail_bucket, \
+    get_job_config, remote_tmpdir, set_job_config
 
 
 class MockStorageResponse:
@@ -34,8 +35,8 @@ class MockStorageClientGCP:
         if blob_path == "config.toml":
             return MockStorageResponse(
                 """[hail]
-                billing_project = "tob-wgs"
-                bucket = "cpg-tob-wgs-hail"
+                billing_project = "dataset0"
+                bucket = "gs://cpg-dataset0-hail"
                 [workflow]
                 access_level = "pytestgcp"
                 """
@@ -57,8 +58,8 @@ class MockStorageClientAzure:
         if self.path == "config.toml":
             return MockStorageResponse(
                 """[hail]
-                billing_project = "tob-wgs"
-                bucket = "cpg-tob-wgs-hail"
+                billing_project = "dataset1"
+                bucket = "hail-az://dataset1_idsa.blob.core.windows.net/cpg-dataset1-hail"
                 [workflow]
                 access_level = "pytestaz"
                 """
@@ -77,14 +78,20 @@ def mock_config_fixture(json_load):
 
 def test_gcp_storage(monkeypatch):
     monkeypatch.setattr(google.cloud.storage, "Client", MockStorageClientGCP)
+    monkeypatch.setenv("CPG_CONFIG_PATH", "config.toml")
     monkeypatch.setenv("CLOUD", "gcp")
     set_deploy_config_from_env()
     sm = get_data_manager()
+
     assert sm.get_blob("dataset0", "main-read", "exists.json").decode("UTF-8") == "GCP BLOB CONTENTS"
     assert sm.get_blob("dataset0", "main-read", "missing.json") == None
     sm.set_blob("dataset0", "main-read", "exists.json", bytes("GCP BLOB CONTENTS", "UTF-8"))
-    assert get_job_config("config.toml")["workflow"]["access_level"] == "pytestgcp"
+
+    assert get_job_config()["workflow"]["access_level"] == "pytestgcp"
     set_job_config({"workflow":{"access_level":"pytestgcp"}})
+
+    assert get_hail_bucket("dataset0", "test") == "gs://cpg-dataset0-test"
+    assert remote_tmpdir() == "gs://cpg-dataset0-hail/batch-tmp"
 
 
 def test_azure_storage(monkeypatch, mock_config_fixture):
@@ -92,8 +99,10 @@ def test_azure_storage(monkeypatch, mock_config_fixture):
     monkeypatch.setattr(azure.identity, "DefaultAzureCredential", MockStorageClientAzure)
     monkeypatch.setattr(azure.storage.blob, "BlobClient", MockStorageClientAzure)
     monkeypatch.setenv("CLOUD", "azure")
+    monkeypatch.setenv("CPG_CONFIG_PATH", "config.toml")
     set_deploy_config_from_env()
     sm = DataManager.get_data_manager()
+
     assert sm.get_blob("dataset1", "main-read", "exists.json").decode("UTF-8") == "AZURE BLOB CONTENTS"
     assert sm.get_blob("dataset1", "main-read", "missing.json") == None
     with pytest.raises(ValueError) as e:
@@ -103,5 +112,10 @@ def test_azure_storage(monkeypatch, mock_config_fixture):
     with pytest.raises(ValueError) as e:
         sm.set_blob("dataset0", "main-read", "exists.json", bytes("AZURE BLOB CONTENTS", "UTF-8"))
         assert "No such dataset in server config" in str(e.value)
+
     assert sm.get_job_config("config.toml")["workflow"]["access_level"] == "pytestaz"
     sm.set_job_config({"workflow":{"access_level":"pytestaz"}})
+
+    assert sm.get_hail_bucket("dataset1", "test") == "hail-az://dataset1_idsa.blob.core.windows.net/cpg-dataset1-test"
+    assert remote_tmpdir("hail-az://dataset1_idsa.blob.core.windows.net/cpg-dataset1-hail") == \
+        "hail-az://dataset1_idsa.blob.core.windows.net/cpg-dataset1-hail/batch-tmp"

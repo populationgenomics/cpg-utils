@@ -30,6 +30,10 @@ class DataManager(ABC):
         return DataManagerGCP()
 
     @abstractmethod
+    def get_hail_bucket(self, dataset: str, bucket_type: str) -> str:
+        """Build dataset-specific bucket URL with Hail-style scheme ("gs:" or "hail-az:")."""
+
+    @abstractmethod
     def get_blob(self, dataset: str, bucket_type: str, blob_path: str) -> Optional[bytes]:
         """Cloud-specific blob read. Returns None if blob doesn't exist."""
 
@@ -62,6 +66,10 @@ class DataManagerGCP(DataManager):
     def __init__(self):
         """Loads GCP credentials and caches storage client."""
         self._storage_client = google.cloud.storage.Client()
+
+    def get_hail_bucket(self, dataset: str, bucket_type: str) -> str:
+        """Build dataset-specific Hail-style bucket URL for GCP ("gs://...")."""
+        return f"gs://cpg-{dataset}-{bucket_type}"
 
     def get_blob(self, dataset: str, bucket_type: str, blob_path: str) -> Optional[bytes]:
         """Reads a GCP storage bucket blob."""
@@ -118,17 +126,21 @@ class DataManagerAzure(DataManager):
         )
 
     def get_storage_url(self, dataset: str) -> str:
-        """Gets storage host URL based on dataset name."""
+        """Gets storage host URL based on dataset name (without scheme)."""
         # Need to map dataset name to storage account name.
         server_config = get_server_config()
         if dataset not in server_config:
             raise ValueError(f"No such dataset in server config: {dataset}")
         dataset_account = server_config[dataset]["projectId"]
-        return f"https://{dataset_account}sa.blob.core.windows.net"
+        return f"{dataset_account}sa.blob.core.windows.net"
+
+    def get_hail_bucket(self, dataset: str, bucket_type: str) -> str:
+        """Build dataset-specific Hail-style bucket URL for Azure ("hail-az://...")."""
+        return f"hail-az://{self.get_storage_url(dataset)}/cpg-{dataset}-{bucket_type}"
 
     def get_blob(self, dataset: str, bucket_type: str, blob_path: str) -> Optional[bytes]:
         """Reads an Azure storage blob."""
-        storage_url = self.get_storage_url(dataset)
+        storage_url = "https://" + self.get_storage_url(dataset)
         container_name = f"cpg-{dataset}-{bucket_type}"
         blob_client = azure.storage.blob.BlobClient(
             storage_url, container_name, blob_path, credential=self._credential
@@ -142,7 +154,7 @@ class DataManagerAzure(DataManager):
 
     def set_blob(self, dataset: str, bucket_type: str, blob_path: str, contents: bytes) -> None:
         """Writes an Azure storage blob."""
-        storage_url = self.get_storage_url(dataset)
+        storage_url = "https://" + self.get_storage_url(dataset)
         container_name = f"cpg-{dataset}-{bucket_type}"
         blob_client = azure.storage.blob.BlobClient(
             storage_url, container_name, blob_path, credential=self._credential
@@ -185,12 +197,26 @@ def get_data_manager() -> DataManager:
     return data_manager
 
 
-def get_job_config(config_name: Optional[str]) -> frozendict:
+def get_job_config(config_name: Optional[str] = None) -> frozendict:
     """Reads the given config name from storage to a dictionary."""
-    return get_data_manager().get_job_config(config_name or os.getenv(CPG_CONFIG_PATH))
+    return get_data_manager().get_job_config(config_name or os.getenv("CPG_CONFIG_PATH"))
 
 
 def set_job_config(config: dict) -> str:
     """Writes the given config dictionary to a blob and returns its unique name."""
     return get_data_manager().set_job_config(config)
 
+
+def get_hail_bucket(dataset: str, bucket_type: str) -> str:
+    """Return dataset-specific bucket URL with Hail-style scheme ("gs:" or "hail-az:")."""
+    return get_data_manager().get_hail_bucket(dataset, bucket_type)
+
+
+def remote_tmpdir(hail_bucket: Optional[str] = None) -> str:
+    """Returns the remote_tmpdir to use for Hail initialization for a particular dataset.
+
+    If `hail_bucket` is not specified explicitly, requires the `hail/bucket` config variable to be set.
+    """
+    bucket = hail_bucket or get_job_config().get('hail', {}).get('bucket')
+    assert bucket, f'hail_bucket was not set by argument or configuration'
+    return f'{bucket}/batch-tmp'
