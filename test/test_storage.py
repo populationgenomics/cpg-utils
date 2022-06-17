@@ -4,7 +4,7 @@ import azure.storage.blob
 import google.cloud.storage
 import pytest
 from cpg_utils.deploy_config import set_deploy_config_from_env
-from cpg_utils.storage import DataManager, get_data_manager, get_hail_bucket, \
+from cpg_utils.storage import DataManager, get_data_manager, get_dataset_bucket_url, \
     get_job_config, remote_tmpdir, set_job_config
 
 
@@ -90,7 +90,7 @@ def test_gcp_storage(monkeypatch):
     assert get_job_config()["workflow"]["access_level"] == "pytestgcp"
     set_job_config({"workflow":{"access_level":"pytestgcp"}})
 
-    assert get_hail_bucket("dataset0", "test") == "gs://cpg-dataset0-test"
+    assert get_dataset_bucket_url("dataset0", "test") == "gs://cpg-dataset0-test"
     assert remote_tmpdir() == "gs://cpg-dataset0-hail/batch-tmp"
 
 
@@ -117,6 +117,6 @@ def test_azure_storage(monkeypatch, mock_config_fixture):
     assert sm.get_job_config("config.toml")["workflow"]["access_level"] == "pytestaz"
     sm.set_job_config({"workflow":{"access_level":"pytestaz"}})
 
-    assert sm.get_hail_bucket("dataset1", "test") == "hail-az://dataset1_idsa.blob.core.windows.net/cpg-dataset1-test"
+    assert sm.get_dataset_bucket_url("dataset1", "test") == "hail-az://dataset1_idsa.blob.core.windows.net/cpg-dataset1-test"
     assert remote_tmpdir("hail-az://dataset1_idsa.blob.core.windows.net/cpg-dataset1-hail") == \
         "hail-az://dataset1_idsa.blob.core.windows.net/cpg-dataset1-hail/batch-tmp"

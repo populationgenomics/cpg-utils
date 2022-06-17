@@ -30,7 +30,7 @@ class DataManager(ABC):
         return DataManagerGCP()
 
     @abstractmethod
-    def get_hail_bucket(self, dataset: str, bucket_type: str) -> str:
+    def get_dataset_bucket_url(self, dataset: str, bucket_type: str) -> str:
         """Build dataset-specific bucket URL with Hail-style scheme ("gs:" or "hail-az:")."""
 
     @abstractmethod
@@ -67,7 +67,7 @@ class DataManagerGCP(DataManager):
         """Loads GCP credentials and caches storage client."""
         self._storage_client = google.cloud.storage.Client()
 
-    def get_hail_bucket(self, dataset: str, bucket_type: str) -> str:
+    def get_dataset_bucket_url(self, dataset: str, bucket_type: str) -> str:
         """Build dataset-specific Hail-style bucket URL for GCP ("gs://...")."""
         return f"gs://cpg-{dataset}-{bucket_type}"
 
@@ -134,7 +134,7 @@ class DataManagerAzure(DataManager):
         dataset_account = server_config[dataset]["projectId"]
         return f"{dataset_account}sa.blob.core.windows.net"
 
-    def get_hail_bucket(self, dataset: str, bucket_type: str) -> str:
+    def get_dataset_bucket_url(self, dataset: str, bucket_type: str) -> str:
         """Build dataset-specific Hail-style bucket URL for Azure ("hail-az://...")."""
         return f"hail-az://{self.get_storage_url(dataset)}/cpg-{dataset}-{bucket_type}"
 
@@ -207,9 +207,9 @@ def set_job_config(config: dict) -> str:
     return get_data_manager().set_job_config(config)
 
 
-def get_hail_bucket(dataset: str, bucket_type: str) -> str:
+def get_dataset_bucket_url(dataset: str, bucket_type: str) -> str:
     """Return dataset-specific bucket URL with Hail-style scheme ("gs:" or "hail-az:")."""
-    return get_data_manager().get_hail_bucket(dataset, bucket_type)
+    return get_data_manager().get_dataset_bucket_url(dataset, bucket_type)
 
 
 def remote_tmpdir(hail_bucket: Optional[str] = None) -> str:
