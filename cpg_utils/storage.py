@@ -163,7 +163,7 @@ class DataManagerAzure(DataManager):
 
     def _get_config_client(self, config_name: str) -> azure.storage.blob.BlobClient:
         """Gets storage client for configuration account."""
-        storage_account = get_deploy_config().analysis_runner_project + "tfsa"
+        storage_account = get_deploy_config().analysis_runner_project + "sa"
         storage_url = f"https://{storage_account}.blob.core.windows.net"
         blob_client = azure.storage.blob.BlobClient(
             storage_url, "config", config_name, credential=self._credential

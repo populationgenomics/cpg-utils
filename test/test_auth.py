@@ -73,12 +73,14 @@ def mock_get_default_creds():
 
 def test_az_default_token(monkeypatch):
     monkeypatch.setenv("CLOUD", "azure")
+    monkeypatch.delenv("CPG_DEPLOY_CONFIG", raising=False)
     monkeypatch.setattr(azure.identity, "DefaultAzureCredential", mock_get_creds)
     set_deploy_config_from_env()
     assert get_sample_metadata_token() == "creds"
 
 
 def test_az_file_token(monkeypatch, test_resources_path):
+    monkeypatch.delenv("CPG_DEPLOY_CONFIG", raising=False)
     monkeypatch.setenv("CLOUD", "azure")
     set_deploy_config_from_env()
     monkeypatch.setattr(azure.identity, "ClientSecretCredential", mock_get_creds)
@@ -94,6 +96,7 @@ def test_gcp_default_token(monkeypatch):
 
 
 def test_gcp_file_token(monkeypatch, test_resources_path):
+    monkeypatch.delenv("CPG_DEPLOY_CONFIG", raising=False)
     monkeypatch.setenv("CLOUD", "gcp")
     set_deploy_config_from_env()
     monkeypatch.setattr(service_account.IDTokenCredentials, "from_service_account_info", mock_get_creds)

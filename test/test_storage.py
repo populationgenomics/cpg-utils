@@ -49,7 +49,7 @@ class MockStorageClientGCP:
 class MockStorageClientAzure:
     def __init__(self, *args, **kwargs):
         if len(args) > 2:
-            assert args[0] in ["https://dataset1_idsa.blob.core.windows.net", "https://analysis-runnertfsa.blob.core.windows.net"]
+            assert args[0] in ["https://dataset1_idsa.blob.core.windows.net", "https://analysis-runnersa.blob.core.windows.net"]
             assert args[1] in ["cpg-dataset1-main-read", "config"]
             self.path = args[2]
     def download_blob(self):
@@ -99,6 +99,7 @@ def test_azure_storage(monkeypatch, mock_config_fixture):
     monkeypatch.setattr(azure.identity, "DefaultAzureCredential", MockStorageClientAzure)
     monkeypatch.setattr(azure.storage.blob, "BlobClient", MockStorageClientAzure)
     monkeypatch.setenv("CLOUD", "azure")
+    monkeypatch.delenv("CPG_DEPLOY_CONFIG", raising=False)
     monkeypatch.setenv("CPG_CONFIG_PATH", "config.toml")
     set_deploy_config_from_env()
     sm = DataManager.get_data_manager()

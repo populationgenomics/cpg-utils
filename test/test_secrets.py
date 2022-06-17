@@ -57,6 +57,7 @@ class MockSecretClientGCP:
 
 
 def test_gcp_secret(monkeypatch):
+    monkeypatch.delenv("CPG_DEPLOY_CONFIG", raising=False)
     monkeypatch.setattr(secretmanager, "SecretManagerServiceClient", MockSecretClientGCP)
     sm = SecretManager.get_secret_manager("gcp")
     assert sm.read_secret("test_host", "test_name") == "supersecret in gcp"
@@ -86,6 +87,7 @@ def test_azure_secret(monkeypatch):
 
 
 def test_server_config(monkeypatch):
+    monkeypatch.delenv("CPG_DEPLOY_CONFIG", raising=False)
     monkeypatch.setattr(secretmanager, "SecretManagerServiceClient", MockSecretClientGCP)
     monkeypatch.setenv("CLOUD", "gcp")
     set_deploy_config_from_env()
