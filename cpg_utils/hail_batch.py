@@ -48,7 +48,7 @@ set -ex
 {packages}
 
 cat << EOT >> script.py
-{command}
+{python_cmd}
 EOT
 python3 script.py
 """
