@@ -1,7 +1,7 @@
 """Provides access to config variables."""
 
 import os
-from typing import Optional
+from typing import Optional, List, Dict
 
 import toml
 from cloudpathlib import AnyPath
@@ -14,7 +14,7 @@ _config_paths = _val.split(',') if (_val := os.getenv('CPG_CONFIG_PATH')) else [
 _config: Optional[frozendict] = None  # Cached config, initialized lazily.
 
 
-def _validate_configs(config_paths: list[str]) -> None:
+def _validate_configs(config_paths: List[str]) -> None:
     if [p for p in config_paths if not p.endswith('.toml')]:
         raise ValueError(
             f'All config files must have ".toml" extensions, got: {config_paths}'
@@ -26,7 +26,7 @@ def _validate_configs(config_paths: list[str]) -> None:
 _validate_configs(_config_paths)
 
 
-def set_config_paths(config_paths: list[str]) -> None:
+def set_config_paths(config_paths: List[str]) -> None:
     """Sets the config paths that are used by subsequent calls to get_config.
 
     If this isn't called, the value of the CPG_CONFIG_PATH environment variable is used
@@ -76,7 +76,7 @@ def get_config() -> frozendict:
     return _config
 
 
-def read_configs(config_paths: list[str]) -> frozendict:
+def read_configs(config_paths: List[str]) -> frozendict:
     """Creates a merged configuration from the given config paths.
 
     For a list of configurations (e.g. ['base.toml', 'override.toml']), the
@@ -120,7 +120,7 @@ def read_configs(config_paths: list[str]) -> frozendict:
     return frozendict(config)
 
 
-def update_dict(d1: dict, d2: dict) -> None:
+def update_dict(d1: Dict, d2: Dict) -> None:
     """Updates the d1 dict with the values from the d2 dict recursively in-place."""
     for k, v2 in d2.items():
         v1 = d1.get(k)

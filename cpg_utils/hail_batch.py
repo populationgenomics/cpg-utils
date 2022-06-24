@@ -10,6 +10,7 @@ from abc import ABC, abstractmethod
 
 import hail as hl
 import hailtop.batch as hb
+from hail.utils.java import Env
 
 from cpg_utils.config import get_config
 from cpg_utils import to_path, Path
@@ -64,6 +65,9 @@ def init_batch(**kwargs):
     kwargs : keyword arguments
         Forwarded directly to `hl.init_batch`.
     """
+    # noinspection PyProtectedMember
+    if Env._hc:  # already initialised
+        return
     return asyncio.get_event_loop().run_until_complete(
         hl.init_batch(
             default_reference=genome_build(),
