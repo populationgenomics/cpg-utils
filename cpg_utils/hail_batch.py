@@ -66,9 +66,9 @@ def init_batch(**kwargs):
         Forwarded directly to `hl.init_batch`.
     """
     # noinspection PyProtectedMember
-    if Env._hc:  # already initialised
-        return
-    return asyncio.get_event_loop().run_until_complete(
+    if Env._hc:  # pylint: disable=W0212
+        return  # already initialised
+    asyncio.get_event_loop().run_until_complete(
         hl.init_batch(
             default_reference=genome_build(),
             billing_project=get_config()['hail']['billing_project'],
