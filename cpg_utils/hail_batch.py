@@ -121,15 +121,11 @@ class PathScheme(ABC):
     @staticmethod
     def parse(val: str) -> 'PathScheme':
         """Parse subclass name from string"""
-        match val:
-            case 'gs':
-                return GSPathScheme()
-            case 'hail-az':
-                return AzurePathScheme()
-            case _:
-                raise ValueError(
-                    f'Unsupported path format: {val}. Available: gs, hail-az'
-                )
+        if val == 'gs':
+            return GSPathScheme()
+        if val == 'hail-az':
+            return AzurePathScheme()
+        raise ValueError(f'Unsupported path format: {val}. Available: gs, hail-az')
 
 
 class GSPathScheme(PathScheme):
