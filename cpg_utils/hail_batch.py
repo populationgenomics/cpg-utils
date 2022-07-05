@@ -10,6 +10,7 @@ from abc import ABC, abstractmethod
 
 import hail as hl
 import hailtop.batch as hb
+from hail.utils.java import Env
 
 from cpg_utils.config import get_config
 from cpg_utils import to_path, Path
@@ -48,7 +49,7 @@ set -ex
 {packages}
 
 cat << EOT >> script.py
-{command}
+{python_cmd}
 EOT
 python3 script.py
 """
@@ -64,7 +65,10 @@ def init_batch(**kwargs):
     kwargs : keyword arguments
         Forwarded directly to `hl.init_batch`.
     """
-    return asyncio.get_event_loop().run_until_complete(
+    # noinspection PyProtectedMember
+    if Env._hc:  # pylint: disable=W0212
+        return  # already initialised
+    asyncio.get_event_loop().run_until_complete(
         hl.init_batch(
             default_reference=genome_build(),
             billing_project=get_config()['hail']['billing_project'],
@@ -117,15 +121,11 @@ class PathScheme(ABC):
     @staticmethod
     def parse(val: str) -> 'PathScheme':
         """Parse subclass name from string"""
-        match val:
-            case 'gs':
-                return GSPathScheme()
-            case 'hail-az':
-                return AzurePathScheme()
-            case _:
-                raise ValueError(
-                    f'Unsupported path format: {val}. Available: gs, hail-az'
-                )
+        if val == 'gs':
+            return GSPathScheme()
+        if val == 'hail-az':
+            return AzurePathScheme()
+        raise ValueError(f'Unsupported path format: {val}. Available: gs, hail-az')
 
 
 class GSPathScheme(PathScheme):
