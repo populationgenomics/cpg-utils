@@ -65,7 +65,6 @@ class DeployConfig:
     def server_config(self) -> Dict[str, Any]:
         if self._server_config is None:
             config = self.read_global_config("server-config")
-            logging.info(f"setting deploy_config: {config}")
             self._server_config = json.loads(config)
         return self._server_config
 

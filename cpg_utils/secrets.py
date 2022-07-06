@@ -3,9 +3,10 @@ from abc import ABC, abstractmethod
 from os import getenv
 from typing import Optional
 
-import azure.identity
 import azure.keyvault.secrets as secrets
 from google.cloud import secretmanager
+
+from .creds import get_azure_credentials
 
 
 class SecretManager(ABC):
@@ -49,13 +50,7 @@ class SecretManagerAzure(SecretManager):
     _credential = None
 
     def __init__(self):
-        # EnvironmentCredential, ManagedIdentityCredential, AzureCliCredential
-        self._credential = azure.identity.DefaultAzureCredential(
-            exclude_powershell_credential = True,
-            exclude_visual_studio_code_credential = True,
-            exclude_shared_token_cache_credential = True,
-            exclude_interactive_browser_credential = True
-        )
+        self._credential = get_azure_credentials()
 
     def read_secret(self, secret_host: str, secret_name: str):
         """Reads an Azure Key Vault secret from the designated vault."""

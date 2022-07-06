@@ -5,7 +5,8 @@ import google.auth
 import google.auth.exceptions
 import google.auth.transport.requests
 import pytest
-from cpg_utils.auth import get_sample_metadata_token, get_user_from_headers
+from cpg_utils.auth import get_user_from_headers
+from cpg_utils.creds import get_sample_metadata_token
 from cpg_utils.deploy_config import set_deploy_config_from_env
 from google.oauth2 import service_account
 

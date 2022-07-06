@@ -6,6 +6,7 @@ import azure.identity
 import azure.storage.blob
 import google.cloud.storage
 
+from .creds import get_azure_credentials
 from .deploy_config import get_deploy_config, get_server_config
 
 data_manager: "DataManager" = None
@@ -72,13 +73,7 @@ class DataManagerAzure(DataManager):
     _credential = None
 
     def __init__(self):
-        # EnvironmentCredential, ManagedIdentityCredential, AzureCliCredential
-        self._credential = azure.identity.DefaultAzureCredential(
-            exclude_powershell_credential = True,
-            exclude_visual_studio_code_credential = True,
-            exclude_shared_token_cache_credential = True,
-            exclude_interactive_browser_credential = True
-        )
+        self._credential = get_azure_credentials()
 
     def get_storage_url(self, dataset: Optional[str]) -> str:
         """Gets storage host URL based on dataset name or AR base (without scheme)."""
