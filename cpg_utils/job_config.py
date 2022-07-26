@@ -21,9 +21,6 @@ def _validate_configs(config_paths: List[str]) -> None:
         raise ValueError(f'Some config files do not exist: {bad_files}')
 
 
-_validate_configs(_config_paths)
-
-
 def set_config_paths(config_paths: List[str]) -> None:
     """Sets the config paths that are used by subsequent calls to get_config.
 
@@ -157,3 +154,6 @@ def update_dict(d1: Dict, d2: Dict) -> None:
             update_dict(v1, v2)
         else:
             d1[k] = v2
+
+
+_validate_configs(_config_paths)
