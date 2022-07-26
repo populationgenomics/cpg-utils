@@ -59,7 +59,7 @@ class MockStorageClientAzure:
             return MockStorageResponse(
                 """[hail]
                 billing_project = "dataset1"
-                bucket = "hail-az://dataset1_idsa.blob.core.windows.net/cpg-dataset1-hail"
+                bucket = "hail-az://dataset1_idsa/cpg-dataset1-hail"
                 [workflow]
                 access_level = "pytestaz"
                 """
@@ -123,6 +123,6 @@ def test_azure_storage(monkeypatch, mock_config_fixture):
     set_config_paths(["config.toml"])
     assert get_config()["workflow"]["access_level"] == "pytestaz"
 
-    assert sm.get_dataset_bucket_url("dataset1", "test") == "hail-az://dataset1_idsa.blob.core.windows.net/cpg-dataset1-test"
-    assert remote_tmpdir("hail-az://dataset1_idsa.blob.core.windows.net/cpg-dataset1-hail") == \
-        "hail-az://dataset1_idsa.blob.core.windows.net/cpg-dataset1-hail/batch-tmp"
+    assert sm.get_dataset_bucket_url("dataset1", "test") == "hail-az://dataset1_idsa/cpg-dataset1-test"
+    assert remote_tmpdir("hail-az://dataset1_idsa/cpg-dataset1-hail") == \
+        "hail-az://dataset1_idsa/cpg-dataset1-hail/batch-tmp"

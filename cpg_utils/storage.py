@@ -75,8 +75,8 @@ class DataManagerAzure(DataManager):
     def __init__(self):
         self._credential = get_azure_credentials()
 
-    def get_storage_url(self, dataset: Optional[str]) -> str:
-        """Gets storage host URL based on dataset name or AR base (without scheme)."""
+    def get_storage_account(self, dataset: Optional[str]) -> str:
+        """Gets storage host account name based on dataset name or AR base (without scheme)."""
         if dataset:
             # Need to map dataset name to storage account name.
             server_config = get_server_config()
@@ -85,15 +85,15 @@ class DataManagerAzure(DataManager):
             account = server_config[dataset]["projectId"]
         else: # Otherwise use the base analysis_runner storage account.
             account = get_deploy_config().analysis_runner_project
-        return f"{account}sa.blob.core.windows.net"
+        return f"{account}sa"
 
     def get_dataset_bucket_url(self, dataset: str, bucket_type: str) -> str:
         """Build dataset-specific Hail-style bucket URL for Azure ("hail-az://...")."""
-        return f"hail-az://{self.get_storage_url(dataset)}/cpg-{dataset}-{bucket_type}"
+        return f"hail-az://{self.get_storage_account(dataset)}/cpg-{dataset}-{bucket_type}"
 
     def get_blob(self, dataset: Optional[str], bucket_type: str, blob_path: str) -> Optional[bytes]:
         """Reads an Azure storage blob."""
-        storage_url = "https://" + self.get_storage_url(dataset)
+        storage_url = "https://" + self.get_storage_account(dataset) + ".blob.core.windows.net"
         container_name = f"cpg-{dataset}-{bucket_type}" if dataset else f"cpg-{bucket_type}"
         blob_client = azure.storage.blob.BlobClient(
             storage_url, container_name, blob_path, credential=self._credential
@@ -107,7 +107,7 @@ class DataManagerAzure(DataManager):
 
     def set_blob(self, dataset: Optional[str], bucket_type: str, blob_path: str, contents: bytes) -> None:
         """Writes an Azure storage blob."""
-        storage_url = "https://" + self.get_storage_url(dataset)
+        storage_url = "https://" + self.get_storage_account(dataset) + ".blob.core.windows.net"
         container_name = f"cpg-{dataset}-{bucket_type}" if dataset else f"cpg-{bucket_type}"
         blob_client = azure.storage.blob.BlobClient(
             storage_url, container_name, blob_path, credential=self._credential
