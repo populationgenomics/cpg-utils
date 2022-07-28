@@ -68,11 +68,12 @@ def init_batch(**kwargs):
     # noinspection PyProtectedMember
     if Env._hc:  # pylint: disable=W0212
         return  # already initialised
+    dataset = get_config()['workflow']['dataset']
     asyncio.get_event_loop().run_until_complete(
         hl.init_batch(
             default_reference=genome_build(),
             billing_project=get_config()['hail']['billing_project'],
-            remote_tmpdir=remote_tmpdir(),
+            remote_tmpdir=remote_tmpdir(f'cpg-{dataset}-hail'),
             **kwargs,
         )
     )
