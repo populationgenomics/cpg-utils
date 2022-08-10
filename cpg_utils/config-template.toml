@@ -161,7 +161,7 @@ vep ='vep:105'
 verify-bam-id = 'verify-bam-id:1.0.1'
 multiqc = 'multiqc:v1.12'
 fastqc = 'fastqc:v0.11.9_cv8'
-happy-vcfeval = 'happy-vcfeval:1.0'
+happy = 'hap.py:v0.3.15'
 hail = 'driver:4225655198684124178417573ffc6ed714cf0c04-hail-d4bd6a2fd606634057b0277fce06cedce5b764a6'
 sm-api = 'driver:4225655198684124178417573ffc6ed714cf0c04-hail-d4bd6a2fd606634057b0277fce06cedce5b764a6'
 
