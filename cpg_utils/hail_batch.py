@@ -68,11 +68,12 @@ def init_batch(**kwargs):
     # noinspection PyProtectedMember
     if Env._hc:  # pylint: disable=W0212
         return  # already initialised
+    dataset = get_config()['workflow']['dataset']
     asyncio.get_event_loop().run_until_complete(
         hl.init_batch(
             default_reference=genome_build(),
             billing_project=get_config()['hail']['billing_project'],
-            remote_tmpdir=remote_tmpdir(),
+            remote_tmpdir=remote_tmpdir(f'cpg-{dataset}-hail'),
             **kwargs,
         )
     )
@@ -404,7 +405,7 @@ def genome_build() -> str:
     return get_config()['references'].get('genome_build', 'GRCh38')
 
 
-def fasta_res_group(b, indices: list | None = None):
+def fasta_res_group(b, indices: Optional[List] = None):
     """
     Hail Batch resource group for fasta reference files.
     @param b: Hail Batch object.
@@ -417,7 +418,8 @@ def fasta_res_group(b, indices: list | None = None):
         dict=str(ref_fasta.with_suffix('.dict')),
     )
     if indices:
-        d |= {ext: f'{ref_fasta}.{ext}' for ext in indices}
+        for ext in indices:
+            d[ext] = f'{ref_fasta}.{ext}'
     return b.read_input_group(**d)
 
 
