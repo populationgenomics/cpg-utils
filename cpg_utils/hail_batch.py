@@ -417,7 +417,8 @@ def fasta_res_group(b, indices: Optional[List] = None):
         dict=str(ref_fasta.with_suffix('.dict')),
     )
     if indices:
-        d |= {ext: f'{ref_fasta}.{ext}' for ext in indices}
+        for ext in indices:
+            d[ext] = f'{ref_fasta}.{ext}'
     return b.read_input_group(**d)
 
 
