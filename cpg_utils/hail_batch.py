@@ -404,7 +404,7 @@ def genome_build() -> str:
     return get_config()['references'].get('genome_build', 'GRCh38')
 
 
-def fasta_res_group(b, indices: list | None = None):
+def fasta_res_group(b, indices: Optional[List] = None):
     """
     Hail Batch resource group for fasta reference files.
     @param b: Hail Batch object.
