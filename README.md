@@ -1,11 +1,11 @@
-# cpg-utils
+# cpg-utils-ms
 
 This is a Python library containing convenience functions that are specific to the CPG.
 
-In order to install the library in a conda environment, run:
+In order to install the library, run:
 
 ```bash
-conda install -c cpg cpg-utils
+pip install cpg-utils-ms
 ```
 
 To use the library, import functions like this:

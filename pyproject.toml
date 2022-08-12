@@ -1,3 +1,14 @@
 [tool.black]
 line-length = 88
 skip-string-normalization = true
+
+[tool.pytest.ini_options]
+junit_family = "xunit2"
+junit_logging = "all"
+# Explanation of additional options used:
+#   -vv                 Increase verbosity twice
+#   --strict-markers    Don't allow unregistered markers
+#   --cov=cpg_utils     Generate coverage report for all files within "cpg_utils" directory
+#   --cov-report=term   Generate coverage report in terminal
+#   --cov-report=html:.testresults/htmlcov  Generate HTML coverage report
+addopts = '-vv --strict-markers --cov=cpg_utils --cov-report=term --cov-report=html:.testresults/htmlcov'

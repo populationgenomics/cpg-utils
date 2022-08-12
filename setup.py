@@ -15,6 +15,9 @@ setuptools.setup(
     install_requires=[
         'google-auth',
         'google-cloud-secret-manager',
+        'azure-identity',
+        'azure-keyvault-secrets',
+        'azure-storage-blob',
         'cloudpathlib[all]',
         'toml',
         'frozendict',
