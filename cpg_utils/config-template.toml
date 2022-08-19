@@ -33,10 +33,10 @@ access_level = 'standard'
 #[workflow.skip_samples_stages]
 #VerifyBamId = ['CPG13409']  # https://batch.hail.populationgenomics.org.au/batches/56236/jobs/372
 
-# Name of the pipeline (to prefix output paths)
+# Name of the workflow (to prefix output paths)
 #name =
 
-# Description of the pipeline (to appear in the Batch GUI)
+# Description of the workflow (to display in the Batch GUI)
 #description =
 
 # Status reporter type (class that reports jobs statuses and results)

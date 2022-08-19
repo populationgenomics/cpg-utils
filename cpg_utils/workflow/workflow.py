@@ -1,15 +1,16 @@
-# pylint: skip-file
 """
-Provides a `Pipeline` class and a `@stage` decorator that allow to define
-pipeline stages and plug them together.
+Provides a `Workflow` class and a `@stage` decorator that allow to define workflows
+in a declarative fashion.
 
-A `Stage` describes the job that are added to Hail Batch, and outputs that are expected
-to be produced. Each stage acts on a `Target`, which can be of a different level:
-a `Sample`, a `Dataset`, a `Cohort` (= all input datasets combined). Pipeline plugs
+A `Stage` object is responsible for creating Hail Batch jobs and declaring outputs
+(files or metamist analysis objects) that are expected to be produced. Each stage
+acts on a `Target`, which can be of the following a `Sample`, a `Dataset` (a container
+for samples), or a `Cohort` (all input datasets together). A `Workflow` object plugs
 stages together by resolving dependencies between different levels accordingly.
 
-Examples of pipelines can be found in the `pipelines/` folder in the repository root.
+Examples of workflows can be found in the `production-workflows` repository.
 """
+
 import functools
 import logging
 import pathlib
@@ -30,7 +31,6 @@ from .targets import Target, Dataset, Sample, Cohort
 from .status import StatusReporter
 from .utils import exists, timestamp, slugify
 from .inputs import get_cohort
-from .exceptions import PipelineError, StageInputNotFoundError
 
 logger = logging.getLogger(__file__)
 
@@ -51,6 +51,19 @@ TargetT = TypeVar('TargetT', bound=Target)
 ExpectedResultT = Union[Path, dict[str, Path], dict[str, str], str, None]
 
 StageOutputData = Union[Path, hb.Resource, dict[str, Path], dict[str, hb.Resource]]
+
+
+class WorkflowError(Exception):
+    """
+    Error raised by workflow and stage implementation.
+    """
+
+
+class StageInputNotFoundError(Exception):
+    """
+    Thrown when a stage requests input from another stage
+    that doesn't exist.
+    """
 
 
 # noinspection PyShadowingNames
@@ -208,7 +221,7 @@ class StageInput:
         stage: StageDecorator,
     ):
         if stage.__name__ not in [s.name for s in self.stage.required_stages]:
-            raise PipelineError(
+            raise WorkflowError(
                 f'{self.stage.name}: getting inputs from stage {stage.__name__}, '
                 f'but {stage.__name__} is not listed in required_stages. '
                 f'Consider adding it into the decorator: '
@@ -216,7 +229,7 @@ class StageInput:
             )
 
         if stage.__name__ not in self._outputs_by_target_by_stage:
-            raise PipelineError(
+            raise WorkflowError(
                 f'No inputs from {stage.__name__} for {self.stage.name} found '
                 'after skipping targets with missing inputs. '
                 + (
@@ -375,7 +388,7 @@ class Action(Enum):
 
 class Stage(Generic[TargetT], ABC):
     """
-    Abstract class for a pipeline stage. Parametrised by specific Target subclass,
+    Abstract class for a workflow stage. Parametrised by specific Target subclass,
     i.e. SampleStage(Stage[Sample]) should only be able to work on Sample(Target).
     """
 
@@ -384,7 +397,7 @@ class Stage(Generic[TargetT], ABC):
         name: str,
         batch: Batch,
         cohort: Cohort,
-        pipeline_tmp_prefix: Path,
+        workflow_tmp_prefix: Path,
         run_id: str,
         required_stages: list[StageDecorator] | StageDecorator | None = None,
         analysis_type: str | None = None,
@@ -404,10 +417,10 @@ class Stage(Generic[TargetT], ABC):
             else:
                 self.required_stages_classes.append(required_stages)
 
-        self.tmp_prefix = pipeline_tmp_prefix / name
+        self.tmp_prefix = workflow_tmp_prefix / name
         self.run_id = run_id
 
-        # Dependencies. Populated in pipeline.run(), after we know all stages.
+        # Dependencies. Populated in workflow.run(), after we know all stages.
         self.required_stages: list[Stage] = []
 
         self.status_reporter = status_reporter
@@ -415,7 +428,7 @@ class Stage(Generic[TargetT], ABC):
         # as well as find and reuse existing outputs from the status reporter
         self.analysis_type = analysis_type
 
-        # Populated with the return value of `add_to_the_pipeline()`
+        # Populated with the return value of `add_to_the_workflow()`
         self.output_by_target: dict[str, StageOutput | None] = dict()
 
         self.skipped = skipped
@@ -454,7 +467,7 @@ class Stage(Generic[TargetT], ABC):
         """
         Get path(s) to files that the stage is expected to generate for a `target`.
         Used within in `queue_jobs()` to pass paths to outputs to job commands,
-        as well as by the pipeline to check if the stage's expected outputs already
+        as well as by the workflow to check if the stage's expected outputs already
         exist and can be reused.
 
         Can be a str, a Path object, or a dictionary of str/Path objects.
@@ -696,7 +709,7 @@ def stage(
 ) -> Union[StageDecorator, Callable[..., StageDecorator]]:
     """
     Implements a standard class decorator pattern with optional arguments.
-    The goal is to allow declaring pipeline stages without requiring to implement
+    The goal is to allow declaring workflow stages without requiring to implement
     a constructor method. E.g.
 
     @stage(required_stages=[Align])
@@ -711,17 +724,17 @@ def stage(
         """Implements decorator."""
 
         @functools.wraps(_cls)
-        def wrapper_stage(pipeline: 'Pipeline') -> Stage:
+        def wrapper_stage(workflow: 'Workflow') -> Stage:
             """Decorator helper function."""
             return _cls(
                 name=_cls.__name__,
-                batch=pipeline.b,
-                cohort=pipeline.cohort,
-                pipeline_tmp_prefix=pipeline.tmp_prefix,
-                run_id=pipeline.run_id,
+                batch=workflow.b,
+                cohort=workflow.cohort,
+                workflow_tmp_prefix=workflow.tmp_prefix,
+                run_id=workflow.run_id,
                 required_stages=required_stages,
                 analysis_type=analysis_type,
-                status_reporter=pipeline.status_reporter,
+                status_reporter=workflow.status_reporter,
                 skipped=skipped,
                 assume_outputs_exist=assume_outputs_exist,
                 forced=forced,
@@ -778,10 +791,10 @@ def skip(
         return decorator_stage(_fun)
 
 
-class Pipeline:
+class Workflow:
     """
-    Represents a Pipeline, and encapsulates a Hail Batch object, stages,
-    and a cohort of datasets of samples.
+    Encapsulates a Hail Batch object, stages, and a cohort of datasets of samples.
+    Responsible for orchestrating stages.
     """
 
     def __init__(
@@ -828,7 +841,7 @@ class Pipeline:
         """
         _stages_in_order = stages or self._stages or _ALL_DECLARED_STAGES
         if not _stages_in_order:
-            raise PipelineError('No stages added')
+            raise WorkflowError('No stages added')
         self.set_stages(_stages_in_order, force_all_implicit_stages)
 
         result = None
@@ -876,7 +889,7 @@ class Pipeline:
         explicitly would still be run.
         """
         if not self.cohort:
-            raise PipelineError('Cohort must be populated before adding stages')
+            raise WorkflowError('Cohort must be populated before adding stages')
 
         # First round: initialising stage objects
         stages = [cls(self) for cls in stages_classes]
@@ -964,7 +977,7 @@ class Pipeline:
                 s.name for s in self._stages_dict.values() if not s.skipped
             ]
         ):
-            raise PipelineError('No stages to run')
+            raise WorkflowError('No stages to run')
         logger.info(f'Setting stages: {final_set_of_stages}')
         required_skipped_stages = [s for s in self._stages_dict.values() if s.skipped]
         if required_skipped_stages:
@@ -978,7 +991,7 @@ class Pipeline:
             logger.info(f'Stage {stage_}')
             stage_.output_by_target = stage_.queue_for_cohort(self.cohort)
             if errors := self._process_stage_errors(stage_.output_by_target):
-                raise PipelineError(
+                raise WorkflowError(
                     f'Stage {stage_} failed to queue jobs with errors: '
                     + '\n'.join(errors)
                 )
@@ -1046,7 +1059,7 @@ class SampleStage(Stage[Sample], ABC):
 
     def queue_for_cohort(self, cohort: Cohort) -> dict[str, StageOutput | None]:
         """
-        Plug in stage into the pipeline.
+        Plug the stage into the workflow.
         """
         output_by_target: dict[str, StageOutput | None] = dict()
 
@@ -1141,7 +1154,7 @@ class DatasetStage(Stage, ABC):
 
     def queue_for_cohort(self, cohort: Cohort) -> dict[str, StageOutput | None]:
         """
-        Plug in stage into the pipeline.
+        Plug the stage into the workflow.
         """
         output_by_target: dict[str, StageOutput | None] = dict()
         if not (datasets := cohort.get_datasets()):
@@ -1160,7 +1173,7 @@ class DatasetStage(Stage, ABC):
 
 class CohortStage(Stage, ABC):
     """
-    Cohort-level stage (all datasets of a pipeline run).
+    Cohort-level stage (all datasets of a workflow run).
     """
 
     @abstractmethod
@@ -1178,6 +1191,6 @@ class CohortStage(Stage, ABC):
 
     def queue_for_cohort(self, cohort: Cohort) -> dict[str, StageOutput | None]:
         """
-        Override to plug in stage into the pipeline.
+        Plug the stage into the workflow.
         """
         return {cohort.target_id: self._queue_jobs_with_checks(cohort)}
