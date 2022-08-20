@@ -136,22 +136,10 @@ def _populate_alignment_inputs(
     """
     assert cohort.get_sample_ids()
     seq_type = get_config()['workflow']['sequencing_type']
-    try:
-        found_seqs: list[dict] = get_metamist().seqapi.get_sequences_by_sample_ids(
-            cohort.get_sample_ids(), get_latest_sequence_only=False
-        )
-        found_seqs = [seq for seq in found_seqs if str(seq['type']) == seq_type]
-    except ApiException:
-        if get_config()['workflow'].get('smdb_errors_are_fatal', True):
-            raise
-        else:
-            logger.error(
-                'Getting sequencing data from SMDB resulted in an error. '
-                'Continuing without sequencing data because of flag override. '
-                'However, here is the error: '
-            )
-            traceback.print_exc()
-            found_seqs = []
+    found_seqs: list[dict] = get_metamist().seqapi.get_sequences_by_sample_ids(
+        cohort.get_sample_ids(), get_latest_sequence_only=False
+    )
+    found_seqs = [seq for seq in found_seqs if str(seq['type']) == seq_type]
     found_seqs_by_sid = defaultdict(list)
     for found_seq in found_seqs:
         found_seqs_by_sid[found_seq['sample_id']].append(found_seq)

@@ -13,24 +13,11 @@ from functools import lru_cache
 from random import choices
 from typing import cast
 
+from hailtop.batch import ResourceFile
+
 from cpg_utils import Path, to_path
 
 logger = logging.getLogger(__file__)
-
-# Packages to install on a dataproc cluster, to use with the dataproc wrapper.
-DATAPROC_PACKAGES = [
-    'cpg_pipes==0.3.10',
-    'cpg_utils',
-    'cpg_gnomad',  # github.com/populationgenomics/gnomad_methods
-    'elasticsearch==8.3.3',
-    'cpg_utils',
-    'click',
-    'google',
-    'fsspec',
-    'sklearn',
-    'gcloud',
-    'selenium',
-]
 
 
 @lru_cache
@@ -138,3 +125,24 @@ def slugify(line: str):
         .strip()
         .lower(),
     )
+
+
+def rich_sample_id_seds(
+    rich_id_map: dict[str, str],
+    file_names: list[str | ResourceFile],
+) -> str:
+    """
+    Helper function to add seds into a command that would extend samples IDs
+    in each file in `file_names` with an external ID, only if external ID is
+    different from the original.
+
+    @param rich_id_map: map used to replace samples, e.g. {'CPG1': 'CPG1|EXTID'}
+    @param file_names: file names and Hail Batch Resource files where to replace IDs
+    @return: bash command that does replacement
+    """
+    cmd = ''
+    for sid, rich_sid in rich_id_map.items():
+        for fname in file_names:
+            cmd += f'sed -iBAK \'s/{sid}/{rich_sid}/g\' {fname}'
+            cmd += '\n'
+    return cmd

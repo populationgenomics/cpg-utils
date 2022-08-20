@@ -5,7 +5,7 @@ import inspect
 import os
 import textwrap
 from enum import Enum
-from typing import Optional, List
+from typing import Optional, List, Union
 from abc import ABC, abstractmethod
 
 import hail as hl
@@ -17,41 +17,10 @@ from cpg_utils import to_path, Path
 
 
 # template commands strings
-GCLOUD_AUTH_COMMAND = (
-    'gcloud -q auth activate-service-account --key-file=/gsa-key/key.json'
-)
-BASE_CMD = """
-import logging
-logger = logging.getLogger(__file__)
-logging.basicConfig(format='%(levelname)s (%(name)s %(lineno)s): %(message)s')
-logger.setLevel(logging.INFO)
-"""
-HAIL_STARTUP = """
-import asyncio
-import hail as hl
-asyncio.get_event_loop().run_until_complete(
-    hl.init_batch(
-        default_reference='{default_reference}',
-        billing_project='{hail_billing_project}',
-        remote_tmpdir='{hail_bucket}',
-    )
-)
-"""
-CMD_MODULE = """
-{source_module}
-{func_name}{func_args}
-"""
-CMD_SCRIPT = """
-set -o pipefail
-set -ex
-{gcloud_auth}
-
-{packages}
-
-cat << EOT >> script.py
-{python_cmd}
-EOT
-python3 script.py
+GCLOUD_AUTH_COMMAND = """\
+export GOOGLE_APPLICATION_CREDENTIALS=/gsa-key/key.json
+gcloud -q auth activate-service-account \
+--key-file=$GOOGLE_APPLICATION_CREDENTIALS
 """
 
 
@@ -69,6 +38,7 @@ def init_batch(**kwargs):
     if Env._hc:  # pylint: disable=W0212
         return  # already initialised
     dataset = get_config()['workflow']['dataset']
+    kwargs.setdefault('token', os.environ.get('HAIL_TOKEN'))
     asyncio.get_event_loop().run_until_complete(
         hl.init_batch(
             default_reference=genome_build(),
@@ -178,7 +148,7 @@ class Namespace(Enum):
     @staticmethod
     def from_access_level(str_val: str) -> 'Namespace':
         """
-        Parse value from a access level string.
+        Parse value from an access level string.
         >>> Namespace.from_access_level('test')
         Namespace.TEST
         >>> Namespace.from_access_level('standard')
@@ -453,37 +423,171 @@ def authenticate_cloud_credentials_in_job(
     job.command(GCLOUD_AUTH_COMMAND)
 
 
-def query_command(
+# commands that declare functions that pull files on an instance,
+# handling transitive errors
+RETRY_CMD = """\
+function fail {
+  echo $1 >&2
+  exit 1
+}
+
+function retry {
+  local n_attempts=10
+  local delay=30
+  local n=1
+  while ! eval "$@"; do
+    if [[ $n -lt $n_attempts ]]; then
+      ((n++))
+      echo "Command failed. Attempt $n/$n_attempts after ${delay}s..."
+      sleep $delay;
+    else
+      fail "The command has failed after $n attempts."
+    fi
+  done
+}
+
+function retry_gs_cp {
+  src=$1
+
+  if [ -n "$2" ]; then
+    dst=$2
+  else
+    dst=/io/batch/${basename $src}
+  fi
+
+  retry gsutil -o GSUtil:check_hashes=never cp $src $dst
+}
+"""
+
+# command that monitors the instance storage space
+MONITOR_SPACE_CMD = f'df -h; du -sh /io; du -sh /io/batch'
+
+ADD_SCRIPT_CMD = """\
+cat <<EOT >> {script_name}
+{script_contents}
+EOT\
+"""
+
+
+def command(
+    cmd: Union[str, List[str]],
+    monitor_space: bool = False,
+    setup_gcp: bool = False,
+    define_retry_function: bool = False,
+    rm_leading_space: bool = True,
+    python_script_path: Path | None = None,
+) -> str:
+    """
+    Wraps a command for Batch.
+
+    @param cmd: command to wrap (can be a list of commands)
+    @param monitor_space: add a background process that checks the instance disk
+        space every 5 minutes and prints it to the screen
+    @param setup_gcp: authenticate on GCP
+    @param define_retry_function: when set, adds bash functions `retry` that attempts
+        to redo a command after every 30 seconds (useful to pull inputs
+        and get around GoogleEgressBandwidth Quota or other google quotas)
+    @param rm_leading_space: remove all leading spaces and tabs from the command lines
+    @param python_script_path: if provided, copy this python script into the command
+    """
+    if isinstance(cmd, list):
+        cmd = '\n'.join(cmd)
+
+    cmd = f"""\
+    set -o pipefail
+    set -ex
+    {GCLOUD_AUTH_COMMAND if setup_gcp else ''}
+    {RETRY_CMD if define_retry_function else ''}
+
+    {f'(while true; do {MONITOR_SPACE_CMD}; sleep 600; done) &'
+    if monitor_space else ''}
+
+    {{copy_script_cmd}}
+
+    {cmd}
+
+    {MONITOR_SPACE_CMD if monitor_space else ''}
+    """
+
+    if rm_leading_space:
+        # remove any leading spaces and tabs
+        cmd = '\n'.join(line.strip() for line in cmd.split('\n'))
+        # remove stretches of spaces
+        cmd = '\n'.join(' '.join(line.split()) for line in cmd.split('\n'))
+    else:
+        # Remove only common leading space:
+        cmd = textwrap.dedent(cmd)
+
+    # We don't want the python script tabs to be stripped, so
+    # we are inserting it after leading space is removed
+    if python_script_path:
+        with python_script_path.open() as f:
+            script_contents = f.read()
+        cmd = cmd.replace(
+            '{copy_script_cmd}',
+            ADD_SCRIPT_CMD.format(
+                script_name=python_script_path.name,
+                script_contents=script_contents,
+            ),
+        )
+    else:
+        cmd = cmd.replace('{copy_script_cmd}', '')
+
+    return cmd
+
+
+def python_command(
     module,
     func_name: str,
     *func_args,
     setup_gcp: bool = False,
-    hail_billing_project: Optional[str] = None,
-    hail_bucket: Optional[str] = None,
-    default_reference: str = 'GRCh38',
+    setup_hail: bool = True,
     packages: Optional[List[str]] = None,
 ) -> str:
     """
+    Construct a command to run a python function inside a Hail Batch job.
+    If hail_billing_project is provided, Hail Query will be also initialised.
+
     Run a Python Hail Query function inside a Hail Batch job.
     Constructs a command string to use with job.command().
     If hail_billing_project is provided, Hail Query will be initialised.
     """
-    python_cmd = BASE_CMD
-    if hail_billing_project:
-        assert hail_bucket
-        python_cmd += HAIL_STARTUP.format(
-            default_reference=default_reference,
-            hail_billing_project=hail_billing_project,
-            hail_bucket=hail_bucket,
-        )
-    python_cmd += CMD_MODULE.format(
-        source_module=textwrap.dedent(inspect.getsource(module)),
-        func_name=func_name,
-        func_args=func_args,
-    )
+    dataset = get_config()['workflow']['dataset']
 
-    return CMD_SCRIPT.format(
-        gcloud_auth=GCLOUD_AUTH_COMMAND if setup_gcp else '',
-        packages=('pip3 install ' + ' '.join(packages)) if packages else '',
-        python_cmd=python_cmd,
+    python_code = """
+    import logging
+    log_fmt = '%(asctime)s %(levelname)s (%(name)s %(lineno)s): %(message)s'
+    coloredlogs.install(level='DEBUG', fmt=log_fmt)
+    logger = logging.getLogger(__file__)
+    """
+    if setup_hail:
+        python_code += f"""
+    import asyncio
+    import hail as hl
+    asyncio.get_event_loop().run_until_complete(
+        hl.init_batch(
+            default_reference='{genome_build()}',
+            billing_project='{get_config()['hail']['billing_project']}',
+            remote_tmpdir='{remote_tmpdir(f'cpg-{dataset}-hail')}',
+        )
+    )
+    """
+    python_code += f"""
+    {inspect.getsource(module)}
+    {func_name}{func_args}
+    """
+
+    return textwrap.dedent(
+        f"""
+    set -o pipefail
+    set -ex
+    {GCLOUD_AUTH_COMMAND if setup_gcp else ''}
+    
+    {('pip3 install ' + ' '.join(packages)) if packages else ''}
+    
+    cat << EOT >> script.py
+    {python_code}
+    EOT
+    python3 script.py
+    """
     )

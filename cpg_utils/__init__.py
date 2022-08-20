@@ -1,13 +1,17 @@
 """
 CPG utils
 """
-
+import coloredlogs
+import importlib
 import pathlib
 from typing import Union
 
 from cloudpathlib import CloudPath
 from cloudpathlib.anypath import to_anypath
 
+
+log_fmt = '%(asctime)s %(levelname)s (%(name)s %(lineno)s): %(message)s'
+coloredlogs.install(level='DEBUG', fmt=log_fmt)
 
 # The AnyPath class https://cloudpathlib.drivendata.org/stable/anypath-polymorphism/
 # is very handy to parse a string that can be either a cloud URL or a local posix path.
@@ -22,3 +26,17 @@ Path = Union[CloudPath, pathlib.Path]
 # Something like to_path() would look better, so we are aliasing a handy method
 # to_anypath to to_path, which returns exactly the Union type we are looking for:
 to_path = to_anypath
+
+
+def get_package_name() -> str:
+    """
+    Get name of the package.
+    """
+    return __name__.split('.', 1)[0]
+
+
+def get_version() -> str:
+    """
+    Get package version.
+    """
+    return importlib.metadata.version(get_package_name())

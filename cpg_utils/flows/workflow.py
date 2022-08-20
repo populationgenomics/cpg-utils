@@ -799,16 +799,14 @@ class Workflow:
 
     def __init__(
         self,
-        name: str | None = None,
-        description: str | None = None,
         stages: list[StageDecorator] | None = None,
     ):
         self._stages = stages
         self.run_id = get_config()['workflow'].get('run_id', timestamp())
 
         analysis_dataset = get_config()['workflow']['dataset']
-        name = get_config()['workflow'].get('name') or name
-        description = get_config()['workflow'].get('description') or description
+        name = get_config()['workflow'].get('name')
+        description = get_config()['workflow'].get('description')
         name = name or description or analysis_dataset
         self.name = slugify(name)
         description = description or name

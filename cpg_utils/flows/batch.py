@@ -10,8 +10,7 @@ from cloudpathlib import CloudPath
 from cpg_utils import to_path
 from cpg_utils import config
 from cpg_utils.config import get_config
-from cpg_utils.hail_batch import copy_common_env, remote_tmpdir
-
+from cpg_utils.hail_batch import copy_common_env, remote_tmpdir, output_path
 
 logger = logging.getLogger(__file__)
 
@@ -158,37 +157,6 @@ class Batch(hb.Batch):
         )
 
 
-def setup_batch(description: str) -> Batch:
-    """
-    Wrapper around the initialisation of a Hail Batch object.
-
-    @param description: descriptive name of the Batch (will be displayed in the GUI)
-    """
-    billing_project = get_config()['hail']['billing_project']
-    dataset = get_config()['workflow']['dataset']
-    access_level = get_config()['workflow']['access_level']
-    pool_label = get_config()['hail'].get('pool_label')
-
-    bucket = remote_tmpdir(f'cpg-{dataset}-hail')
-    if access_level == 'test':
-        bucket = remote_tmpdir(f'cpg-{dataset}-hail/test')
-
-    logger.info(
-        f'Starting Hail Batch with the project {billing_project}'
-        f', bucket {bucket}' + (f', pool label {pool_label}' if pool_label else '')
-    )
-    backend = hb.ServiceBackend(
-        billing_project=billing_project,
-        remote_tmpdir=bucket,
-        token=os.environ.get('HAIL_TOKEN'),
-    )
-    return Batch(
-        name=description,
-        backend=backend,
-        pool_label=pool_label,
-    )
-
-
 def make_job_name(
     name: str,
     sample: str | None = None,
@@ -211,3 +179,21 @@ def make_job_name(
     if reuse:
         name += ' [reuse]'
     return name
+
+
+def setup_batch(description: str) -> Batch:
+    """
+    Wrapper around the initialisation of a Hail Batch object.
+
+    @param description: descriptive name of the Batch (will be displayed in the GUI)
+    """
+    backend = hb.ServiceBackend(
+        billing_project=get_config()['hail']['billing_project'],
+        remote_tmpdir=output_path('batch-tmp', category='tmp'),
+        token=os.environ.get('HAIL_TOKEN'),
+    )
+    return Batch(
+        name=description,
+        backend=backend,
+        pool_label=get_config()['hail'].get('pool_label'),
+    )

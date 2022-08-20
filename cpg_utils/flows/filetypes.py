@@ -10,7 +10,7 @@ from typing import Union
 from hailtop.batch import ResourceGroup, ResourceFile, Batch
 
 from cpg_utils import Path, to_path
-from cpg_pipes import utils
+from cpg_utils.flows.utils import exists
 
 logger = logging.getLogger(__file__)
 
@@ -70,7 +70,7 @@ class CramPath(AlignmentInput):
         """
         CRAM file exists.
         """
-        return utils.exists(self.path)
+        return exists(self.path)
 
     def resource_group(self, b: Batch) -> ResourceGroup:
         """
@@ -176,7 +176,7 @@ class FastqPairs(list[FastqPair], AlignmentInput):
         """
         Check if each FASTQ file in each pair exist.
         """
-        return all(utils.exists(pair.r1) and utils.exists(pair.r2) for pair in self)
+        return all(exists(pair.r1) and exists(pair.r2) for pair in self)
 
     def path_glob(self) -> str:
         """

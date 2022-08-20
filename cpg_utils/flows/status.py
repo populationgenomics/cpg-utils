@@ -6,11 +6,10 @@ from textwrap import dedent
 from abc import ABC, abstractmethod
 
 from cpg_utils import Path
-from cpg_utils.hail_batch import image_path
+from cpg_utils.hail_batch import image_path, command
 from hailtop.batch.job import Job
 from hailtop.batch import Batch, Resource
 
-from .command import wrap_command
 from .targets import Target, Sample
 from .metamist import get_metamist, AnalysisStatus, MetamistError
 
@@ -45,7 +44,9 @@ class StatusReporter(ABC):
         meta: dict | None = None,
         project_name: str = None,
     ) -> int | None:
-        """Record analysis entry"""
+        """
+        Record analysis entry.
+        """
 
 
 class MetamistStatusReporter(StatusReporter):
@@ -187,5 +188,5 @@ class MetamistStatusReporter(StatusReporter):
         python3 update.py
         """
         )
-        j.command(wrap_command(cmd, rm_leading_space=False, setup_gcp=True))
+        j.command(command(cmd, rm_leading_space=False, setup_gcp=True))
         return j

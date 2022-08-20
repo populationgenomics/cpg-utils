@@ -22,8 +22,8 @@ from sample_metadata.apis import (
 )
 from sample_metadata.exceptions import ApiException
 
-from cpg_pipes import utils
-from cpg_pipes.filetypes import FastqPair, CramPath, AlignmentInput, FastqPairs
+from cpg_utils.flows.utils import exists
+from cpg_utils.flows.filetypes import FastqPair, CramPath, AlignmentInput, FastqPairs
 
 logger = logging.getLogger(__file__)
 
@@ -32,7 +32,7 @@ _metamist: Optional['Metamist'] = None
 
 
 def get_metamist() -> 'Metamist':
-    """Return the cohort object, which is a signleton"""
+    """Return the cohort object"""
     global _metamist
     if not _metamist:
         _metamist = Metamist()
@@ -49,7 +49,7 @@ class MetamistError(Exception):
 
 class AnalysisStatus(Enum):
     """
-    Corresponds to SMDB Analysis statuses:
+    Corresponds to metamist Analysis statuses:
     https://github.com/populationgenomics/sample-metadata/blob/dev/models/enums/analysis.py#L14-L21
     """
 
@@ -69,7 +69,7 @@ class AnalysisStatus(Enum):
 
 class AnalysisType(Enum):
     """
-    Corresponds to SMDB Analysis types:
+    Corresponds to metamist Analysis types:
     https://github.com/populationgenomics/sample-metadata/blob/dev/models/enums
     /analysis.py#L4-L11
 
@@ -124,7 +124,7 @@ class Analysis:
             for key in req_keys:
                 if key not in data:
                     logger.error(f'"Analysis" data does not have {key}: {data}')
-            raise ValueError(f'Cannot parse SMDB Sequence {data}')
+            raise ValueError(f'Cannot parse metamist Sequence {data}')
 
         output = data.get('output')
         if output:
@@ -150,7 +150,6 @@ class Metamist:
         self.default_dataset: str = get_config()['workflow']['dataset']
         self.sapi = SampleApi()
         self.aapi = AnalysisApi()
-        self.seqapi = SequenceApi()
         self.seqapi = SequenceApi()
         self.papi = ParticipantApi()
         self.fapi = FamilyApi()
@@ -342,7 +341,7 @@ class Metamist:
                     f'{expected_output_fpath}'
                 )
                 found_output_fpath = None
-            elif not utils.exists(found_output_fpath):
+            elif not exists(found_output_fpath):
                 logger.error(
                     f'Found a completed analysis {label}, '
                     f'but the "output" file {found_output_fpath} does not exist'
@@ -366,7 +365,7 @@ class Metamist:
             self.update_analysis(completed_analysis, status=AnalysisStatus.FAILED)
 
         # can reuse, need to create a completed one?
-        if utils.exists(expected_output_fpath):
+        if exists(expected_output_fpath):
             logger.info(
                 f'Output file {expected_output_fpath} already exists, so creating '
                 f'an analysis {label} with status=completed'
@@ -431,7 +430,7 @@ class MmSequence:
             for key in req_keys:
                 if key not in data:
                     logger.error(f'"Sequence" data does not have {key}: {data}')
-            raise ValueError(f'Cannot parse SMDB Sequence {data}')
+            raise ValueError(f'Cannot parse metamist Sequence {data}')
 
         sample_id = data['sample_id']
         sequencing_type = data['type']
@@ -465,7 +464,7 @@ class MmSequence:
         Parse a AlignmentInput object from the meta dictionary.
 
         @param check_existence: check if fastq/crams exist on buckets.
-        Default value is pulled from self.smdb and can be overridden.
+        Default value is pulled from self.metamist and can be overridden.
         """
         reads_data = meta.get('reads')
         reads_type = meta.get('reads_type')
@@ -497,7 +496,7 @@ class MmSequence:
                     f'.cram or .bam, got: {bam_path}'
                 )
                 return None
-            if check_existence and not utils.exists(bam_path):
+            if check_existence and not exists(bam_path):
                 logger.error(
                     f'{sample_id}: ERROR: index file does not exist: {bam_path}'
                 )
@@ -517,7 +516,7 @@ class MmSequence:
                         f'{sample_id}: ERROR: expected the index file to have an extension '
                         f'.crai or .bai, got: {index_path}'
                     )
-                if check_existence and not utils.exists(index_path):
+                if check_existence and not exists(index_path):
                     logger.error(
                         f'{sample_id}: ERROR: index file does not exist: {index_path}'
                     )
@@ -537,13 +536,13 @@ class MmSequence:
                         f'but got {len(lane_pair)}. '
                         f'Read data: {pprint.pformat(reads_data)}'
                     )
-                if check_existence and not utils.exists(lane_pair[0]['location']):
+                if check_existence and not exists(lane_pair[0]['location']):
                     logger.error(
                         f'{sample_id}: ERROR: read 1 file does not exist: '
                         f'{lane_pair[0]["location"]}'
                     )
                     return None
-                if check_existence and not utils.exists(lane_pair[1]['location']):
+                if check_existence and not exists(lane_pair[1]['location']):
                     logger.error(
                         f'{sample_id}: ERROR: read 2 file does not exist: '
                         f'{lane_pair[1]["location"]}'

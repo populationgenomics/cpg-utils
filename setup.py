@@ -18,6 +18,7 @@ setuptools.setup(
         'cloudpathlib[all]',
         'toml',
         'frozendict',
+        'coloredlogs',
     ],
     package_data={
         'cpg_utils': ['config-template.toml'],

@@ -31,22 +31,13 @@ access_level = 'standard'
 
 # Map of stages to lists of samples, to skip for specific stages
 #[workflow.skip_samples_stages]
-#VerifyBamId = ['CPG13409']  # https://batch.hail.populationgenomics.org.au/batches/56236/jobs/372
+#VerifyBamId = ['CPG13409']
 
 # Name of the workflow (to prefix output paths)
 #name =
 
 # Description of the workflow (to display in the Batch GUI)
 #description =
-
-# Status reporter type (class that reports jobs statuses and results)
-#status_repotrer = 'smdb'
-
-# Input provider type ('csv' or 'smdb' for the CPG sample-metadata database)
-input_provider = 'smdb'
-
-# CSV file path for input_provider='csv'
-#input_csv =
 
 # For the first (not-skipped) stage, if the input for a target does
 # not exist, just skip this target instead of failing. E.g. if the first
@@ -77,10 +68,6 @@ check_expected_outputs = true
 #channel = 'seqr-loader-test'
 #token_secret_id = 'slack-seqr-loader-token'
 #token_project_id = 'seqr-308602'
-
-# When the sample-metadata database API returns an error from the
-# database, only show the error and continue, instead of crashing
-smdb_errors_are_fatal = true
 
 # Prefix to find docker images referenced in `image_config_yaml_path`
 image_registry_prefix = 'australia-southeast1-docker.pkg.dev/cpg-common/images'
