@@ -3,6 +3,7 @@
 import asyncio
 import inspect
 import os
+import tempfile
 import textwrap
 from enum import Enum
 from typing import Optional, List, Union
@@ -96,7 +97,11 @@ class PathScheme(ABC):
             return GSPathScheme()
         if val == 'hail-az':
             return AzurePathScheme()
-        raise ValueError(f'Unsupported path format: {val}. Available: gs, hail-az')
+        if val == 'local':
+            return LocalPathScheme()
+        raise ValueError(
+            f'Unsupported path format: {val}. Available: gs, hail-az, local'
+        )
 
 
 class GSPathScheme(PathScheme):
@@ -134,6 +139,26 @@ class AzurePathScheme(PathScheme):
     def full_path(self, prefix: str, suffix: str) -> str:
         """Build full path from prefix and suffix"""
         return os.path.join(f'{self.scheme}://', prefix, suffix)
+
+
+class LocalPathScheme(PathScheme):
+    """
+    Local posix path scheme. Requires workflow/local_dir to be set
+    """
+
+    def __init__(self):
+        if not (local_dir := get_config()['workflow'].get('local_dir')):
+            local_dir = tempfile.mkdtemp('cpg-utils')
+        self.local_dir = to_path(local_dir)
+        self.scheme = 'local'
+
+    def path_prefix(self, dataset: str, category: str) -> str:
+        """Build path prefix used in dataset_path"""
+        return f'{dataset}-{category}'
+
+    def full_path(self, prefix: str, suffix: str) -> str:
+        """Build full path from prefix and suffix"""
+        return str(self.local_dir / prefix / suffix)
 
 
 class Namespace(Enum):

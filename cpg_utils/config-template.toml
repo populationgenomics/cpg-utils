@@ -127,9 +127,8 @@ password_project_id = 'seqr-308602'
 
 [hail]
 #billing_project =
-#bucket =
 pool_label = 'seqr'
-keep_scratch = true
+delete_scratch_on_exit = false
 dry_run = false
 
 [images]

@@ -4,6 +4,7 @@ Extending the Hail's `Batch` class.
 
 import logging
 import os
+import tempfile
 
 import hailtop.batch as hb
 from cloudpathlib import CloudPath
@@ -38,6 +39,8 @@ class Batch(hb.Batch):
 
     def _copy_configs_to_remote(self):
         """If configs are local files, copy them to remote"""
+        if isinstance(self._backend, hb.LocalBackend):
+            return
         remote_dir = to_path(self._backend.remote_tmpdir) / 'config'
         remote_paths = []
         # noinspection PyProtectedMember
@@ -155,11 +158,11 @@ class Batch(hb.Batch):
             logger.info(f'Split by tool:')
             _print_stat(self.job_by_tool, default_label='<tool is not defined>')
 
-        return super().run(
-            dry_run=get_config()['hail'].get('dry_run', False),
-            delete_scratch_on_exit=not get_config()['hail'].get('keep_scratch', True),
-            **kwargs,
+        kwargs.setdefault('dry_run', get_config()['hail'].get('dry_run'))
+        kwargs.setdefault(
+            'delete_scratch_on_exit', get_config()['hail'].get('delete_scratch_on_exit')
         )
+        return super().run(**kwargs)
 
 
 def make_job_name(
@@ -192,11 +195,18 @@ def setup_batch(description: str) -> Batch:
 
     @param description: descriptive name of the Batch (will be displayed in the GUI)
     """
-    backend = hb.ServiceBackend(
-        billing_project=get_config()['hail']['billing_project'],
-        remote_tmpdir=dataset_path('batch-tmp', category='tmp'),
-        token=os.environ.get('HAIL_TOKEN'),
-    )
+    if get_config()['hail'].get('backend', 'batch') == 'local':
+        logger.info('Initialising Hail Batch with local backend')
+        backend = hb.LocalBackend(
+            tmp_dir=tempfile.mkdtemp('batch-tmp'),
+        )
+    else:
+        logger.info('Initialising Hail Batch with service backend')
+        backend = hb.ServiceBackend(
+            billing_project=get_config()['hail']['billing_project'],
+            remote_tmpdir=dataset_path('batch-tmp', category='tmp'),
+            token=os.environ.get('HAIL_TOKEN'),
+        )
     return Batch(
         name=description,
         backend=backend,
