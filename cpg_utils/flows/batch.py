@@ -10,7 +10,12 @@ from cloudpathlib import CloudPath
 from cpg_utils import to_path
 from cpg_utils import config
 from cpg_utils.config import get_config
-from cpg_utils.hail_batch import copy_common_env, remote_tmpdir, output_path
+from cpg_utils.hail_batch import (
+    copy_common_env,
+    remote_tmpdir,
+    output_path,
+    dataset_path,
+)
 
 logger = logging.getLogger(__file__)
 
@@ -189,7 +194,7 @@ def setup_batch(description: str) -> Batch:
     """
     backend = hb.ServiceBackend(
         billing_project=get_config()['hail']['billing_project'],
-        remote_tmpdir=output_path('batch-tmp', category='tmp'),
+        remote_tmpdir=dataset_path('batch-tmp', category='tmp'),
         token=os.environ.get('HAIL_TOKEN'),
     )
     return Batch(
