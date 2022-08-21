@@ -3,11 +3,9 @@ Metamist wrapper to get input samples.
 """
 
 import logging
-import traceback
 from collections import defaultdict
 from itertools import groupby
 
-from sample_metadata import ApiException
 from cpg_utils.config import get_config
 
 from .filetypes import GvcfPath, CramPath
@@ -24,11 +22,11 @@ def get_cohort() -> Cohort:
     """Return the cohort object"""
     global _cohort
     if not _cohort:
-        _cohort = _create_cohort()
+        _cohort = create_cohort()
     return _cohort
 
 
-def _create_cohort() -> Cohort:
+def create_cohort() -> Cohort:
     """
     Add datasets in the cohort. There exists only one cohort for the workflow run.
     """
@@ -56,7 +54,7 @@ def _create_cohort() -> Cohort:
             dataset.add_sample(
                 id=str(entry['id']),
                 external_id=str(entry['external_id']),
-                meta=entry['meta'],
+                meta=entry.get('meta', {}),
             )
 
     if not cohort.get_datasets():
@@ -66,19 +64,19 @@ def _create_cohort() -> Cohort:
         logger.warning(msg)
         return cohort
 
-    _populate_alignment_inputs(cohort)
-    _filter_sequencing_type(cohort)
+    if sequencing_type := get_config()['workflow'].get('sequencing_type'):
+        _populate_alignment_inputs(cohort, sequencing_type)
+        _filter_sequencing_type(cohort, sequencing_type)
     _populate_analysis(cohort)
     _populate_participants(cohort)
     _populate_pedigree(cohort)
     return cohort
 
 
-def _filter_sequencing_type(cohort: Cohort):
+def _filter_sequencing_type(cohort: Cohort, sequencing_type: str):
     """
     Filtering to the samples with only requested sequencing types.
     """
-    sequencing_type = get_config()['workflow']['sequencing_type']
     for s in cohort.get_samples():
         if not s.seq_by_type:
             logger.warning(f'{s}: skipping because no sequencing inputs found')
@@ -129,17 +127,17 @@ def _filter_samples(
 
 def _populate_alignment_inputs(
     cohort: Cohort,
+    sequencing_type: str,
     check_existence: bool = False,
 ) -> None:
     """
     Populate sequencing inputs for samples.
     """
     assert cohort.get_sample_ids()
-    seq_type = get_config()['workflow']['sequencing_type']
     found_seqs: list[dict] = get_metamist().seqapi.get_sequences_by_sample_ids(
         cohort.get_sample_ids(), get_latest_sequence_only=False
     )
-    found_seqs = [seq for seq in found_seqs if str(seq['type']) == seq_type]
+    found_seqs = [seq for seq in found_seqs if str(seq['type']) == sequencing_type]
     found_seqs_by_sid = defaultdict(list)
     for found_seq in found_seqs:
         found_seqs_by_sid[found_seq['sample_id']].append(found_seq)
@@ -149,7 +147,7 @@ def _populate_alignment_inputs(
     if sample_wo_seq := [
         s for s in cohort.get_samples() if s.id not in found_seqs_by_sid
     ]:
-        msg = f'No {seq_type} sequencing data found for samples:\n'
+        msg = f'No {sequencing_type} sequencing data found for samples:\n'
         ds_sample_count = {
             ds_name: len(list(ds_samples))
             for ds_name, ds_samples in groupby(

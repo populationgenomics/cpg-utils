@@ -148,7 +148,7 @@ class LocalPathScheme(PathScheme):
 
     def __init__(self):
         if not (local_dir := get_config()['workflow'].get('local_dir')):
-            local_dir = tempfile.mkdtemp('cpg-utils')
+§            local_dir = tempfile.mkdtemp(prefix='cpg-utils-')
         self.local_dir = to_path(local_dir)
         self.scheme = 'local'
 
@@ -577,42 +577,26 @@ def python_command(
     Constructs a command string to use with job.command().
     If hail_billing_project is provided, Hail Query will be initialised.
     """
-    dataset = get_config()['workflow']['dataset']
+    init_hail_code = """
+from cpg_utils.hail_batch import init_batch
+init_batch()
+"""
 
-    python_code = """
-    import logging
-    log_fmt = '%(asctime)s %(levelname)s (%(name)s %(lineno)s): %(message)s'
-    coloredlogs.install(level='DEBUG', fmt=log_fmt)
-    logger = logging.getLogger(__file__)
-    """
-    if setup_hail:
-        python_code += f"""
-    import asyncio
-    import hail as hl
-    asyncio.get_event_loop().run_until_complete(
-        hl.init_batch(
-            default_reference='{genome_build()}',
-            billing_project='{get_config()['hail']['billing_project']}',
-            remote_tmpdir='{remote_tmpdir(f'cpg-{dataset}-hail')}',
-        )
-    )
-    """
-    python_code += f"""
-    {inspect.getsource(module)}
-    {func_name}{func_args}
-    """
+    python_code = f"""
+{'' if not setup_hail else init_hail_code}
+{inspect.getsource(module)}
+{func_name}{func_args}
+"""
 
-    return textwrap.dedent(
-        f"""
-    set -o pipefail
-    set -ex
-    {GCLOUD_AUTH_COMMAND if setup_gcp else ''}
-    
-    {('pip3 install ' + ' '.join(packages)) if packages else ''}
-    
-    cat << EOT >> script.py
-    {python_code}
-    EOT
-    python3 script.py
-    """
-    )
+    return f"""\
+set -o pipefail
+set -ex
+{GCLOUD_AUTH_COMMAND if setup_gcp else ''}
+
+{('pip3 install ' + ' '.join(packages)) if packages else ''}
+
+cat << EOT >> script.py
+{python_code}
+EOT
+python3 script.py
+"""

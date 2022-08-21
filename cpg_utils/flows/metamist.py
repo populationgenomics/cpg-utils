@@ -154,26 +154,6 @@ class Metamist:
         self.papi = ParticipantApi()
         self.fapi = FamilyApi()
 
-    def get_sample_entries(
-        self,
-        dataset: str | None = None,
-        active: bool = True,
-    ) -> list[dict]:
-        """
-        Get samples in the project as a list of dictionaries.
-        """
-        dataset = dataset or self.default_dataset
-        logger.debug(f'Finding samples for dataset {dataset}...')
-        body = {
-            'project_ids': [dataset],
-            'active': active,
-        }
-        sample_entries = self.sapi.get_samples(body_get_samples=body)
-        logger.info(
-            f'Finding samples for project {dataset}: ' f'found {len(sample_entries)}'
-        )
-        return sample_entries
-
     def update_analysis(self, analysis: Analysis, status: AnalysisStatus):
         """
         Update "status" of an Analysis entry.

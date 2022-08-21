@@ -162,6 +162,10 @@ class Batch(hb.Batch):
         kwargs.setdefault(
             'delete_scratch_on_exit', get_config()['hail'].get('delete_scratch_on_exit')
         )
+        if isinstance(self._backend, hb.LocalBackend):
+            # Local backend does not support "wait"
+            if 'wait' in kwargs:
+                del kwargs['wait']
         return super().run(**kwargs)
 
 

@@ -270,8 +270,10 @@ class Dataset(Target):
         Subdirectory parametrised by sequencing type. For genomes, we don't
         prefix at all.
         """
-        seq_type = get_config()['workflow']['sequencing_type']
-        return '' if not self.cohort or seq_type == 'genome' else seq_type
+        seq_type = get_config()['workflow'].get('sequencing_type')
+        return (
+            '' if not self.cohort or not seq_type or seq_type == 'genome' else seq_type
+        )
 
     def prefix(self, **kwargs) -> Path:
         """

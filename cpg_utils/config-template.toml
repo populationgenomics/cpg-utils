@@ -84,7 +84,7 @@ web_url_template = 'https://{namespace}-web.populationgenomics.org.au/{dataset}'
 #dataset_gcp_project =
 
 # Limit to data of this sequencing type
-sequencing_type = 'genome'
+#sequencing_type = 'genome'
 
 # Realign CRAM when available, instead of using FASTQ.
 # The parameter value should correspond to CRAM version

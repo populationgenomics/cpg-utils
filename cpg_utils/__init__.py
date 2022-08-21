@@ -2,7 +2,6 @@
 CPG utils
 """
 import coloredlogs
-import importlib
 import pathlib
 from typing import Union
 
@@ -26,17 +25,3 @@ Path = Union[CloudPath, pathlib.Path]
 # Something like to_path() would look better, so we are aliasing a handy method
 # to_anypath to to_path, which returns exactly the Union type we are looking for:
 to_path = to_anypath
-
-
-def get_package_name() -> str:
-    """
-    Get name of the package.
-    """
-    return __name__.split('.', 1)[0]
-
-
-def get_version() -> str:
-    """
-    Get package version.
-    """
-    return importlib.metadata.version(get_package_name())

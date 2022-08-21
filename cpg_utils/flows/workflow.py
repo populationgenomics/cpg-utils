@@ -689,10 +689,9 @@ class Stage(Generic[TargetT], ABC):
         """
         Create Hail Batch Job attributes dictionary
         """
-        job_attrs = dict(
-            seq_type=get_config()['workflow']['sequencing_type'],
-            stage=self.name,
-        )
+        job_attrs = dict(stage=self.name)
+        if sequencing_type := get_config()['workflow'].get('sequencing_type'):
+            job_attrs['sequencing_type'] = sequencing_type
         if target:
             job_attrs |= target.get_job_attrs()
         return job_attrs
@@ -814,7 +813,8 @@ class Workflow:
 
         self.cohort = get_cohort()
         self.tmp_prefix = self.cohort.analysis_dataset.tmp_prefix() / self.run_id
-        description += f' [{get_config()["workflow"]["sequencing_type"]}]'
+        if sequencing_type := get_config()['workflow'].get('sequencing_type'):
+            description += f' [{sequencing_type}]'
         if ds_set := set(d.name for d in self.cohort.get_datasets()):
             description += ' ' + ', '.join(sorted(ds_set))
         self.b: Batch = setup_batch(description=description)
