@@ -824,7 +824,7 @@ class Workflow:
         self.status_reporter = None
         if get_config()['workflow'].get('status_reporter') == 'metamist':
             self.status_reporter = MetamistStatusReporter()
-        self._stages: list[StageDecorator] = stages
+        self._stages: list[StageDecorator] | None = stages
 
     def run(
         self,
