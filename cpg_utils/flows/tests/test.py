@@ -180,7 +180,7 @@ def test_workflow(mocker):
             assert len(path_by_sample) == len(cohort.get_samples())
             j = self.b.new_job('Cohort job', self.get_job_attrs(cohort))
             j.command(f'touch {j.output}')
-            for sample_id, sample_result_path in path_by_sample.items():
+            for _, sample_result_path in path_by_sample.items():
                 input_file = self.b.read_input(str(sample_result_path))
                 j.command(f'cat {input_file} >> {j.output}')
             self.b.write_output(j.output, str(self.expected_outputs(cohort)))
