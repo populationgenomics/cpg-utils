@@ -254,7 +254,7 @@ regions = 'syndip/regions/syndip.b38_20180222.bed'
 truth = 'giab/truth/HG001_GRCh38_GIAB_highconf_CG-IllFB-IllGATKHC-Ion-10X-SOLID_CHROM1-X_v.3.3.2_highconf_PGandRTGphasetransfer.vcf.gz'
 regions = 'giab/regions/HG001_GRCh38_GIAB_highconf_CG-IllFB-IllGATKHC-Ion-10X-SOLID_CHROM1-X_v.3.3.2_highconf_nosomaticdel_noCENorHET7.bed'
 
-# Map internally used validation sample external_id to truth sample names 
+# Map internally used validation sample external_id to truth sample names
 [validation.genome]
 HG001_NA12878 = 'HG001'
 SYNDIP = 'syndip'
