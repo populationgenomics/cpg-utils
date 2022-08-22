@@ -2,14 +2,11 @@
 Functions to set up Hail Batch resources (cores, memory, storage).
 """
 
-import logging
 import math
 from dataclasses import dataclass
 
 from cpg_utils.config import get_config
 from hailtop.batch.job import Job
-
-logger = logging.getLogger(__file__)
 
 
 def _is_power_of_two(n: int) -> bool:

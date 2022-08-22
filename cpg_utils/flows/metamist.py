@@ -25,8 +25,6 @@ from sample_metadata.exceptions import ApiException
 from cpg_utils.flows.utils import exists
 from cpg_utils.flows.filetypes import FastqPair, CramPath, AlignmentInput, FastqPairs
 
-logger = logging.getLogger(__file__)
-
 
 _metamist: Optional['Metamist'] = None
 
@@ -123,7 +121,7 @@ class Analysis:
         if any(k not in data for k in req_keys):
             for key in req_keys:
                 if key not in data:
-                    logger.error(f'"Analysis" data does not have {key}: {data}')
+                    logging.error(f'"Analysis" data does not have {key}: {data}')
             raise ValueError(f'Cannot parse metamist Sequence {data}')
 
         output = data.get('output')
@@ -208,7 +206,7 @@ class Metamist:
 
         analysis_per_sid: dict[str, Analysis] = dict()
 
-        logger.info(
+        logging.info(
             f'Querying {analysis_type} analysis entries for dataset {dataset}...'
         )
         datas = self.aapi.query_analyses(
@@ -229,7 +227,7 @@ class Metamist:
             assert a.type == analysis_type, data
             assert len(a.sample_ids) == 1, data
             analysis_per_sid[list(a.sample_ids)[0]] = a
-        logger.info(
+        logging.info(
             f'Querying {analysis_type} analysis entries for dataset {dataset}: '
             f'found {len(analysis_per_sid)}'
         )
@@ -267,7 +265,7 @@ class Metamist:
             traceback.print_exc()
             return None
         else:
-            logger.info(
+            logging.info(
                 f'Created Analysis(id={aid}, type={type_}, status={status}, '
                 f'output={str(output)}) in project {dataset}'
             )
@@ -303,26 +301,26 @@ class Metamist:
 
         found_output_fpath: Path | None = None
         if not completed_analysis:
-            logger.warning(
+            logging.warning(
                 f'Not found completed analysis {label} for '
                 f'{f"sample {sample_ids}" if len(sample_ids) == 1 else f"{len(sample_ids)} samples" }'
             )
         elif not completed_analysis.output:
-            logger.error(
+            logging.error(
                 f'Found a completed analysis {label}, '
                 f'but the "output" field does not exist or empty'
             )
         else:
             found_output_fpath = completed_analysis.output
             if found_output_fpath != expected_output_fpath:
-                logger.error(
+                logging.error(
                     f'Found a completed analysis {label}, but the "output" path '
                     f'{found_output_fpath} does not match the expected path '
                     f'{expected_output_fpath}'
                 )
                 found_output_fpath = None
             elif not exists(found_output_fpath):
-                logger.error(
+                logging.error(
                     f'Found a completed analysis {label}, '
                     f'but the "output" file {found_output_fpath} does not exist'
                 )
@@ -330,7 +328,7 @@ class Metamist:
 
         # completed and good exists, can reuse
         if found_output_fpath:
-            logger.info(
+            logging.info(
                 f'Completed analysis {label} exists, '
                 f'reusing the result {found_output_fpath}'
             )
@@ -338,7 +336,7 @@ class Metamist:
 
         # can't reuse, need to invalidate
         if completed_analysis:
-            logger.warning(
+            logging.warning(
                 f'Invalidating the analysis {label} by setting the status to "failure", '
                 f'and resubmitting the analysis.'
             )
@@ -346,7 +344,7 @@ class Metamist:
 
         # can reuse, need to create a completed one?
         if exists(expected_output_fpath):
-            logger.info(
+            logging.info(
                 f'Output file {expected_output_fpath} already exists, so creating '
                 f'an analysis {label} with status=completed'
             )
@@ -361,7 +359,7 @@ class Metamist:
 
         # proceeding with the standard workflow (creating status=queued, submitting jobs)
         else:
-            logger.info(
+            logging.info(
                 f'Expected output file {expected_output_fpath} does not exist, '
                 f'so queueing analysis {label}'
             )
@@ -409,7 +407,7 @@ class MmSequence:
         if any(k not in data for k in req_keys):
             for key in req_keys:
                 if key not in data:
-                    logger.error(f'"Sequence" data does not have {key}: {data}')
+                    logging.error(f'"Sequence" data does not have {key}: {data}')
             raise ValueError(f'Cannot parse metamist Sequence {data}')
 
         sample_id = data['sample_id']
@@ -429,7 +427,7 @@ class MmSequence:
             ):
                 sm_seq.alignment_input = alignment_input
         else:
-            logger.warning(
+            logging.warning(
                 f'{sample_id} sequence: no meta/reads found with FASTQ information'
             )
         return sm_seq
@@ -451,14 +449,14 @@ class MmSequence:
         reference_assembly = meta.get('reference_assembly', {}).get('location')
 
         if not reads_data:
-            logger.error(f'{sample_id}: no "meta/reads" field in meta')
+            logging.error(f'{sample_id}: no "meta/reads" field in meta')
             return None
         if not reads_type:
-            logger.error(f'{sample_id}: no "meta/reads_type" field in meta')
+            logging.error(f'{sample_id}: no "meta/reads_type" field in meta')
             return None
         supported_types = ('fastq', 'bam', 'cram')
         if reads_type not in supported_types:
-            logger.error(
+            logging.error(
                 f'{sample_id}: ERROR: "reads_type" is expected to be one of '
                 f'{supported_types}'
             )
@@ -466,18 +464,18 @@ class MmSequence:
 
         if reads_type in ('bam', 'cram'):
             if len(reads_data) > 1:
-                logger.error(f'{sample_id}: supporting only single bam/cram input')
+                logging.error(f'{sample_id}: supporting only single bam/cram input')
                 return None
 
             bam_path = reads_data[0]['location']
             if not (bam_path.endswith('.cram') or bam_path.endswith('.bam')):
-                logger.error(
+                logging.error(
                     f'{sample_id}: ERROR: expected the file to have an extension '
                     f'.cram or .bam, got: {bam_path}'
                 )
                 return None
             if check_existence and not exists(bam_path):
-                logger.error(
+                logging.error(
                     f'{sample_id}: ERROR: index file does not exist: {bam_path}'
                 )
                 return None
@@ -492,12 +490,12 @@ class MmSequence:
                     or bam_path.endswith('.bai')
                     and not index_path.endswith('.bai')
                 ):
-                    logger.error(
+                    logging.error(
                         f'{sample_id}: ERROR: expected the index file to have an extension '
                         f'.crai or .bai, got: {index_path}'
                     )
                 if check_existence and not exists(index_path):
-                    logger.error(
+                    logging.error(
                         f'{sample_id}: ERROR: index file does not exist: {index_path}'
                     )
                     return None
@@ -517,13 +515,13 @@ class MmSequence:
                         f'Read data: {pprint.pformat(reads_data)}'
                     )
                 if check_existence and not exists(lane_pair[0]['location']):
-                    logger.error(
+                    logging.error(
                         f'{sample_id}: ERROR: read 1 file does not exist: '
                         f'{lane_pair[0]["location"]}'
                     )
                     return None
                 if check_existence and not exists(lane_pair[1]['location']):
-                    logger.error(
+                    logging.error(
                         f'{sample_id}: ERROR: read 2 file does not exist: '
                         f'{lane_pair[1]["location"]}'
                     )

@@ -17,8 +17,6 @@ from hailtop.batch import ResourceFile
 
 from cpg_utils import Path, to_path
 
-logger = logging.getLogger(__file__)
-
 
 @lru_cache
 def exists(path: Path | str, verbose: bool = True) -> bool:
@@ -58,9 +56,9 @@ def exists_not_cached(path: Path | str, verbose: bool = True) -> bool:
             res = path.exists()
         except BaseException:
             traceback.print_exc()
-            logger.error(f'Failed checking {path}')
+            logging.error(f'Failed checking {path}')
             sys.exit(1)
-        logger.debug(f'Checked {path} [' + ('exists' if res else 'missing') + ']')
+        logging.debug(f'Checked {path} [' + ('exists' if res else 'missing') + ']')
         return res
     return path.exists()
 
@@ -87,7 +85,7 @@ def can_reuse(
     if not exists(path):
         return False
 
-    logger.debug(f'Reusing existing {path}. Use --overwrite to overwrite')
+    logging.debug(f'Reusing existing {path}. Use --overwrite to overwrite')
     return True
 
 

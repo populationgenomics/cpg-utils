@@ -148,7 +148,7 @@ class LocalPathScheme(PathScheme):
 
     def __init__(self):
         if not (local_dir := get_config()['workflow'].get('local_dir')):
-§            local_dir = tempfile.mkdtemp(prefix='cpg-utils-')
+            local_dir = tempfile.mkdtemp(prefix='cpg-utils-')
         self.local_dir = to_path(local_dir)
         self.scheme = 'local'
 
@@ -561,7 +561,7 @@ def command(
     return cmd
 
 
-def python_command(
+def query_command(
     module,
     func_name: str,
     *func_args,

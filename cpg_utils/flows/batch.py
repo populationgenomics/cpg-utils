@@ -2,9 +2,9 @@
 Extending the Hail's `Batch` class.
 """
 
-import logging
 import os
 import tempfile
+import logging
 
 import hailtop.batch as hb
 from cloudpathlib import CloudPath
@@ -13,12 +13,8 @@ from cpg_utils import config
 from cpg_utils.config import get_config
 from cpg_utils.hail_batch import (
     copy_common_env,
-    remote_tmpdir,
-    output_path,
     dataset_path,
 )
-
-logger = logging.getLogger(__file__)
 
 
 class Batch(hb.Batch):
@@ -126,7 +122,7 @@ class Batch(hb.Batch):
         Execute a batch. Overridden to print pre-submission statistics.
         """
         if not self._jobs:
-            logger.error('No jobs to submit')
+            logging.error('No jobs to submit')
             return
 
         else:
@@ -138,7 +134,7 @@ class Batch(hb.Batch):
                     job._pool_label = self.pool_label
                 copy_common_env(job)
 
-            logger.info(f'Will submit {self.total_job_num} jobs')
+            logging.info(f'Will submit {self.total_job_num} jobs')
 
             def _print_stat(_d: dict, default_label: str | None = None):
                 for label, stat in _d.items():
@@ -150,12 +146,12 @@ class Batch(hb.Batch):
                         msg += f' for {len(stat["samples"])} sample'
                         if len(stat['samples']) > 1:
                             msg += 's'
-                    logger.info(f'  {label}: {msg}')
+                    logging.info(f'  {label}: {msg}')
 
-            logger.info('Split by stage:')
+            logging.info('Split by stage:')
             _print_stat(self.job_by_stage, default_label='<not in stage>')
 
-            logger.info(f'Split by tool:')
+            logging.info(f'Split by tool:')
             _print_stat(self.job_by_tool, default_label='<tool is not defined>')
 
         kwargs.setdefault('dry_run', get_config()['hail'].get('dry_run'))
@@ -200,12 +196,12 @@ def setup_batch(description: str) -> Batch:
     @param description: descriptive name of the Batch (will be displayed in the GUI)
     """
     if get_config()['hail'].get('backend', 'batch') == 'local':
-        logger.info('Initialising Hail Batch with local backend')
+        logging.info('Initialising Hail Batch with local backend')
         backend = hb.LocalBackend(
             tmp_dir=tempfile.mkdtemp('batch-tmp'),
         )
     else:
-        logger.info('Initialising Hail Batch with service backend')
+        logging.info('Initialising Hail Batch with service backend')
         backend = hb.ServiceBackend(
             billing_project=get_config()['hail']['billing_project'],
             remote_tmpdir=dataset_path('batch-tmp', category='tmp'),

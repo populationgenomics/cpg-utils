@@ -2,7 +2,6 @@
 Wrappers for bioinformatics file types (CRAM, GVCF, FASTQ, etc).
 """
 
-import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Union
@@ -11,8 +10,6 @@ from hailtop.batch import ResourceGroup, ResourceFile, Batch
 
 from cpg_utils import Path, to_path
 from cpg_utils.flows.utils import exists
-
-logger = logging.getLogger(__file__)
 
 
 class AlignmentInput(ABC):

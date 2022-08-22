@@ -12,8 +12,6 @@ from .filetypes import GvcfPath, CramPath
 from .metamist import get_metamist, MmSequence, AnalysisType, MetamistError
 from .targets import Cohort, Sex, PedigreeInfo
 
-logger = logging.getLogger(__file__)
-
 
 _cohort: Cohort | None = None
 
@@ -61,7 +59,7 @@ def create_cohort() -> Cohort:
         msg = 'No datasets populated'
         if skip_samples or only_samples or skip_datasets:
             msg += ' (after skipping/picking samples)'
-        logger.warning(msg)
+        logging.warning(msg)
         return cohort
 
     if sequencing_type := get_config()['workflow'].get('sequencing_type'):
@@ -79,7 +77,7 @@ def _filter_sequencing_type(cohort: Cohort, sequencing_type: str):
     """
     for s in cohort.get_samples():
         if not s.seq_by_type:
-            logger.warning(f'{s}: skipping because no sequencing inputs found')
+            logging.warning(f'{s}: skipping because no sequencing inputs found')
             s.active = False
             continue
 
@@ -91,7 +89,7 @@ def _filter_sequencing_type(cohort: Cohort, sequencing_type: str):
                 if k == sequencing_type
             }
             if not bool(s.alignment_input_by_seq_type):
-                logger.warning(
+                logging.warning(
                     f'{s}: skipping because no inputs with data type '
                     f'"{sequencing_type}" found in {avail_types}'
                 )
@@ -114,12 +112,12 @@ def _filter_samples(
         extid = entry['external_id']
         if only_samples:
             if cpgid in only_samples or extid in only_samples:
-                logger.info(f'Picking sample: {dataset_name}|{cpgid}|{extid}')
+                logging.info(f'Picking sample: {dataset_name}|{cpgid}|{extid}')
             else:
                 continue
         if skip_samples:
             if cpgid in skip_samples or extid in skip_samples:
-                logger.info(f'Skipping sample: {dataset_name}|{cpgid}|{extid}')
+                logging.info(f'Skipping sample: {dataset_name}|{cpgid}|{extid}')
                 continue
         filtered_entries.append(entry)
     return filtered_entries
@@ -159,7 +157,7 @@ def _populate_alignment_inputs(
                 f'\t{ds}, {len(list(samples))}/{ds_sample_count.get(ds)} samples: '
                 f'{", ".join([s.id for s in samples])}\n'
             )
-        logger.info(msg)
+        logging.info(msg)
 
     for sample in cohort.get_samples():
         for d in found_seqs_by_sid.get(sample.id, []):
@@ -240,7 +238,7 @@ def _populate_pedigree(cohort: Cohort) -> None:
 
         for sample in dataset.get_samples():
             if sample.participant_id not in ped_entry_by_participant_id:
-                logger.warning(
+                logging.warning(
                     f'No pedigree data for participant {sample.participant_id}'
                 )
                 continue
@@ -263,7 +261,7 @@ def _populate_pedigree(cohort: Cohort) -> None:
 
     for dataset in cohort.get_datasets():
         samples_with_ped = [s for s in dataset.get_samples() if s.pedigree]
-        logger.info(
+        logging.info(
             f'{dataset.name}: found pedigree info for {len(samples_with_ped)} '
             f'samples out of {len(dataset.get_samples())}'
         )

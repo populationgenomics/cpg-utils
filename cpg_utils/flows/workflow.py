@@ -32,8 +32,6 @@ from .status import StatusReporter
 from .utils import exists, timestamp, slugify
 from .inputs import get_cohort
 
-logger = logging.getLogger(__file__)
-
 
 # We record all initialised Stage subclasses, which we then use as a default
 # list of stages when the user didn't pass them explicitly.
@@ -593,7 +591,7 @@ class Stage(Generic[TargetT], ABC):
         ) and self.name in d:
             skip_targets = d[self.name]
             if target.target_id in skip_targets:
-                logger.info(f'{self.name}: requested to skip {target}')
+                logging.info(f'{self.name}: requested to skip {target}')
                 return Action.SKIP
 
         expected_out = self.expected_outputs(target)
@@ -603,7 +601,7 @@ class Stage(Generic[TargetT], ABC):
             if reusable and not first_missing_path:
                 return Action.REUSE
             if get_config()['workflow'].get('skip_samples_with_missing_input'):
-                logger.warning(
+                logging.warning(
                     f'Skipping {target}: stage {self.name} is required, '
                     f'but is marked as skipped, and some expected outputs for the '
                     f'target do not exist: {first_missing_path}'
@@ -627,22 +625,22 @@ class Stage(Generic[TargetT], ABC):
 
         if reusable and not first_missing_path:
             if target.forced:
-                logger.info(
+                logging.info(
                     f'{self.name}: can reuse, but forcing the target '
                     f'{target} to rerun this stage'
                 )
                 return Action.QUEUE
             elif self.forced:
-                logger.info(
+                logging.info(
                     f'{self.name}: can reuse, but forcing the stage '
                     f'to rerun, target={target}'
                 )
                 return Action.QUEUE
             else:
-                logger.info(f'{self.name}: reusing results for {target}')
+                logging.info(f'{self.name}: reusing results for {target}')
                 return Action.REUSE
 
-        logger.info(f'{self.name}: running queue_jobs(target={target})')
+        logging.info(f'{self.name}: running queue_jobs(target={target})')
         return Action.QUEUE
 
     def _is_reusable(self, expected_out: ExpectedResultT) -> tuple[bool, Path | None]:
@@ -859,7 +857,7 @@ class Workflow:
         first_stage_num = None
         if first_stage:
             if first_stage.lower() not in lower_stage_names:
-                logger.critical(
+                logging.critical(
                     f'Value for --first-stage {first_stage} '
                     f'not found in available stages: {", ".join(stage_names)}'
                 )
@@ -867,7 +865,7 @@ class Workflow:
         last_stage_num = None
         if last_stage:
             if last_stage.lower() not in lower_stage_names:
-                logger.critical(
+                logging.critical(
                     f'Value for --last-stage {last_stage} '
                     f'not found in available stages: {", ".join(stage_names)}'
                 )
@@ -930,15 +928,15 @@ class Workflow:
                         # Only checking outputs of immediately required stages
                         if depth > 1:
                             reqstage.assume_outputs_exist = True
-                            logger.info(f'Stage {reqstage.name} is skipped')
+                            logging.info(f'Stage {reqstage.name} is skipped')
                         else:
-                            logger.info(
+                            logging.info(
                                 f'Stage {reqstage.name} is skipped, but the output '
                                 f'will be required for the stage {stage_.name}'
                             )
 
             if newly_implicitly_added_d:
-                logger.info(
+                logging.info(
                     f'Additional implicit stages: '
                     f'{list(newly_implicitly_added_d.keys())}'
                 )
@@ -963,7 +961,7 @@ class Workflow:
                 if i < first_stage_num - 1:
                     # Not checking expected outputs of stages before that
                     stage_.assume_outputs_exist = True
-                logger.info(f'Skipping stage {stage_name}')
+                logging.info(f'Skipping stage {stage_name}')
                 continue
             if last_stage_num is not None and i > last_stage_num:
                 stage_.skipped = True
@@ -976,17 +974,17 @@ class Workflow:
             ]
         ):
             raise WorkflowError('No stages to run')
-        logger.info(f'Setting stages: {final_set_of_stages}')
+        logging.info(f'Setting stages: {final_set_of_stages}')
         required_skipped_stages = [s for s in self._stages_dict.values() if s.skipped]
         if required_skipped_stages:
-            logger.info(
+            logging.info(
                 f'Skipped stages: ' f'{[s.name for s in required_skipped_stages]}'
             )
 
         # Second round - actually adding jobs from the stages.
         for i, (_, stage_) in enumerate(self._stages_dict.items()):
-            logger.info(f'*' * 60)
-            logger.info(f'Stage {stage_}')
+            logging.info(f'*' * 60)
+            logging.info(f'Stage {stage_}')
             stage_.output_by_target = stage_.queue_for_cohort(self.cohort)
             if errors := self._process_stage_errors(stage_.output_by_target):
                 raise WorkflowError(
@@ -994,9 +992,9 @@ class Workflow:
                     + '\n'.join(errors)
                 )
 
-            logger.info(f'')
+            logging.info(f'')
             if last_stage_num is not None and i >= last_stage_num:
-                logger.info(f'Last stage was {stage_.name}, stopping here')
+                logging.info(f'Last stage was {stage_.name}, stopping here')
                 break
 
     @staticmethod
@@ -1062,7 +1060,7 @@ class SampleStage(Stage[Sample], ABC):
         output_by_target: dict[str, StageOutput | None] = dict()
 
         if not (datasets := cohort.get_datasets()):
-            logger.warning(
+            logging.warning(
                 f'{len(cohort.get_datasets())}/'
                 f'{len(cohort.get_datasets(only_active=False))} '
                 f'usable (active=True) datasets found in the cohort. Check that '
@@ -1071,7 +1069,7 @@ class SampleStage(Stage[Sample], ABC):
             )
             return output_by_target
         if not cohort.get_samples():
-            logger.warning(
+            logging.warning(
                 f'{len(cohort.get_samples())}/'
                 f'{len(cohort.get_samples(only_active=False))} '
                 f'usable (active=True) samples found. Check logs above for '
@@ -1083,7 +1081,7 @@ class SampleStage(Stage[Sample], ABC):
 
         for ds_i, dataset in enumerate(datasets):
             if not dataset.get_samples():
-                logger.warning(
+                logging.warning(
                     f'{dataset}: '
                     f'{len(dataset.get_samples())}/'
                     f'{len(dataset.get_samples(only_active=False))} '
@@ -1097,7 +1095,7 @@ class SampleStage(Stage[Sample], ABC):
             # Checking if all samples can be reused, queuing only one job per target:
             action_by_sid = dict()
             for sample_i, sample in enumerate(dataset.get_samples()):
-                logger.info(f'{self.name}: #{sample_i + 1}/{sample}')
+                logging.info(f'{self.name}: #{sample_i + 1}/{sample}')
                 action = self._get_action(sample)
                 action_by_sid[sample.id] = action
                 if action == Action.REUSE:
@@ -1121,13 +1119,13 @@ class SampleStage(Stage[Sample], ABC):
                     continue
 
             # Some samples can't be reused, queuing each sample:
-            logger.info(f'{self.name}: #{ds_i + 1} {dataset}')
+            logging.info(f'{self.name}: #{ds_i + 1} {dataset}')
             for sample_i, sample in enumerate(dataset.get_samples()):
-                logger.info(f'{self.name}: #{sample_i + 1}/{sample}')
+                logging.info(f'{self.name}: #{sample_i + 1}/{sample}')
                 output_by_target[sample.target_id] = self._queue_jobs_with_checks(
                     sample, action=action_by_sid[sample.id]
                 )
-            logger.info('-#-#-#-')
+            logging.info('-#-#-#-')
 
         return output_by_target
 
@@ -1156,7 +1154,7 @@ class DatasetStage(Stage, ABC):
         """
         output_by_target: dict[str, StageOutput | None] = dict()
         if not (datasets := cohort.get_datasets()):
-            logger.warning(
+            logging.warning(
                 f'{len(cohort.get_datasets())}/'
                 f'{len(cohort.get_datasets(only_active=False))} '
                 f'usable (active=True) datasets found in the cohort. Check that '

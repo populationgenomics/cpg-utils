@@ -21,8 +21,6 @@ from .filetypes import (
 )
 from .metamist import MmSequence
 
-logger = logging.getLogger(__file__)
-
 
 class Target:
     """
@@ -166,7 +164,7 @@ class Cohort(Target):
         """
         dataset.cohort = self
         if dataset.name in self._datasets_by_name:
-            logger.debug(f'Dataset {dataset.name} already exists in the cohort')
+            logging.debug(f'Dataset {dataset.name} already exists in the cohort')
             return dataset
         self._datasets_by_name[dataset.name] = dataset
         return dataset
@@ -179,7 +177,7 @@ class Cohort(Target):
         Create a dataset and add it to the cohort.
         """
         if name in self._datasets_by_name:
-            logger.debug(f'Dataset {name} already exists in the cohort')
+            logging.debug(f'Dataset {name} already exists in the cohort')
             return self._datasets_by_name[name]
 
         if name == self.analysis_dataset.name:
@@ -338,7 +336,7 @@ class Dataset(Target):
         Create a new sample and add it to the dataset.
         """
         if id in self._sample_by_id:
-            logger.debug(f'Sample {id} already exists in the dataset {self.name}')
+            logging.debug(f'Sample {id} already exists in the dataset {self.name}')
             return self._sample_by_id[id]
 
         force_samples = get_config()['workflow'].get('force_samples', set())
