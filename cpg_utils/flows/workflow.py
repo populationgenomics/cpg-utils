@@ -18,7 +18,7 @@ import pathlib
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from enum import Enum
-from typing import cast, Callable, Union, TypeVar, Generic, Any, Optional, Type
+from typing import cast, Callable, Union, TypeVar, Generic, Optional, Type
 
 from cloudpathlib import CloudPath
 import hailtop.batch as hb
@@ -26,10 +26,9 @@ from hailtop.batch.job import Job
 from cpg_utils.config import get_config
 from cpg_utils import Path, to_path
 
-from .batch import setup_batch, Batch
+from .batch import get_batch
 from .status import MetamistStatusReporter
 from .targets import Target, Dataset, Sample, Cohort
-from .status import StatusReporter
 from .utils import exists, timestamp, slugify
 from .inputs import get_cohort
 
@@ -110,7 +109,7 @@ class StageOutput:
 
     def as_path_or_resource(self, id=None) -> Path | hb.Resource:
         """
-        Cast the result to Union[str, hb.Resource], error if can't cast.
+        Cast the result to Union[str, hb.Resource], throw an error if can't cast.
         `id` is used to extract the value when the result is a dictionary.
         """
         if self.data is None:
@@ -225,7 +224,7 @@ class StageInput:
         if stage.__name__ not in self._outputs_by_target_by_stage:
             raise WorkflowError(
                 f'No inputs from {stage.__name__} for {self.stage.name} found '
-                'after skipping targets with missing inputs. '
+                + 'after skipping targets with missing inputs. '
                 + (
                     'Check the logs if all samples were missing inputs from previous '
                     'stages, and consider changing `workflow/first_stage`'
@@ -389,21 +388,16 @@ class Stage(Generic[TargetT], ABC):
     def __init__(
         self,
         name: str,
-        batch: Batch,
-        cohort: Cohort,
-        workflow_tmp_prefix: Path,
-        run_id: str,
         required_stages: list[StageDecorator] | StageDecorator | None = None,
         analysis_type: str | None = None,
         skipped: bool = False,
         assume_outputs_exist: bool = False,
         forced: bool = False,
-        status_reporter: StatusReporter | None = None,
     ):
-        self._name = name
-        self.b = batch
-        self.cohort = cohort
+        self.b = get_batch()
+        self.cohort = get_cohort()
 
+        self._name = name
         self.required_stages_classes: list[StageDecorator] = []
         if required_stages:
             if isinstance(required_stages, list):
@@ -411,13 +405,13 @@ class Stage(Generic[TargetT], ABC):
             else:
                 self.required_stages_classes.append(required_stages)
 
-        self.tmp_prefix = workflow_tmp_prefix / name
-        self.run_id = run_id
+        self.tmp_prefix = get_workflow().tmp_prefix / name
+        self.run_id = get_workflow().run_id
 
         # Dependencies. Populated in workflow.run(), after we know all stages.
         self.required_stages: list[Stage] = []
 
-        self.status_reporter = status_reporter
+        self.status_reporter = get_workflow().status_reporter
         # If analysis type is defined, it will be used to update analysis status,
         # as well as find and reuse existing outputs from the status reporter
         self.analysis_type = analysis_type
@@ -563,7 +557,7 @@ class Stage(Generic[TargetT], ABC):
         # Adding status reporter jobs
         if self.analysis_type and self.status_reporter:
             self.status_reporter.add_updaters_jobs(
-                b=self.b,
+                b=get_batch(),
                 output=outputs.data,
                 analysis_type=self.analysis_type,
                 target=target,
@@ -580,7 +574,7 @@ class Stage(Generic[TargetT], ABC):
         """
         attrs = dict(stage=self.name, reuse=True)
         attrs |= target.get_job_attrs()
-        return self.b.new_job(self.name, attrs)
+        return get_batch().new_job(self.name, attrs)
 
     def _get_action(self, target: TargetT) -> Action:
         """
@@ -684,7 +678,7 @@ class Stage(Generic[TargetT], ABC):
         return self.make_outputs(
             target=target,
             data=found_paths,
-            jobs=[self.b.new_job(f'{self.name} [reuse]', target.get_job_attrs())],
+            jobs=[get_batch().new_job(f'{self.name} [reuse]', target.get_job_attrs())],
         )
 
     def get_job_attrs(self, target: TargetT | None = None) -> dict[str, str]:
@@ -725,17 +719,12 @@ def stage(
         """Implements decorator."""
 
         @functools.wraps(_cls)
-        def wrapper_stage(workflow: 'Workflow') -> Stage:
+        def wrapper_stage() -> Stage:
             """Decorator helper function."""
             return _cls(
                 name=_cls.__name__,
-                batch=workflow.b,
-                cohort=workflow.cohort,
-                workflow_tmp_prefix=workflow.tmp_prefix,
-                run_id=workflow.run_id,
                 required_stages=required_stages,
                 analysis_type=analysis_type,
-                status_reporter=workflow.status_reporter,
                 skipped=skipped,
                 assume_outputs_exist=assume_outputs_exist,
                 forced=forced,
@@ -791,6 +780,16 @@ def skip(
         return decorator_stage(_fun)
 
 
+_workflow: Optional['Workflow'] = None
+
+
+def get_workflow() -> 'Workflow':
+    global _workflow
+    if _workflow is None:
+        _workflow = Workflow()
+    return _workflow
+
+
 class Workflow:
     """
     Encapsulates a Hail Batch object, stages, and a cohort of datasets of samples.
@@ -801,8 +800,13 @@ class Workflow:
         self,
         stages: list[StageDecorator] | None = None,
     ):
-        self._stages: list[StageDecorator] = stages
+        if _workflow is not None:
+            raise ValueError(
+                'Workflow already initialised. Use get_workflow() to get the instance'
+            )
+
         self.run_id = get_config()['workflow'].get('run_id', timestamp())
+        self.tmp_prefix = get_cohort().analysis_dataset.tmp_prefix() / self.run_id
 
         analysis_dataset = get_config()['workflow']['dataset']
         name = get_config()['workflow'].get('name')
@@ -811,24 +815,22 @@ class Workflow:
         self.name = slugify(name)
         description = description or name
         description += f': run_id={self.run_id}'
-
-        self.cohort: Cohort = get_cohort()
-        self.tmp_prefix = self.cohort.analysis_dataset.tmp_prefix() / self.run_id
         if sequencing_type := get_config()['workflow'].get('sequencing_type'):
             description += f' [{sequencing_type}]'
-        if ds_set := set(d.name for d in self.cohort.get_datasets()):
+        if ds_set := set(d.name for d in get_cohort().get_datasets()):
             description += ' ' + ', '.join(sorted(ds_set))
-        self.b: Batch = setup_batch(description=description)
+        get_batch().name = description
 
         self.status_reporter = None
         if get_config()['workflow'].get('status_reporter') == 'metamist':
             self.status_reporter = MetamistStatusReporter()
+        self._stages: list[StageDecorator] = stages
 
     def run(
         self,
         stages: list[StageDecorator] | None = None,
         wait: bool | None = False,
-    ) -> Any | None:
+    ):
         """
         Resolve stages, add and submit Hail Batch jobs.
         When `run_all_implicit_stages` is set, all required stages that were not defined
@@ -838,11 +840,7 @@ class Workflow:
         if not _stages:
             raise WorkflowError('No stages added')
         self.set_stages(_stages)
-
-        result = None
-        if self.b:
-            result = self.b.run(wait=wait)
-        return result
+        return get_batch().run(wait=wait)
 
     @staticmethod
     def _validate_first_last_stage(
@@ -888,7 +886,7 @@ class Workflow:
         for cls in requested_stages:
             if cls.__name__ in _stages_d:
                 continue
-            _stages_d[cls.__name__] = cls(self)
+            _stages_d[cls.__name__] = cls()
 
         # Second round: adding implicit stages, following dependencies.
         depth = 0
@@ -900,7 +898,7 @@ class Workflow:
                     if reqcls.__name__ in _stages_d:  # already added
                         continue
                     # Initialising and adding as explicit.
-                    reqstg = reqcls(self)
+                    reqstg = reqcls()
                     newly_implicitly_added_d[reqstg.name] = reqstg
                     if reqcls.__name__ in get_config()['workflow'].get(
                         'skip_stages', []
@@ -965,7 +963,7 @@ class Workflow:
         for i, stg in enumerate(stages):
             logging.info(f'*' * 60)
             logging.info(f'Stage {stg}')
-            stg.output_by_target = stg.queue_for_cohort(self.cohort)
+            stg.output_by_target = stg.queue_for_cohort(get_cohort())
             if errors := self._process_stage_errors(stg.output_by_target):
                 raise WorkflowError(
                     f'Stage {stg} failed to queue jobs with errors: '
@@ -989,30 +987,6 @@ class Workflow:
             f'{error}: {", ".join(target_ids)}'
             for error, target_ids in targets_by_error.items()
         ]
-
-    def get_datasets(self, only_active: bool = True) -> list[Dataset]:
-        """
-        Thin wrapper.
-        """
-        return self.cohort.get_datasets(only_active=only_active)
-
-    def create_dataset(self, name: str) -> Dataset:
-        """
-        Thin wrapper.
-        """
-        return self.cohort.create_dataset(name)
-
-    def get_all_samples(self, only_active: bool = True) -> list[Sample]:
-        """
-        Thin wrapper.
-        """
-        return self.cohort.get_samples(only_active=only_active)
-
-    def get_all_sample_ids(self, only_active: bool = True) -> list[str]:
-        """
-        Thin wrapper.
-        """
-        return self.cohort.get_sample_ids(only_active=only_active)
 
 
 class SampleStage(Stage[Sample], ABC):

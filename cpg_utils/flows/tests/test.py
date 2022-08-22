@@ -1,12 +1,17 @@
 """
 Test Hail Query functions.
 """
-import hail as hl
+import shutil
 
-from cpg_utils import to_path
-from cpg_utils.config import get_config
-from cpg_utils.flows.batch import setup_batch
+import hail as hl
+import pytest
+import toml
+
+from cpg_utils import to_path, Path
+from cpg_utils.config import get_config, update_dict, set_config_paths
+from cpg_utils.flows.batch import get_batch
 from cpg_utils.flows.targets import Sample, Cohort
+from cpg_utils.flows.utils import timestamp
 from cpg_utils.flows.workflow import (
     Workflow,
     SampleStage,
@@ -19,18 +24,35 @@ from cpg_utils.flows.workflow import (
 from cpg_utils.flows.inputs import get_cohort
 from cpg_utils.hail_batch import dataset_path, command
 
-assert get_config()['workflow']['dataset'] == 'fewgenomes'
-assert get_config()['workflow']['access_level'] == 'test'
-assert get_config()['workflow']['path_scheme'] == 'local'
+tmp_dir_path = to_path('results') / timestamp()
+tmp_dir_path = tmp_dir_path.absolute()
+tmp_dir_path.mkdir(parents=True, exist_ok=True)
 
-# Local file system doesn't create directories automatically,
-# so creating the parent dataset path explicitly for all tests,
-# sort of simulating the cloud file system behaviour.
-to_path(dataset_path('')).parent.mkdir(parents=True, exist_ok=True)
+config_toml = f"""
+[workflow]
+dataset_gcp_project = 'fewgenomes'
+access_level = 'test'
+dataset = 'fewgenomes'
+check_inputs = false
+check_intermediates = false
+check_expected_outputs = false
+path_scheme = 'local'
+local_dir = '{str(tmp_dir_path)}'
+
+[hail]
+billing_project = 'fewgenomes'
+delete_scratch_on_exit = false
+backend = 'local'
+"""
+
+config_path = tmp_dir_path / 'config.toml'
+with config_path.open('w') as f:
+    toml.dump(toml.loads(config_toml), f)
+set_config_paths([str(config_path)])
 
 
 def test_batch_job():
-    b = setup_batch('Test batch job')
+    b = get_batch('Test batch job')
     j1 = b.new_job('Jo b1')
     text = 'success'
     cmd = f"""\
@@ -53,21 +75,21 @@ def test_batch_job():
 
 
 def test_batch_python_job():
-    b = setup_batch('Test batch python job')
+    b = get_batch('Test batch python job')
     j = b.new_python_job('Test python job')
 
     input_tsv_path = to_path(dataset_path('input.tsv'))
-    input_tsv_path.parent.mkdir(parents=True)
+    input_tsv_path.parent.mkdir(parents=True, exist_ok=True)
     with input_tsv_path.open('w') as f:
         f.write('col1\tcol2\n1\t2')
-    output_ht_path = dataset_path('output.ht')
 
     def query_fn(tsv_path: str, out_ht_path: str):
         ht = hl.import_table(tsv_path, types={'col1': hl.tint, 'col2': hl.tint})
         ht.show()
         ht = ht.annotate(col3=ht.col1 + ht.col2)
-        ht.write(out_ht_path)
+        ht.write(out_ht_path, overwrite=True)
 
+    output_ht_path = dataset_path('output.ht')
     j.call(query_fn, str(input_tsv_path), output_ht_path)
     b.run()
 
@@ -188,14 +210,10 @@ def test_workflow(mocker):
             return self.make_outputs(cohort, self.expected_outputs(cohort))
 
     workflow = Workflow(stages=[MyCohortStage])
-    workflow.run(force_all_implicit_stages=True)
+    workflow.run()
 
     print(f'Checking result in {output_path}:')
     with output_path.open() as f:
         result = f.read()
         print(result)
         assert result.split() == ['CPG01_done', 'CPG02_done'], result
-
-
-if __name__ == '__main__':
-    test_batch_job()
