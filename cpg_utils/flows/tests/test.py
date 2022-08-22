@@ -1,15 +1,14 @@
 """
 Test Hail Query functions.
 """
-import shutil
 
 import hail as hl
-import pytest
 import toml
 
-from cpg_utils import to_path, Path
-from cpg_utils.config import get_config, update_dict, set_config_paths
+from cpg_utils import to_path
+from cpg_utils.config import set_config_paths
 from cpg_utils.flows.batch import get_batch
+from cpg_utils.flows.inputs import get_cohort
 from cpg_utils.flows.targets import Sample, Cohort
 from cpg_utils.flows.utils import timestamp
 from cpg_utils.flows.workflow import (
@@ -21,7 +20,6 @@ from cpg_utils.flows.workflow import (
     CohortStage,
     stage,
 )
-from cpg_utils.flows.inputs import get_cohort
 from cpg_utils.hail_batch import dataset_path, command
 
 tmp_dir_path = to_path('results') / timestamp()
