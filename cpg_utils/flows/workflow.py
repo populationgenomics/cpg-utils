@@ -890,7 +890,7 @@ class Workflow:
                 continue
             _stages_d[cls.__name__] = cls(self)
 
-        # Second round: checking which stages are required, even implicitly.
+        # Second round: adding implicit stages, following dependencies.
         depth = 0
         while True:  # Might need several rounds to resolve dependencies recursively.
             depth += 1
@@ -924,15 +924,20 @@ class Workflow:
             stg.required_stages = [
                 _stages_d[cls.__name__] for cls in stg.required_stages_classes
             ]
-        # Sorting stages topologically, accounting for dependencies
+
+        # Third round: determining order of execution.
         stage_graph = dict()
         for stg in _stages_d.values():
             stage_graph[stg.name] = set(dep.name for dep in stg.required_stages)
-        stage_names = list(graphlib.TopologicalSorter(stage_graph).static_order())
+        try:
+            stage_names = list(graphlib.TopologicalSorter(stage_graph).static_order())
+        except graphlib.CycleError:
+            logging.error('Circular dependencies found between stages')
+            raise
         logging.info(f'Stages in order of execution: {stage_names}')
         stages = [_stages_d[name] for name in stage_names]
 
-        # Second round - applying first and last stage options.
+        # Forth round: applying first and last stage options.
         first_stage_num, last_stage_num = self._validate_first_last_stage(stages)
         for i, stg in enumerate(stages):
             if first_stage_num is not None and i < first_stage_num:
@@ -956,7 +961,7 @@ class Workflow:
                 f'Skipped stages: ' f'{[s.name for s in required_skipped_stages]}'
             )
 
-        # Second round - actually adding jobs from the stages.
+        # Final round: actually adding jobs from the stages.
         for i, stg in enumerate(stages):
             logging.info(f'*' * 60)
             logging.info(f'Stage {stg}')
