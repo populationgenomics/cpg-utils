@@ -12,6 +12,7 @@ Examples of workflows can be found in the `production-workflows` repository.
 """
 
 import functools
+import graphlib
 import logging
 import pathlib
 from abc import ABC, abstractmethod
@@ -31,11 +32,6 @@ from .targets import Target, Dataset, Sample, Cohort
 from .status import StatusReporter
 from .utils import exists, timestamp, slugify
 from .inputs import get_cohort
-
-
-# We record all initialised Stage subclasses, which we then use as a default
-# list of stages when the user didn't pass them explicitly.
-_ALL_DECLARED_STAGES = []
 
 
 StageDecorator = Callable[..., 'Stage']
@@ -297,7 +293,7 @@ class StageInput:
         if not self._outputs_by_target_by_stage.get(stage.__name__):
             raise StageInputNotFoundError(
                 f'Not found output from stage {stage.__name__}, required for stage '
-                f'{self.stage.name}'
+                f'{self.stage.name}. Available: {self._outputs_by_target_by_stage}'
             )
         if not self._outputs_by_target_by_stage[stage.__name__].get(target.target_id):
             raise StageInputNotFoundError(
@@ -484,8 +480,13 @@ class Stage(Generic[TargetT], ABC):
         Collects outputs from all dependencies and create input for this stage
         """
         inputs = StageInput(self)
+        logging.info(f'_make_inputs stage={self}')
         for prev_stage in self.required_stages:
+            logging.info(f'_make_inputs stage={self}, prev_stage={prev_stage}')
             for _, stage_output in prev_stage.output_by_target.items():
+                logging.info(
+                    f'_make_inputs stage={self}, prev_stage={prev_stage}, stage_output={stage_output}'
+                )
                 if stage_output:
                     inputs.add_other_stage_output(stage_output)
         return inputs
@@ -525,6 +526,9 @@ class Stage(Generic[TargetT], ABC):
         if not action:
             action = self._get_action(target)
 
+        logging.info(
+            f'_queue_jobs_with_checks: stage={self}, target={target} action={action}'
+        )
         inputs = self._make_inputs()
         expected_out = self.expected_outputs(target)
 
@@ -737,7 +741,6 @@ def stage(
                 forced=forced,
             )
 
-        _ALL_DECLARED_STAGES.append(wrapper_stage)
         return wrapper_stage
 
     if cls is None:
@@ -798,7 +801,7 @@ class Workflow:
         self,
         stages: list[StageDecorator] | None = None,
     ):
-        self._stages = stages
+        self._stages: list[StageDecorator] = stages
         self.run_id = get_config()['workflow'].get('run_id', timestamp())
 
         analysis_dataset = get_config()['workflow']['dataset']
@@ -809,7 +812,7 @@ class Workflow:
         description = description or name
         description += f': run_id={self.run_id}'
 
-        self.cohort = get_cohort()
+        self.cohort: Cohort = get_cohort()
         self.tmp_prefix = self.cohort.analysis_dataset.tmp_prefix() / self.run_id
         if sequencing_type := get_config()['workflow'].get('sequencing_type'):
             description += f' [{sequencing_type}]'
@@ -821,38 +824,37 @@ class Workflow:
         if get_config()['workflow'].get('status_reporter') == 'metamist':
             self.status_reporter = MetamistStatusReporter()
 
-        # Will be populated by set_stages() in submit_batch()
-        self._stages_dict: dict[str, Stage] = dict()
-
     def run(
         self,
         stages: list[StageDecorator] | None = None,
         wait: bool | None = False,
-        force_all_implicit_stages: bool = False,
     ) -> Any | None:
         """
         Resolve stages, add and submit Hail Batch jobs.
         When `run_all_implicit_stages` is set, all required stages that were not defined
         explicitly would still be executed.
         """
-        _stages_in_order = stages or self._stages or _ALL_DECLARED_STAGES
-        if not _stages_in_order:
+        _stages = stages or self._stages
+        if not _stages:
             raise WorkflowError('No stages added')
-        self.set_stages(_stages_in_order, force_all_implicit_stages)
+        self.set_stages(_stages)
 
         result = None
         if self.b:
             result = self.b.run(wait=wait)
         return result
 
-    def _validate_first_last_stage(self) -> tuple[int | None, int | None]:
+    @staticmethod
+    def _validate_first_last_stage(
+        stages: list[Stage],
+    ) -> tuple[int | None, int | None]:
         """
         Validating the first_stage and the last_stage parameters.
         """
         first_stage = get_config()['workflow'].get('first_stage')
         last_stage = get_config()['workflow'].get('last_stage')
 
-        stage_names = list(self._stages_dict.keys())
+        stage_names = list(stg.name for stg in stages)
         lower_stage_names = [s.lower() for s in stage_names]
         first_stage_num = None
         if first_stage:
@@ -874,66 +876,37 @@ class Workflow:
 
     def set_stages(
         self,
-        stages_classes: list[StageDecorator],
-        force_all_implicit_stages: bool = False,
+        requested_stages: list[StageDecorator],
     ):
         """
-        Iterate over stages and call queue_for_cohort(cohort) on each.
-        Effectively creates all Hail Batch jobs through Stage.queue_jobs().
-
-        When `run_all_implicit_stages` is set, all required stages that were not set
-        explicitly would still be run.
+        Iterate over stages and call their queue_for_cohort(cohort) methods;
+        through that, creates all Hail Batch jobs through Stage.queue_jobs().
         """
-        if not self.cohort:
-            raise WorkflowError('Cohort must be populated before adding stages')
+        _stages_d: dict[str, Stage] = dict()
 
         # First round: initialising stage objects
-        stages = [cls(self) for cls in stages_classes]
-        for stage_ in stages:
-            if stage_.name in self._stages_dict:
-                raise ValueError(
-                    f'Stage {stage_.name} is already defined. Check this '
-                    f'list for duplicates: {", ".join(s.name for s in stages)}'
-                )
-            self._stages_dict[stage_.name] = stage_
+        for cls in requested_stages:
+            if cls.__name__ in _stages_d:
+                continue
+            _stages_d[cls.__name__] = cls(self)
 
         # Second round: checking which stages are required, even implicitly.
-        # implicit_stages_d: dict[str, Stage] = dict()  # If there are required
-        # dependency stages that are not requested explicitly, we are putting them
-        # into this dict as `skipped`.
         depth = 0
         while True:  # Might need several rounds to resolve dependencies recursively.
             depth += 1
             newly_implicitly_added_d = dict()
-            for stage_ in self._stages_dict.values():
-                for reqcls in stage_.required_stages_classes:  # check dependencies
-                    if reqcls.__name__ in self._stages_dict:  # already added
+            for stg in _stages_d.values():
+                for reqcls in stg.required_stages_classes:  # check dependencies
+                    if reqcls.__name__ in _stages_d:  # already added
                         continue
                     # Initialising and adding as explicit.
-                    reqstage = reqcls(self)
-                    newly_implicitly_added_d[reqstage.name] = reqstage
-                    if reqcls.__name__ in get_config()['workflow'].get(
-                        'assume_outputs_exist_for_stages', []
-                    ):
-                        reqstage.assume_outputs_exist = True
+                    reqstg = reqcls(self)
+                    newly_implicitly_added_d[reqstg.name] = reqstg
                     if reqcls.__name__ in get_config()['workflow'].get(
                         'skip_stages', []
                     ):
-                        reqstage.skipped = True
+                        reqstg.skipped = True
                         continue
-                    if not force_all_implicit_stages:
-                        # Stage is not declared or requested implicitly, so setting
-                        # it as skipped:
-                        reqstage.skipped = True
-                        # Only checking outputs of immediately required stages
-                        if depth > 1:
-                            reqstage.assume_outputs_exist = True
-                            logging.info(f'Stage {reqstage.name} is skipped')
-                        else:
-                            logging.info(
-                                f'Stage {reqstage.name} is skipped, but the output '
-                                f'will be required for the stage {stage_.name}'
-                            )
 
             if newly_implicitly_added_d:
                 logging.info(
@@ -942,59 +915,61 @@ class Workflow:
                 )
                 # Adding new stages back into the ordered dict, so they are
                 # executed first.
-                self._stages_dict = newly_implicitly_added_d | self._stages_dict
+                _stages_d |= newly_implicitly_added_d
             else:
                 # No new implicit stages added, can stop here.
                 break
 
-        for stage_ in self._stages_dict.values():
-            stage_.required_stages = [
-                self._stages_dict[cls.__name__]
-                for cls in stage_.required_stages_classes
+        for stg in _stages_d.values():
+            stg.required_stages = [
+                _stages_d[cls.__name__] for cls in stg.required_stages_classes
             ]
+        # Sorting stages topologically, accounting for dependencies
+        stage_graph = dict()
+        for stg in _stages_d.values():
+            stage_graph[stg.name] = set(dep.name for dep in stg.required_stages)
+        stage_names = list(graphlib.TopologicalSorter(stage_graph).static_order())
+        logging.info(f'Stages in order of execution: {stage_names}')
+        stages = [_stages_d[name] for name in stage_names]
 
         # Second round - applying first and last stage options.
-        first_stage_num, last_stage_num = self._validate_first_last_stage()
-        for i, (stage_name, stage_) in enumerate(self._stages_dict.items()):
+        first_stage_num, last_stage_num = self._validate_first_last_stage(stages)
+        for i, stg in enumerate(stages):
             if first_stage_num is not None and i < first_stage_num:
-                stage_.skipped = True
+                stg.skipped = True
                 if i < first_stage_num - 1:
                     # Not checking expected outputs of stages before that
-                    stage_.assume_outputs_exist = True
-                logging.info(f'Skipping stage {stage_name}')
+                    stg.assume_outputs_exist = True
+                logging.info(f'Skipping stage {stg.name}')
                 continue
             if last_stage_num is not None and i > last_stage_num:
-                stage_.skipped = True
-                stage_.assume_outputs_exist = True
+                stg.skipped = True
+                stg.assume_outputs_exist = True
                 continue
 
-        if not (
-            final_set_of_stages := [
-                s.name for s in self._stages_dict.values() if not s.skipped
-            ]
-        ):
+        if not (final_set_of_stages := [s.name for s in stages if not s.skipped]):
             raise WorkflowError('No stages to run')
         logging.info(f'Setting stages: {final_set_of_stages}')
-        required_skipped_stages = [s for s in self._stages_dict.values() if s.skipped]
+        required_skipped_stages = [s for s in stages if s.skipped]
         if required_skipped_stages:
             logging.info(
                 f'Skipped stages: ' f'{[s.name for s in required_skipped_stages]}'
             )
 
         # Second round - actually adding jobs from the stages.
-        for i, (_, stage_) in enumerate(self._stages_dict.items()):
+        for i, stg in enumerate(stages):
             logging.info(f'*' * 60)
-            logging.info(f'Stage {stage_}')
-            stage_.output_by_target = stage_.queue_for_cohort(self.cohort)
-            if errors := self._process_stage_errors(stage_.output_by_target):
+            logging.info(f'Stage {stg}')
+            stg.output_by_target = stg.queue_for_cohort(self.cohort)
+            if errors := self._process_stage_errors(stg.output_by_target):
                 raise WorkflowError(
-                    f'Stage {stage_} failed to queue jobs with errors: '
+                    f'Stage {stg} failed to queue jobs with errors: '
                     + '\n'.join(errors)
                 )
 
             logging.info(f'')
             if last_stage_num is not None and i >= last_stage_num:
-                logging.info(f'Last stage was {stage_.name}, stopping here')
+                logging.info(f'Last stage was {stg.name}, stopping here')
                 break
 
     @staticmethod
