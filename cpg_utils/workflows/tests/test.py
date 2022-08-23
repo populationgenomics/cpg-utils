@@ -7,11 +7,11 @@ import toml
 
 from cpg_utils import to_path
 from cpg_utils.config import set_config_paths
-from cpg_utils.flows.batch import get_batch
-from cpg_utils.flows.inputs import get_cohort
-from cpg_utils.flows.targets import Sample, Cohort
-from cpg_utils.flows.utils import timestamp
-from cpg_utils.flows.workflow import (
+from cpg_utils.workflows.batch import get_batch
+from cpg_utils.workflows.inputs import get_cohort
+from cpg_utils.workflows.targets import Sample, Cohort
+from cpg_utils.workflows.utils import timestamp
+from cpg_utils.workflows.workflow import (
     Workflow,
     SampleStage,
     StageInput,
@@ -172,7 +172,7 @@ def test_workflow(mocker):
         ds.add_sample('CPG02', external_id='SAMPLE2')
         return c
 
-    mocker.patch('cpg_utils.flows.inputs.create_cohort', mock_create_cohort)
+    mocker.patch('cpg_utils.workflows.inputs.create_cohort', mock_create_cohort)
 
     output_path = to_path(dataset_path('cohort.tsv'))
 

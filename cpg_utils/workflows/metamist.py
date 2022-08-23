@@ -22,8 +22,13 @@ from sample_metadata.apis import (
 )
 from sample_metadata.exceptions import ApiException
 
-from cpg_utils.flows.utils import exists
-from cpg_utils.flows.filetypes import FastqPair, CramPath, AlignmentInput, FastqPairs
+from cpg_utils.workflows.utils import exists
+from cpg_utils.workflows.filetypes import (
+    FastqPair,
+    CramPath,
+    AlignmentInput,
+    FastqPairs,
+)
 
 
 _metamist: Optional['Metamist'] = None
