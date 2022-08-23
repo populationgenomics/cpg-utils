@@ -500,7 +500,7 @@ def command(
     setup_gcp: bool = False,
     define_retry_function: bool = False,
     rm_leading_space: bool = True,
-    python_script_path: Path | None = None,
+    python_script_path: Optional[Path] = None,
 ) -> str:
     """
     Wraps a command for Batch.
