@@ -9,7 +9,7 @@ from itertools import groupby
 from cpg_utils.config import get_config
 
 from .filetypes import GvcfPath, CramPath
-from .metamist import get_metamist, MmSequence, AnalysisType, MetamistError
+from .metamist import get_metamist, Sequence, AnalysisType, MetamistError
 from .targets import Cohort, Sex, PedigreeInfo
 
 
@@ -161,7 +161,7 @@ def _populate_alignment_inputs(
 
     for sample in cohort.get_samples():
         for d in found_seqs_by_sid.get(sample.id, []):
-            seq = MmSequence.parse(d, check_existence=check_existence)
+            seq = Sequence.parse(d, check_existence=check_existence)
             sample.seq_by_type[seq.sequencing_type] = seq
             if seq.alignment_input:
                 if seq.sequencing_type in sample.alignment_input_by_seq_type:

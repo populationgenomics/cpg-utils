@@ -384,7 +384,7 @@ class Metamist:
 
 
 @dataclass
-class MmSequence:
+class Sequence:
     """
     Metamist "Sequence" entry.
 
@@ -399,9 +399,9 @@ class MmSequence:
     alignment_input: AlignmentInput | None = None
 
     @staticmethod
-    def parse(data: dict, check_existence: bool = False) -> 'MmSequence':
+    def parse(data: dict, check_existence: bool = False) -> 'Sequence':
         """
-        Parse dictionary to create a SmSequence object.
+        Create from a dictionary.
         """
         req_keys = ['id', 'sample_id', 'meta']
         if any(k not in data for k in req_keys):
@@ -413,24 +413,24 @@ class MmSequence:
         sample_id = data['sample_id']
         sequencing_type = data['type']
         assert sequencing_type, data
-        sm_seq = MmSequence(
+        mm_seq = Sequence(
             id=data['id'],
             sample_id=sample_id,
             meta=data['meta'],
             sequencing_type=sequencing_type,
         )
         if data['meta'].get('reads'):
-            if alignment_input := MmSequence._parse_reads(
+            if alignment_input := Sequence._parse_reads(
                 sample_id=sample_id,
                 meta=data['meta'],
                 check_existence=check_existence,
             ):
-                sm_seq.alignment_input = alignment_input
+                mm_seq.alignment_input = alignment_input
         else:
             logging.warning(
                 f'{sample_id} sequence: no meta/reads found with FASTQ information'
             )
-        return sm_seq
+        return mm_seq
 
     @staticmethod
     def _parse_reads(  # pylint: disable=too-many-return-statements
