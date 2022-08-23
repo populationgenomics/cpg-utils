@@ -31,22 +31,13 @@ access_level = 'standard'
 
 # Map of stages to lists of samples, to skip for specific stages
 #[workflow.skip_samples_stages]
-#VerifyBamId = ['CPG13409']  # https://batch.hail.populationgenomics.org.au/batches/56236/jobs/372
+#VerifyBamId = ['CPG13409']
 
-# Name of the pipeline (to prefix output paths)
+# Name of the workflow (to prefix output paths)
 #name =
 
-# Description of the pipeline (to appear in the Batch GUI)
+# Description of the workflow (to display in the Batch GUI)
 #description =
-
-# Status reporter type (class that reports jobs statuses and results)
-#status_repotrer = 'smdb'
-
-# Input provider type ('csv' or 'smdb' for the CPG sample-metadata database)
-input_provider = 'smdb'
-
-# CSV file path for input_provider='csv'
-#input_csv =
 
 # For the first (not-skipped) stage, if the input for a target does
 # not exist, just skip this target instead of failing. E.g. if the first
@@ -78,10 +69,6 @@ check_expected_outputs = true
 #token_secret_id = 'slack-seqr-loader-token'
 #token_project_id = 'seqr-308602'
 
-# When the sample-metadata database API returns an error from the
-# database, only show the error and continue, instead of crashing
-smdb_errors_are_fatal = true
-
 # Prefix to find docker images referenced in `image_config_yaml_path`
 image_registry_prefix = 'australia-southeast1-docker.pkg.dev/cpg-common/images'
 
@@ -97,7 +84,7 @@ web_url_template = 'https://{namespace}-web.populationgenomics.org.au/{dataset}'
 #dataset_gcp_project =
 
 # Limit to data of this sequencing type
-sequencing_type = 'genome'
+#sequencing_type = 'genome'
 
 # Realign CRAM when available, instead of using FASTQ.
 # The parameter value should correspond to CRAM version
@@ -140,9 +127,8 @@ password_project_id = 'seqr-308602'
 
 [hail]
 #billing_project =
-#bucket =
 pool_label = 'seqr'
-keep_scratch = true
+delete_scratch_on_exit = false
 dry_run = false
 
 [images]
@@ -158,12 +144,12 @@ picard_samtools = 'picard_samtools:v0'
 somalier = 'somalier:v0.2.15'
 peddy = 'peddy:v0'
 vep ='vep:105'
-verify-bam-id = 'verify-bam-id:1.0.1'
+verifybamid = 'verifybamid:2.0.1'
 multiqc = 'multiqc:v1.12'
 fastqc = 'fastqc:v0.11.9_cv8'
 happy = 'hap.py:v0.3.15'
-hail = 'driver:4225655198684124178417573ffc6ed714cf0c04-hail-d4bd6a2fd606634057b0277fce06cedce5b764a6'
-sm-api = 'driver:4225655198684124178417573ffc6ed714cf0c04-hail-d4bd6a2fd606634057b0277fce06cedce5b764a6'
+hail = 'driver:5d04b6d6bb411ea4b8750f40cf39fd0b701ea288-hail-c4eb2b16220d9872f417412ea565902f78739124'
+sm-api = 'driver:5d04b6d6bb411ea4b8750f40cf39fd0b701ea288-hail-c4eb2b16220d9872f417412ea565902f78739124'
 
 [references]
 # Genome build. Only GRCh38 is currently supported.
@@ -232,10 +218,14 @@ mills_vcf_index = 'Mills_and_1000G_gold_standard.indels.hg38.vcf.gz.tbi'
 axiom_poly_vcf = 'Axiom_Exome_Plus.genotypes.all_populations.poly.hg38.vcf.gz'
 axiom_poly_vcf_index = 'Axiom_Exome_Plus.genotypes.all_populations.poly.hg38.vcf.gz.tbi'
 
-# Contamination check (relative to boad_ref):
-contam_ud =  'contamination-resources/1000g/1000g.phase3.100k.b38.vcf.gz.dat.UD'
-contam_bed = 'contamination-resources/1000g/1000g.phase3.100k.b38.vcf.gz.dat.bed'
-contam_mu =  'contamination-resources/1000g/1000g.phase3.100k.b38.vcf.gz.dat.mu'
+# Genome contamination check
+genome_contam_ud =  'contamination-resources/1000g/1000g.phase3.100k.b38.vcf.gz.dat.UD'
+genome_contam_bed = 'contamination-resources/1000g/1000g.phase3.100k.b38.vcf.gz.dat.bed'
+genome_contam_mu =  'contamination-resources/1000g/1000g.phase3.100k.b38.vcf.gz.dat.mu'
+# Exome contamination check
+exome_contam_ud = 'contamination-resources/1000g/whole_exome_illumina_coding_v1.Homo_sapiens_assembly38.1000g.contam.UD'
+exome_contam_bed = 'contamination-resources/1000g/whole_exome_illumina_coding_v1.Homo_sapiens_assembly38.1000g.contam.bed'
+exome_contam_mu = 'contamination-resources/1000g/whole_exome_illumina_coding_v1.Homo_sapiens_assembly38.1000g.contam.mu'
 
 ## GnomAD resources for Hail Query
 [references.gnomad]
@@ -254,3 +244,17 @@ mills_ht = 'mills/Mills_and_1000G_gold_standard.indels.hg38.ht'
 prefix = 'seqr/v0-1'
 combined_reference = 'combined_reference_data_grch38-2.0.4.ht'
 clinvar = 'clinvar.GRCh38.ht'
+
+[references.validation]
+prefix = 'validation'
+[references.validation.genome.syndip]
+truth = 'syndip/truth/full.38.20180222.vcf.gz'
+regions = 'syndip/regions/syndip.b38_20180222.bed'
+[references.validation.genome.HG001]
+truth = 'giab/truth/HG001_GRCh38_GIAB_highconf_CG-IllFB-IllGATKHC-Ion-10X-SOLID_CHROM1-X_v.3.3.2_highconf_PGandRTGphasetransfer.vcf.gz'
+regions = 'giab/regions/HG001_GRCh38_GIAB_highconf_CG-IllFB-IllGATKHC-Ion-10X-SOLID_CHROM1-X_v.3.3.2_highconf_nosomaticdel_noCENorHET7.bed'
+
+# Map internally used validation sample external_id to truth sample names
+[validation.genome]
+HG001_NA12878 = 'HG001'
+SYNDIP = 'syndip'

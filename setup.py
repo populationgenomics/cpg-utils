@@ -5,7 +5,7 @@ import setuptools
 setuptools.setup(
     name='cpg-utils',
     # This tag is automatically updated by bumpversion
-    version='4.4.5',
+    version='4.5.0',
     description='Library of convenience functions specific to the CPG',
     long_description=open('README.md').read(),
     long_description_content_type='text/markdown',
@@ -18,6 +18,7 @@ setuptools.setup(
         'cloudpathlib[all]',
         'toml',
         'frozendict',
+        'coloredlogs',
     ],
     package_data={
         'cpg_utils': ['config-template.toml'],

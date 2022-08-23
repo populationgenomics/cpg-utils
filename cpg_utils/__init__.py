@@ -1,13 +1,17 @@
 """
 CPG utils
 """
-
 import pathlib
 from typing import Union
 
+import coloredlogs
 from cloudpathlib import CloudPath
 from cloudpathlib.anypath import to_anypath
 
+
+coloredlogs.install(
+    level='DEBUG', fmt='%(asctime)s %(levelname)s (%(name)s %(lineno)s): %(message)s'
+)
 
 # The AnyPath class https://cloudpathlib.drivendata.org/stable/anypath-polymorphism/
 # is very handy to parse a string that can be either a cloud URL or a local posix path.

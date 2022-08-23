@@ -40,6 +40,7 @@ repos:
     entry: pylint
     language: system
     types: [python]
+    args: ['--ignore-paths=cpg_utils/workflows/*']
 
 # Static type analysis (as much as it's possible in python using type hints)
 - repo: https://github.com/pre-commit/mirrors-mypy
