@@ -1,17 +1,17 @@
 #!/usr/bin/env python
 
-import setuptools
+from setuptools import find_packages, setup
 
-setuptools.setup(
+setup(
     name='cpg-utils',
     # This tag is automatically updated by bumpversion
-    version='4.5.1',
+    version='4.5.2',
     description='Library of convenience functions specific to the CPG',
     long_description=open('README.md').read(),
     long_description_content_type='text/markdown',
     url=f'https://github.com/populationgenomics/cpg-utils',
     license='MIT',
-    packages=['cpg_utils'],
+    packages=find_packages(),
     install_requires=[
         'google-auth',
         'google-cloud-secret-manager',
