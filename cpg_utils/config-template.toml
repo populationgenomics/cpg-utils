@@ -131,13 +131,13 @@ picard = 'picard_samtools:v0'
 picard_samtools = 'picard_samtools:v0'
 somalier = 'somalier:v0.2.15'
 peddy = 'peddy:v0'
+vep = 'vep:105.0'
 verifybamid = 'verifybamid:2.0.1'
 multiqc = 'multiqc:v1.12'
 fastqc = 'fastqc:v0.11.9_cv8'
 happy = 'hap.py:v0.3.15'
 hail = 'driver:5d04b6d6bb411ea4b8750f40cf39fd0b701ea288-hail-c4eb2b16220d9872f417412ea565902f78739124'
 sm-api = 'driver:5d04b6d6bb411ea4b8750f40cf39fd0b701ea288-hail-c4eb2b16220d9872f417412ea565902f78739124'
-vep = 'vep:105.0'
 
 [references]
 # Genome build. Only GRCh38 is currently supported.
