@@ -91,18 +91,6 @@ web_url_template = 'https://{namespace}-web.populationgenomics.org.au/{dataset}'
 # (e.g. v0 in gs://cpg-fewgenomes-main/cram/v0/CPG01234.cram
 #realign_from_cram_version = 'bwamem'
 
-# Number of shards for realignment from BAM/CRAM
-realignment_shards_num = 10
-
-# Number of intervals to partition sample genotyping
-hc_intervals_num = 50
-
-# Number of intervals to partition joint calling and VQSR
-jc_intervals_num = 50
-
-# Number of intervals to partition VEP annotation
-vep_intervals_num = 50
-
 # Use GnarlyGenotyper instead of GenotypeGVCFs
 use_gnarly = false
 
