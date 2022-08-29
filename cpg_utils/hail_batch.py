@@ -363,8 +363,8 @@ def reference_path(key: str) -> Path:
 
     Examples
     --------
-    >>> reference_path('vep_loftee')
-    CloudPath('gs://cpg-reference/vep/loftee_GRCh38.tar')
+    >>> reference_path('vep_mount')
+    CloudPath('gs://cpg-reference/vep/105.0/mount')
     >>> reference_path('broad/genome_calling_interval_lists')
     CloudPath('gs://cpg-reference/hg38/v0/wgs_calling_regions.hg38.interval_list')
 
