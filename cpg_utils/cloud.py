@@ -1,19 +1,24 @@
 """Convenience functions related to cloud infrastructure."""
-import traceback
+
 from typing import Optional
-from google.auth import jwt
+import traceback
+import google.auth
+from google.auth.exceptions import DefaultCredentialsError
+from google.auth.transport.requests import Request
 from google.cloud import secretmanager
+from google.oauth2 import id_token
+from google.auth import jwt
 import google.api_core.exceptions
 
 
-def email_from_id_token(id_token: str) -> str:
+def email_from_id_token(id_token_jwt: str) -> str:
     """Decodes the ID token (JWT) to get the email address of the caller.
 
     See http://bit.ly/2YAIkzy for details.
 
     This function assumes that the token has been verified beforehand."""
 
-    return jwt.decode(id_token, verify=False)['email']
+    return jwt.decode(id_token_jwt, verify=False)['email']
 
 
 def read_secret(
@@ -84,3 +89,20 @@ def write_secret(project_id: str, secret_name: str, secret_value: str) -> None:
             and version.name != response.name
         ):
             secret_manager.disable_secret_version(request={'name': version.name})
+
+
+def get_google_identity_token(audience: str) -> str:
+    """
+    Returns a Google identity token for the given audience.
+    """
+
+    # Need to support two distinct cases:
+    # - service accounts on GCE VMs (default),
+    # - human users with default credentials.
+    try:
+        return id_token.fetch_id_token(Request(), audience=audience)
+    except DefaultCredentialsError:
+        # https://stackoverflow.com/a/55804230
+        creds, _ = google.auth.default()
+        creds.refresh(Request())
+        return creds.id_token
