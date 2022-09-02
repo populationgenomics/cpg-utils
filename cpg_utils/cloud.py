@@ -2,6 +2,7 @@
 
 from typing import Optional
 import traceback
+import logging
 import google.auth
 from google.auth.exceptions import DefaultCredentialsError
 from google.auth.transport.requests import Request
@@ -96,6 +97,12 @@ def get_google_identity_token(audience: str) -> str:
     Returns a Google identity token for the given audience.
     """
 
+    # Suppress DEBUG / WARNING messages from google-auth library,
+    # in case we're not running on GCE. This gets restored at the end.
+    logger = logging.getLogger()
+    previous_level = logger.getEffectiveLevel()
+    logger.setLevel(logging.ERROR)
+
     # Need to support two distinct cases:
     # - service accounts on GCE VMs (default),
     # - human users with default credentials.
@@ -106,3 +113,5 @@ def get_google_identity_token(audience: str) -> str:
         creds, _ = google.auth.default()
         creds.refresh(Request())
         return creds.id_token
+    finally:
+        logger.setLevel(previous_level)
