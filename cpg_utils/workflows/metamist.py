@@ -512,7 +512,8 @@ class Sequence:
                     index_path=index_location,
                     reference_assembly=reference_assembly,
                 )
-            if location.endswith('.bam'):
+            else:
+                assert location.endswith('.bam')
                 return BamPath(location, index_path=index_location)
 
         else:

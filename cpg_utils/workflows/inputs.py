@@ -8,7 +8,6 @@ from itertools import groupby
 
 from cpg_utils.config import get_config
 
-from .filetypes import GvcfPath, CramPath
 from .metamist import get_metamist, Sequence, AnalysisType, MetamistError
 from .targets import Cohort, Sex, PedigreeInfo
 
@@ -194,10 +193,14 @@ def _populate_analysis(cohort: Cohort) -> None:
         for sample in dataset.get_samples():
             if analysis := gvcf_by_sid.get(sample.id):
                 if analysis.output:
-                    assert analysis.output == sample.make_gvcf_path().path, analysis.output
+                    assert (
+                        analysis.output == sample.make_gvcf_path().path
+                    ), analysis.output
             if analysis := cram_by_sid.get(sample.id):
                 if analysis.output:
-                    assert analysis.output == sample.make_cram_path().path, analysis.output
+                    assert (
+                        analysis.output == sample.make_cram_path().path
+                    ), analysis.output
 
 
 def _populate_participants(cohort: Cohort) -> None:

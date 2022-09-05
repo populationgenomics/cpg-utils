@@ -117,9 +117,9 @@ class CramPath(CramOrBamPath):
         self,
         path: str | Path,
         index_path: str | Path | None = None,
-        reference_assembly: str = None,
+        reference_assembly: str | Path = None,
     ):
-        self.reference_assembly = reference_assembly
+        self.reference_assembly = to_path(reference_assembly)
         super().__init__(path, index_path)
         self.somalier_path = to_path(f'{self.path}.somalier')
 
