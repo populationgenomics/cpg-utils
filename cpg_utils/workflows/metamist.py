@@ -26,6 +26,7 @@ from cpg_utils.workflows.utils import exists
 from cpg_utils.workflows.filetypes import (
     FastqPair,
     CramPath,
+    BamPath,
     AlignmentInput,
     FastqPairs,
 )
@@ -472,42 +473,47 @@ class Sequence:
                 logging.error(f'{sample_id}: supporting only single bam/cram input')
                 return None
 
-            bam_path = reads_data[0]['location']
-            if not (bam_path.endswith('.cram') or bam_path.endswith('.bam')):
+            location = reads_data[0]['location']
+            if not (location.endswith('.cram') or location.endswith('.bam')):
                 logging.error(
                     f'{sample_id}: ERROR: expected the file to have an extension '
-                    f'.cram or .bam, got: {bam_path}'
+                    f'.cram or .bam, got: {location}'
                 )
                 return None
-            if check_existence and not exists(bam_path):
+            if check_existence and not exists(location):
                 logging.error(
-                    f'{sample_id}: ERROR: index file does not exist: {bam_path}'
+                    f'{sample_id}: ERROR: index file does not exist: {location}'
                 )
                 return None
 
             # Index:
-            index_path = None
+            index_location = None
             if reads_data[0].get('secondaryFiles'):
-                index_path = reads_data[0]['secondaryFiles'][0]['location']
+                index_location = reads_data[0]['secondaryFiles'][0]['location']
                 if (
-                    bam_path.endswith('.cram')
-                    and not index_path.endswith('.crai')
-                    or bam_path.endswith('.bai')
-                    and not index_path.endswith('.bai')
+                    location.endswith('.cram')
+                    and not index_location.endswith('.crai')
+                    or location.endswith('.bai')
+                    and not index_location.endswith('.bai')
                 ):
                     logging.error(
                         f'{sample_id}: ERROR: expected the index file to have an extension '
-                        f'.crai or .bai, got: {index_path}'
+                        f'.crai or .bai, got: {index_location}'
                     )
-                if check_existence and not exists(index_path):
+                if check_existence and not exists(index_location):
                     logging.error(
-                        f'{sample_id}: ERROR: index file does not exist: {index_path}'
+                        f'{sample_id}: ERROR: index file does not exist: {index_location}'
                     )
                     return None
 
-            return CramPath(
-                bam_path, index_path=index_path, reference_assembly=reference_assembly
-            )
+            if location.endswith('.cram'):
+                return CramPath(
+                    location,
+                    index_path=index_location,
+                    reference_assembly=reference_assembly,
+                )
+            if location.endswith('.bam'):
+                return BamPath(location, index_path=index_location)
 
         else:
             fastq_pairs = FastqPairs()
