@@ -41,7 +41,9 @@ class CramOrBamPath(AlignmentInput, ABC):
         if index_path:
             self.index_path = to_path(index_path)
             assert self.index_path.suffix == f'.{self.index_ext}'
-            self.full_index_suffix = str(self.index_path).replace(self.path.stem, '')
+            self.full_index_suffix = str(self.index_path).replace(
+                str(self.path.with_suffix('')), ''
+            )
 
     @property
     @abstractmethod
@@ -54,13 +56,18 @@ class CramOrBamPath(AlignmentInput, ABC):
         ...
 
     def __str__(self) -> str:
-        repr = str(self.path)
+        """
+        >>> str(CramPath('gs://bucket/sample.cram', 'gs://bucket/sample.cram.crai'))
+        'CRAM(gs://bucket/sample{.cram,.cram.crai})'
+        """
+        res = str(self.path)
         if self.index_path:
             assert self.full_index_suffix
-            repr = (
-                str(self.path.stem) + f'{{{self.path.suffix},{self.full_index_suffix}}}'
+            res = (
+                str(self.path.with_suffix(''))
+                + f'{{{self.path.suffix},{self.full_index_suffix}}}'
             )
-        return f'{self.ext.upper()}({repr})'
+        return f'{self.ext.upper()}({res})'
 
     def exists(self) -> bool:
         """
@@ -119,7 +126,9 @@ class CramPath(CramOrBamPath):
         index_path: str | Path | None = None,
         reference_assembly: str | Path = None,
     ):
-        self.reference_assembly = to_path(reference_assembly)
+        self.reference_assembly = None
+        if reference_assembly:
+            self.reference_assembly = to_path(reference_assembly)
         super().__init__(path, index_path)
         self.somalier_path = to_path(f'{self.path}.somalier')
 
