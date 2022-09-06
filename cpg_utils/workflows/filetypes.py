@@ -223,14 +223,14 @@ class FastqPairs(list[FastqPair], AlignmentInput):
         """
         Glob string to find all FASTQ files.
 
-        >>> FastqPairs([
+        >>> str(FastqPairs([
         >>>     FastqPair('gs://sample_R1.fq.gz', 'gs://sample_R2.fq.gz'),
-        >>> ]).path_glob()
+        >>> ]))
         'gs://sample_R{2,1}.fq.gz'
-        >>> FastqPairs([
+        >>> str(FastqPairs([
         >>>     FastqPair('gs://sample_L1_R1.fq.gz', 'gs://sample_L1_R2.fq.gz'),
         >>>     FastqPair('gs://sample_L2_R1.fq.gz', 'gs://sample_L2_R2.fq.gz'),
-        >>> ]).path_glob()
+        >>> ]))
         'gs://sample_L{2,1}_R{2,1}.fq.gz'
         """
         all_fastq_paths = []
