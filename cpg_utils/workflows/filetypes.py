@@ -58,15 +58,12 @@ class CramOrBamPath(AlignmentInput, ABC):
     def __str__(self) -> str:
         """
         >>> str(CramPath('gs://bucket/sample.cram', 'gs://bucket/sample.cram.crai'))
-        'CRAM(gs://bucket/sample{.cram,.cram.crai})'
+        'CRAM(gs://bucket/sample.cram+.cram.crai)'
         """
         res = str(self.path)
         if self.index_path:
             assert self.full_index_suffix
-            res = (
-                str(self.path.with_suffix(''))
-                + f'{{{self.path.suffix},{self.full_index_suffix}}}'
-            )
+            res += f'+{self.full_index_suffix}'
         return f'{self.ext.upper()}({res})'
 
     def exists(self) -> bool:
