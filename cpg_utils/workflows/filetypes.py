@@ -56,8 +56,11 @@ class CramOrBamPath(AlignmentInput, ABC):
         ...
 
     def __str__(self) -> str:
+        return str(self.path)
+
+    def __repr__(self) -> str:
         """
-        >>> str(CramPath('gs://bucket/sample.cram', 'gs://bucket/sample.cram.crai'))
+        >>> repr(CramPath('gs://bucket/sample.cram', 'gs://bucket/sample.cram.crai'))
         'CRAM(gs://bucket/sample.cram+.cram.crai)'
         """
         res = str(self.path)
@@ -184,7 +187,7 @@ FastqPath = Union[str, Path, ResourceFile]
 
 
 @dataclass
-class FastqPair:
+class FastqPair(AlignmentInput):
     """
     Pair of FASTQ files
     """
@@ -209,8 +212,23 @@ class FastqPair:
             ]
         )
 
-    def __str__(self):
-        return f'{self.r1}|{self.r2}'
+    def exists(self) -> bool:
+        """
+        Check if each FASTQ file in the pair exists.
+        """
+        return exists(self.r1) and exists(self.r2)
+
+    def __repr__(self):
+        """
+        Glob string to find all FASTQ files.
+
+        >>> str(FastqPair('gs://sample_R1.fq.gz', 'gs://sample_R2.fq.gz'))
+        'gs://sample_R{1,2}.fq.gz'
+        """
+        return ''.join(
+            f'{{{",".join(sorted(set(chars)))}}}' if len(set(chars)) > 1 else chars[0]
+            for chars in zip(str(self.r1), str(self.r2))
+        )
 
 
 class FastqPairs(list[FastqPair], AlignmentInput):
@@ -221,31 +239,22 @@ class FastqPairs(list[FastqPair], AlignmentInput):
 
     def exists(self) -> bool:
         """
-        Check if each FASTQ file in each pair exist.
+        Check if each FASTQ file in each pair exists.
         """
-        return all(exists(pair.r1) and exists(pair.r2) for pair in self)
+        return all(pair.exists() for pair in self)
 
-    def __str__(self) -> str:
+    def __repr__(self) -> str:
         """
         Glob string to find all FASTQ files.
 
-        >>> str(FastqPairs([
-        >>>     FastqPair('gs://sample_R1.fq.gz', 'gs://sample_R2.fq.gz'),
-        >>> ]))
-        'gs://sample_R{2,1}.fq.gz'
-        >>> str(FastqPairs([
-        >>>     FastqPair('gs://sample_L1_R1.fq.gz', 'gs://sample_L1_R2.fq.gz'),
-        >>>     FastqPair('gs://sample_L2_R1.fq.gz', 'gs://sample_L2_R2.fq.gz'),
-        >>> ]))
-        'gs://sample_L{2,1}_R{2,1}.fq.gz'
+        >>> repr(FastqPairs([FastqPair('gs://sample_R1.fq.gz', 'gs://sample_R2.fq.gz')]))
+        'gs://sample_R{1,2}.fq.gz'
+        >>> p1 = FastqPair('gs://sample_L2_R1.fq.gz', 'gs://sample_L2_R2.fq.gz')
+        >>> p2 = FastqPair('gs://sample_L1_R1.fq.gz', 'gs://sample_L1_R2.fq.gz')
+        >>> repr(FastqPairs([p1, p2]))
+        'gs://sample_L{1,2}_R{1,2}.fq.gz'
         """
-        all_fastq_paths = []
-        for pair in self:
-            all_fastq_paths.extend([pair.r1, pair.r2])
-        # Triple braces are intentional: they are resolved to single ones.
         return ''.join(
-            [
-                f'{{{",".join(set(chars))}}}' if len(set(chars)) > 1 else chars[0]
-                for chars in zip(*map(str, all_fastq_paths))
-            ]
+            f'{{{",".join(sorted(set(chars)))}}}' if len(set(chars)) > 1 else chars[0]
+            for chars in zip(*[repr(pair) for pair in self])
         )
