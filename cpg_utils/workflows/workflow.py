@@ -474,12 +474,12 @@ class Stage(Generic[TargetT], ABC):
         Collects outputs from all dependencies and create input for this stage
         """
         inputs = StageInput(self)
-        logging.info(f'_make_inputs stage={self}')
+        logging.debug(f'Stage._make_inputs stage={self}')
         for prev_stage in self.required_stages:
-            logging.info(f'_make_inputs stage={self}, prev_stage={prev_stage}')
+            logging.debug(f'Stage._make_inputs stage={self}, prev_stage={prev_stage}')
             for _, stage_output in prev_stage.output_by_target.items():
-                logging.info(
-                    f'_make_inputs stage={self}, prev_stage={prev_stage}, stage_output={stage_output}'
+                logging.debug(
+                    f'Stage._make_inputs stage={self}, prev_stage={prev_stage}, stage_output={stage_output}'
                 )
                 if stage_output:
                     inputs.add_other_stage_output(stage_output)
