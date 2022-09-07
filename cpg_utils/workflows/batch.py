@@ -10,7 +10,6 @@ from typing import Optional
 
 import hailtop.batch as hb
 import toml
-from cloudpathlib import CloudPath
 from cpg_utils import to_path
 from cpg_utils import config
 from cpg_utils.config import get_config
