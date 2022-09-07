@@ -62,7 +62,9 @@ def create_cohort() -> Cohort:
         return cohort
 
     if sequencing_type := get_config()['workflow'].get('sequencing_type'):
-        _populate_alignment_inputs(cohort, sequencing_type)
+        only_batches = get_config()['workflow'].get('only_batches', [])
+        only_batches = [str(b) for b in only_batches]
+        _populate_alignment_inputs(cohort, sequencing_type, only_batches)
         _filter_sequencing_type(cohort, sequencing_type)
     _populate_analysis(cohort)
     _populate_participants(cohort)
@@ -81,22 +83,15 @@ def _filter_sequencing_type(cohort: Cohort, sequencing_type: str):
             continue
 
         if s.alignment_input_by_seq_type:
-            avail_types = list(s.seq_by_type.keys())
             s.alignment_input_by_seq_type = {
                 k: v
                 for k, v in s.alignment_input_by_seq_type.items()
                 if k == sequencing_type
             }
-            if not bool(s.alignment_input_by_seq_type):
-                logging.warning(
-                    f'{s}: skipping because no inputs with data type '
-                    f'"{sequencing_type}" found in {avail_types}'
-                )
-                s.active = False
 
 
 def _filter_samples(
-    entries: list[dict[str, str]],
+    entries: list[dict[str, str | dict]],
     dataset_name: str,
     skip_samples: list[str] | None = None,
     only_samples: list[str] | None = None,
@@ -125,6 +120,7 @@ def _filter_samples(
 def _populate_alignment_inputs(
     cohort: Cohort,
     sequencing_type: str,
+    only_batches: list[str],
     check_existence: bool = False,
 ) -> None:
     """
@@ -161,6 +157,24 @@ def _populate_alignment_inputs(
     for sample in cohort.get_samples():
         for d in found_seqs_by_sid.get(sample.id, []):
             seq = Sequence.parse(d, check_existence=check_existence)
+            if only_batches:
+                if 'batch' not in seq.meta:
+                    logging.warning(
+                        f'Sample {sample.rich_id} does not contain '
+                        f'sequence.meta.batch field, but filtering based on batch '
+                        f'numbers is requested: only_batches={only_batches}.'
+                    )
+                    sample.active = False
+                    continue
+                if str(seq.meta['batch']) in only_batches:
+                    logging.info(
+                        f'Using sequence for {sample} with '
+                        f'meta.batch={seq.meta["batch"]}'
+                    )
+                else:
+                    sample.active = False
+                    continue
+
             sample.seq_by_type[seq.sequencing_type] = seq
             if seq.alignment_input:
                 if seq.sequencing_type in sample.alignment_input_by_seq_type:
