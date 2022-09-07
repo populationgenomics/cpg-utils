@@ -9,13 +9,14 @@ from enum import Enum
 from typing import Optional
 import pandas as pd
 
-from cpg_utils.hail_batch import dataset_path, web_url
+from cpg_utils.hail_batch import dataset_path, web_url, reference_path
 from cpg_utils.config import get_config
 from cpg_utils import Path, to_path
 
 from .filetypes import (
     AlignmentInput,
     CramPath,
+    BamPath,
     GvcfPath,
     FastqPairs,
 )
@@ -493,10 +494,9 @@ class Sample(Target):
         for seq_type, alignment_input in self.alignment_input_by_seq_type.items():
             ai_tag += f'|SEQ={seq_type}:'
             if isinstance(alignment_input, CramPath):
-                if alignment_input.is_bam:
-                    ai_tag += 'CRAM'
-                else:
-                    ai_tag += 'BAM'
+                ai_tag += 'CRAM'
+            elif isinstance(alignment_input, BamPath):
+                ai_tag += 'BAM'
             else:
                 assert isinstance(alignment_input, FastqPairs)
                 ai_tag += f'{len(alignment_input)}FQS'
@@ -550,11 +550,18 @@ class Sample(Target):
             'Phenotype': '0',
         }
 
-    def make_cram_path(self) -> CramPath:
+    def make_cram_path(self, access_level: str | None = None) -> CramPath:
         """
         Path to a CRAM file. Not checking its existence here.
         """
-        return CramPath(self.dataset.prefix() / 'cram' / f'{self.id}.cram')
+        path = (
+            self.dataset.prefix(access_level=access_level) / 'cram' / f'{self.id}.cram'
+        )
+        return CramPath(
+            path=path,
+            index_path=path.with_suffix('.cram.crai'),
+            reference_assembly=reference_path('broad/ref_fasta'),
+        )
 
     def make_gvcf_path(self, access_level: str | None = None) -> GvcfPath:
         """

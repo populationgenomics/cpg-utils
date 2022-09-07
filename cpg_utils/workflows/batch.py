@@ -5,10 +5,11 @@ Extending the Hail's `Batch` class.
 import os
 import tempfile
 import logging
+import uuid
 from typing import Optional
 
 import hailtop.batch as hb
-from cloudpathlib import CloudPath
+import toml
 from cpg_utils import to_path
 from cpg_utils import config
 from cpg_utils.config import get_config
@@ -65,19 +66,10 @@ class Batch(hb.Batch):
         if isinstance(self._backend, hb.LocalBackend):
             return
         remote_dir = to_path(self._backend.remote_tmpdir) / 'config'
-        remote_paths = []
-        # noinspection PyProtectedMember
-        for path in config._config_paths:
-            path = to_path(path)
-            if isinstance(path, CloudPath):
-                remote_paths.append(str(path))
-            else:
-                remote_path = remote_dir / path.name
-                with path.open() as inp, remote_path.open('w') as out:
-                    out.write(inp.read())
-                remote_paths.append(str(remote_path))
-        config.set_config_paths(remote_paths)
-        os.environ['CPG_CONFIG_PATH'] = ','.join(remote_paths)
+        config_path = remote_dir / (str(uuid.uuid4()) + '.toml')
+        with config_path.open('w') as f:
+            toml.dump(dict(get_config()), f)
+        config.set_config_paths([str(config_path)])
 
     def _process_attributes(
         self,

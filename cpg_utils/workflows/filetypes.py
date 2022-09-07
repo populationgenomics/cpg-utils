@@ -23,18 +23,10 @@ class AlignmentInput(ABC):
         Check if all files exist.
         """
 
-    @abstractmethod
-    def path_glob(self) -> str:
-        """
-        Compact representation of file paths.
-        """
 
-
-class CramPath(AlignmentInput):
+class CramOrBamPath(AlignmentInput, ABC):
     """
-    Represents alignment data on a bucket within the workflow.
-    Includes a path to a CRAM or a BAM file along with a corresponding index,
-    and a corresponding fingerprint path.
+    Represents a path to a CRAM or a BAM file, optionally with corresponding index.
     """
 
     def __init__(
@@ -44,24 +36,38 @@ class CramPath(AlignmentInput):
         reference_assembly: str = None,
     ):
         self.path = to_path(path)
-        self.is_bam = self.path.suffix == '.bam'
-        self.ext = 'cram' if not self.is_bam else 'bam'
-        self.index_ext = 'bai' if self.is_bam else 'crai'
-        if not index_path:
-            self.full_index_ext = f'{self.ext}.{self.index_ext}'
-            self.index_path = self.path.with_suffix(f'.{self.full_index_ext}')
-        else:
-            assert str(index_path).endswith(self.index_ext)
+        self.index_path: Path | None = None
+        self.full_index_suffix: str | None = None
+        if index_path:
             self.index_path = to_path(index_path)
-            self.full_index_ext = str(self.index_path).replace(self.path.stem, '')
-        self.somalier_path = to_path(f'{self.path}.somalier')
-        self.reference_assembly = reference_assembly
+            assert self.index_path.suffix == f'.{self.index_ext}'
+            self.full_index_suffix = str(self.index_path).replace(
+                str(self.path.with_suffix('')), ''
+            )
+
+    @property
+    @abstractmethod
+    def ext(self) -> str:
+        ...
+
+    @property
+    @abstractmethod
+    def index_ext(self) -> str:
+        ...
 
     def __str__(self) -> str:
         return str(self.path)
 
     def __repr__(self) -> str:
-        return f'CRAM({self.path})'
+        """
+        >>> repr(CramPath('gs://bucket/sample.cram', 'gs://bucket/sample.cram.crai'))
+        'CRAM(gs://bucket/sample.cram+.cram.crai)'
+        """
+        res = str(self.path)
+        if self.index_path:
+            assert self.full_index_suffix
+            res += f'+{self.full_index_suffix}'
+        return f'{self.ext.upper()}({res})'
 
     def exists(self) -> bool:
         """
@@ -73,19 +79,66 @@ class CramPath(AlignmentInput):
         """
         Create a Hail Batch resource group
         """
-        return b.read_input_group(
-            **{
-                self.ext: str(self.path),
-                self.full_index_ext: str(self.index_path),
-            }
-        )
+        d = {
+            self.ext: str(self.path),
+        }
+        if self.full_index_suffix:
+            d[self.full_index_suffix] = str(self.index_path)
 
-    def path_glob(self) -> str:
-        """
-        Compact representation of file paths.
-        For a CRAM, it's just the CRAM file path.
-        """
-        return str(self.path)
+        return b.read_input_group(**d)
+
+
+class BamPath(CramOrBamPath):
+    """
+    Represents a path to a BAM file, optionally with corresponding index.
+    """
+
+    EXT = 'bam'
+    INDEX_EXT = 'bai'
+
+    def __init__(
+        self,
+        path: str | Path,
+        index_path: str | Path | None = None,
+    ):
+        super().__init__(path, index_path)
+
+    @property
+    def ext(self) -> str:
+        return BamPath.EXT
+
+    @property
+    def index_ext(self) -> str:
+        return BamPath.INDEX_EXT
+
+
+class CramPath(CramOrBamPath):
+    """
+    Represents a path to a CRAM file, optionally with corresponding index.
+    """
+
+    EXT = 'cram'
+    INDEX_EXT = 'crai'
+
+    def __init__(
+        self,
+        path: str | Path,
+        index_path: str | Path | None = None,
+        reference_assembly: str | Path = None,
+    ):
+        self.reference_assembly = None
+        if reference_assembly:
+            self.reference_assembly = to_path(reference_assembly)
+        super().__init__(path, index_path)
+        self.somalier_path = to_path(f'{self.path}.somalier')
+
+    @property
+    def ext(self) -> str:
+        return CramPath.EXT
+
+    @property
+    def index_ext(self) -> str:
+        return CramPath.INDEX_EXT
 
 
 class GvcfPath:
@@ -134,7 +187,7 @@ FastqPath = Union[str, Path, ResourceFile]
 
 
 @dataclass
-class FastqPair:
+class FastqPair(AlignmentInput):
     """
     Pair of FASTQ files
     """
@@ -159,8 +212,23 @@ class FastqPair:
             ]
         )
 
-    def __str__(self):
-        return f'{self.r1}|{self.r2}'
+    def exists(self) -> bool:
+        """
+        Check if each FASTQ file in the pair exists.
+        """
+        return exists(self.r1) and exists(self.r2)
+
+    def __repr__(self):
+        """
+        Glob string to find all FASTQ files.
+
+        >>> str(FastqPair('gs://sample_R1.fq.gz', 'gs://sample_R2.fq.gz'))
+        'gs://sample_R{1,2}.fq.gz'
+        """
+        return ''.join(
+            f'{{{",".join(sorted(set(chars)))}}}' if len(set(chars)) > 1 else chars[0]
+            for chars in zip(str(self.r1), str(self.r2))
+        )
 
 
 class FastqPairs(list[FastqPair], AlignmentInput):
@@ -171,32 +239,22 @@ class FastqPairs(list[FastqPair], AlignmentInput):
 
     def exists(self) -> bool:
         """
-        Check if each FASTQ file in each pair exist.
+        Check if each FASTQ file in each pair exists.
         """
-        return all(exists(pair.r1) and exists(pair.r2) for pair in self)
+        return all(pair.exists() for pair in self)
 
-    def path_glob(self) -> str:
+    def __repr__(self) -> str:
         """
-        Compact representation of file paths.
-        For FASTQ pairs, it's glob string to find all FASTQ files.
+        Glob string to find all FASTQ files.
 
-        >>> FastqPairs([
-        >>>     FastqPair('gs://sample_R1.fq.gz', 'gs://sample_R2.fq.gz'),
-        >>> ]).path_glob()
-        'gs://sample_R{2,1}.fq.gz'
-        >>> FastqPairs([
-        >>>     FastqPair('gs://sample_L1_R1.fq.gz', 'gs://sample_L1_R2.fq.gz'),
-        >>>     FastqPair('gs://sample_L2_R1.fq.gz', 'gs://sample_L2_R2.fq.gz'),
-        >>> ]).path_glob()
-        'gs://sample_L{2,1}_R{2,1}.fq.gz'
+        >>> repr(FastqPairs([FastqPair('gs://sample_R1.fq.gz', 'gs://sample_R2.fq.gz')]))
+        'gs://sample_R{1,2}.fq.gz'
+        >>> p1 = FastqPair('gs://sample_L2_R1.fq.gz', 'gs://sample_L2_R2.fq.gz')
+        >>> p2 = FastqPair('gs://sample_L1_R1.fq.gz', 'gs://sample_L1_R2.fq.gz')
+        >>> repr(FastqPairs([p1, p2]))
+        'gs://sample_L{1,2}_R{1,2}.fq.gz'
         """
-        all_fastq_paths = []
-        for pair in self:
-            all_fastq_paths.extend([pair.r1, pair.r2])
-        # Triple braces are intentional: they are resolved to single ones.
         return ''.join(
-            [
-                f'{{{",".join(set(chars))}}}' if len(set(chars)) > 1 else chars[0]
-                for chars in zip(*map(str, all_fastq_paths))
-            ]
+            f'{{{",".join(sorted(set(chars)))}}}' if len(set(chars)) > 1 else chars[0]
+            for chars in zip(*[repr(pair) for pair in self])
         )
