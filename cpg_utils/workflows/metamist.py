@@ -179,9 +179,12 @@ class Metamist:
         """
         Query the DB to find the last completed joint-calling analysis for the samples.
         """
+        project = dataset or self.default_dataset
+        if get_config()['workflow']['access_level'] == 'test':
+            project += '-test'
         try:
             data = self.aapi.get_latest_complete_analysis_for_type(
-                project=dataset or self.default_dataset,
+                project=project,
                 analysis_type=models.AnalysisType('joint-calling'),
             )
         except ApiException:
@@ -209,15 +212,16 @@ class Metamist:
         sample (e.g. cram, gvcf).
         """
         dataset = dataset or self.default_dataset
+        project = dataset or self.default_dataset
+        if get_config()['workflow']['access_level'] == 'test':
+            project += '-test'
 
         analysis_per_sid: dict[str, Analysis] = dict()
 
-        logging.info(
-            f'Querying {analysis_type} analysis entries for dataset {dataset}...'
-        )
+        logging.info(f'Querying {analysis_type} analysis entries for {project}...')
         datas = self.aapi.query_analyses(
             models.AnalysisQueryModel(
-                projects=[dataset],
+                projects=[project],
                 sample_ids=sample_ids,
                 type=models.AnalysisType(analysis_type.value),
                 status=models.AnalysisStatus(analysis_status.value),
@@ -234,7 +238,7 @@ class Metamist:
             assert len(a.sample_ids) == 1, data
             analysis_per_sid[list(a.sample_ids)[0]] = a
         logging.info(
-            f'Querying {analysis_type} analysis entries for dataset {dataset}: '
+            f'Querying {analysis_type} analysis entries for {project}: '
             f'found {len(analysis_per_sid)}'
         )
         return analysis_per_sid
@@ -252,6 +256,9 @@ class Metamist:
         Tries to create an Analysis entry, returns its id if successful.
         """
         dataset = dataset or self.default_dataset
+        project = dataset or self.default_dataset
+        if get_config()['workflow']['access_level'] == 'test':
+            project += '-test'
 
         if isinstance(type_, AnalysisType):
             type_ = type_.value
@@ -266,14 +273,14 @@ class Metamist:
             meta=meta or {},
         )
         try:
-            aid = self.aapi.create_new_analysis(project=dataset, analysis_model=am)
+            aid = self.aapi.create_new_analysis(project=project, analysis_model=am)
         except ApiException:
             traceback.print_exc()
             return None
         else:
             logging.info(
                 f'Created Analysis(id={aid}, type={type_}, status={status}, '
-                f'output={str(output)}) in project {dataset}'
+                f'output={str(output)}) in {project}'
             )
             return aid
 
@@ -298,7 +305,7 @@ class Metamist:
         @param analysis_type: cram, gvcf, joint_calling
         @param expected_output_fpath: where the workflow expects the analysis output
         file to sit on the bucket (will invalidate the analysis when it doesn't match)
-        @param dataset: the name of the project where to create a new analysis
+        @param dataset: the name of the dataset to create a new analysis
         @return: path to the output if it can be reused, otherwise None
         """
         label = f'type={analysis_type}'
@@ -480,6 +487,8 @@ class Sequence:
                     f'.cram or .bam, got: {location}'
                 )
                 return None
+            if get_config()['workflow']['access_level'] == 'test':
+                location = location.replace('-main-upload/', '-test-upload/')
             if check_existence and not exists(location):
                 logging.error(
                     f'{sample_id}: ERROR: index file does not exist: {location}'
@@ -499,6 +508,10 @@ class Sequence:
                     logging.error(
                         f'{sample_id}: ERROR: expected the index file to have an extension '
                         f'.crai or .bai, got: {index_location}'
+                    )
+                if get_config()['workflow']['access_level'] == 'test':
+                    index_location = index_location.replace(
+                        '-main-upload/', '-test-upload/'
                     )
                 if check_existence and not exists(index_location):
                     logging.error(
@@ -525,6 +538,13 @@ class Sequence:
                         f'formatted. Expecting 2 entries per lane (R1 and R2 fastqs), '
                         f'but got {len(lane_pair)}. '
                         f'Read data: {pprint.pformat(reads_data)}'
+                    )
+                if get_config()['workflow']['access_level'] == 'test':
+                    lane_pair[0]['location'] = lane_pair[0]['location'].replace(
+                        '-main-upload/', '-test-upload/'
+                    )
+                    lane_pair[1]['location'] = lane_pair[1]['location'].replace(
+                        '-main-upload/', '-test-upload/'
                     )
                 if check_existence and not exists(lane_pair[0]['location']):
                     logging.error(
