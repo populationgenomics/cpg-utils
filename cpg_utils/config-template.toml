@@ -186,7 +186,6 @@ exome_calling_interval_lists = 'exome_calling_regions.v1.interval_list'
 genome_evaluation_interval_lists = 'wgs_evaluation_regions.hg38.interval_list'
 exome_evaluation_interval_lists = 'exome_evaluation_regions.v1.interval_list'
 genome_coverage_interval_list = 'wgs_coverage_regions.hg38.interval_list'
-unpadded_intervals = 'hg38.even.handcurated.20k.intervals'
 
 # VQSR (relative to broad_ref)
 dbsnp_vcf = 'Homo_sapiens_assembly38.dbsnp138.vcf'
