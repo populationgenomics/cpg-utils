@@ -191,16 +191,13 @@ def _populate_analysis(cohort: Cohort) -> None:
             dataset=dataset.name,
         )
         for sample in dataset.get_samples():
-            if analysis := gvcf_by_sid.get(sample.id):
-                if analysis.output:
-                    assert (
-                        analysis.output == sample.make_gvcf_path().path
-                    ), analysis.output
-            if analysis := cram_by_sid.get(sample.id):
-                if analysis.output:
-                    assert (
-                        analysis.output == sample.make_cram_path().path
-                    ), analysis.output
+            if (analysis := gvcf_by_sid.get(sample.id)) and analysis.output:
+                assert analysis.output == sample.make_gvcf_path().path, (
+                    analysis.output,
+                    sample.make_gvcf_path().path,
+                )
+            if (analysis := cram_by_sid.get(sample.id)) and analysis.output:
+                assert analysis.output == sample.make_cram_path().path, analysis.output
 
 
 def _populate_participants(cohort: Cohort) -> None:

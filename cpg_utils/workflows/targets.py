@@ -550,11 +550,13 @@ class Sample(Target):
             'Phenotype': '0',
         }
 
-    def make_cram_path(self) -> CramPath:
+    def make_cram_path(self, access_level: str | None = None) -> CramPath:
         """
         Path to a CRAM file. Not checking its existence here.
         """
-        path = self.dataset.prefix() / 'cram' / f'{self.id}.cram'
+        path = (
+            self.dataset.prefix(access_level=access_level) / 'cram' / f'{self.id}.cram'
+        )
         return CramPath(
             path=path,
             index_path=path.with_suffix('.cram.crai'),
