@@ -19,6 +19,7 @@ setup(
         'toml',
         'frozendict',
         'coloredlogs',
+        'networkx',
     ],
     package_data={
         'cpg_utils': ['config-template.toml'],

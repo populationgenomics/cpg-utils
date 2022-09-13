@@ -23,11 +23,17 @@ access_level = 'standard'
 # Process the following samples even if outputs exist:
 #force_samples = []
 
+# Skip these stages:
+#skip_stages = []
+
+# Skip all other stages:
+#only_stages = []
+
 # Start from this stage:
-#first_stage =
+#first_stages = []
 
 # Finish at this stage:
-#last_stage =
+#last_stages = []
 
 # Map of stages to lists of samples, to skip for specific stages
 #[workflow.skip_samples_stages]
