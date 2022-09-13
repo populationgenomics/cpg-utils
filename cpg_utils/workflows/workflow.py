@@ -980,7 +980,7 @@ class Workflow:
         # Round 6: actually adding jobs from the stages.
         for i, stg in enumerate(stages):
             logging.info(f'*' * 60)
-            logging.info(f'Stage {stg}')
+            logging.info(f'Stage #{i + 1}: {stg}')
             stg.output_by_target = stg.queue_for_cohort(get_cohort())
             if errors := self._process_stage_errors(stg.output_by_target):
                 raise WorkflowError(
