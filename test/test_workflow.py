@@ -43,13 +43,21 @@ delete_scratch_on_exit = false
 backend = 'local'
 """
 
-config_path = tmp_dir_path / 'config.toml'
-with config_path.open('w') as f:
-    toml.dump(toml.loads(config_toml), f)
-set_config_paths([str(config_path)])
+
+def _set_config():
+    config_path = tmp_dir_path / 'config.toml'
+    with config_path.open('w') as f:
+        toml.dump(toml.loads(config_toml), f)
+    set_config_paths([str(config_path)])
+
+
+_set_config()
 
 
 def test_batch_job():
+    """
+    Test creating a job and running a batch.
+    """
     b = get_batch('Test batch job')
     j1 = b.new_job('Jo b1')
     text = 'success'
@@ -68,11 +76,14 @@ def test_batch_job():
     b.write_output(j2.output, str(output2_path))
 
     b.run()
-    with to_path(output2_path).open() as f:
-        assert f.read().strip() == text
+    with to_path(output2_path).open() as fh:
+        assert fh.read().strip() == text
 
 
 def test_batch_python_job():
+    """
+    Testing calling a python job.
+    """
     b = get_batch('Test batch python job')
     j = b.new_python_job('Test python job')
 
@@ -97,13 +108,21 @@ def test_batch_python_job():
 
 
 def test_cohort(mocker):
-    def mock_get_samples(*args, **kwargs) -> list[dict]:
+    """
+    Testing creating a Cohort object from metamist mocks.
+    """
+
+    def mock_get_samples(
+        *args, **kwargs
+    ) -> list[dict]:  # pylint: disable=unused-argument
         return [
             {'id': 'CPG01', 'external_id': 'SAMPLE1'},
             {'id': 'CPG02', 'external_id': 'SAMPLE2'},
         ]
 
-    def mock_get_sequences_by_sample_ids(*args, **kwargs) -> list[dict]:
+    def mock_get_sequences_by_sample_ids(
+        *args, **kwargs
+    ) -> list[dict]:  # pylint: disable=unused-argument
         return [
             {
                 'id': 0,
@@ -122,17 +141,17 @@ def test_cohort(mocker):
         ]
 
     def mock_get_external_participant_id_to_internal_sample_id(
-        *args, **kwargs
+        *args, **kwargs  # pylint: disable=unused-argument
     ) -> list[list]:
         return [['CPG01', 'PART1'], ['CPG02', 'PART2']]
 
-    def mock_get_families(*args, **kwargs):
+    def mock_get_families(*args, **kwargs):  # pylint: disable=unused-argument
         return []
 
-    def mock_get_pedigree(*args, **kwargs):
+    def mock_get_pedigree(*args, **kwargs):  # pylint: disable=unused-argument
         return []
 
-    def mock_query_analyses(*args, **kwargs):
+    def mock_query_analyses(*args, **kwargs):  # pylint: disable=unused-argument
         return []
 
     mocker.patch(
@@ -165,6 +184,10 @@ def test_cohort(mocker):
 
 
 def test_workflow(mocker):
+    """
+    Testing running a workflow from a mock cohort.
+    """
+
     def mock_create_cohort() -> Cohort:
         c = Cohort()
         ds = c.create_dataset('my_dataset')
