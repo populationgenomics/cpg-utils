@@ -112,17 +112,17 @@ def test_cohort(mocker):
     Testing creating a Cohort object from metamist mocks.
     """
 
-    def mock_get_samples(
+    def mock_get_samples(  # pylint: disable=unused-argument
         *args, **kwargs
-    ) -> list[dict]:  # pylint: disable=unused-argument
+    ) -> list[dict]:
         return [
             {'id': 'CPG01', 'external_id': 'SAMPLE1'},
             {'id': 'CPG02', 'external_id': 'SAMPLE2'},
         ]
 
-    def mock_get_sequences_by_sample_ids(
+    def mock_get_sequences_by_sample_ids(  # pylint: disable=unused-argument
         *args, **kwargs
-    ) -> list[dict]:  # pylint: disable=unused-argument
+    ) -> list[dict]:
         return [
             {
                 'id': 0,
@@ -140,8 +140,8 @@ def test_cohort(mocker):
             },
         ]
 
-    def mock_get_external_participant_id_to_internal_sample_id(
-        *args, **kwargs  # pylint: disable=unused-argument
+    def mock_get_external_participant_id_to_internal_sample_id(  # pylint: disable=unused-argument
+        *args, **kwargs
     ) -> list[list]:
         return [['CPG01', 'PART1'], ['CPG02', 'PART2']]
 
@@ -203,6 +203,10 @@ def test_workflow(mocker):
 
     @stage
     class MySampleStage(SampleStage):
+        """
+        Just a sample-level stage.
+        """
+
         def expected_outputs(self, sample: Sample) -> ExpectedResultT:
             return dataset_path(f'{sample.id}.tsv')
 
@@ -215,6 +219,10 @@ def test_workflow(mocker):
 
     @stage(required_stages=MySampleStage)
     class MyCohortStage(CohortStage):
+        """
+        Just a cohort-level stage.
+        """
+
         def expected_outputs(self, cohort: Cohort) -> ExpectedResultT:
             return output_path
 
