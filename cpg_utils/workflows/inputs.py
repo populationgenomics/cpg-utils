@@ -38,6 +38,7 @@ def create_cohort() -> Cohort:
     cohort = Cohort()
     for dataset_name in dataset_names:
         dataset = cohort.create_dataset(dataset_name)
+        logging.info(f'Getting samples for dataset {dataset_name}')
         sample_entries = get_metamist().sapi.get_samples(
             body_get_samples={'project_ids': [dataset_name]}
         )
@@ -205,6 +206,7 @@ def _populate_participants(cohort: Cohort) -> None:
     Populate Participant entries.
     """
     for dataset in cohort.get_datasets():
+        logging.info(f'Reading participants IDs for dataset {dataset}')
         pid_sid_multi = (
             get_metamist().papi.get_external_participant_id_to_internal_sample_id(
                 dataset.name
@@ -230,6 +232,7 @@ def _populate_pedigree(cohort: Cohort) -> None:
         sample_by_participant_id[s.participant_id] = s
 
     for dataset in cohort.get_datasets():
+        logging.info(f'Reading pedigree for dataset {dataset}')
         ped_entries = get_metamist().get_ped_entries(dataset=dataset.name)
         ped_entry_by_participant_id = {}
         for ped_entry in ped_entries:
