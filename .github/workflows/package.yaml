@@ -30,12 +30,14 @@ jobs:
       - name: Test import
         run: python -c "import cpg_utils.cloud"
 
+      - name: Run unit tests
+        run: python -m pytest test
+
       - name: Publish the wheel to PyPI
-        # Run when merging into main with a commit that starts with "Bump version:"
-        # OR where the workflow was manually dispatched:
-        if: "${{ startsWith(github.event.head_commit.message, 'Bump version:') || github.event_name == 'workflow_dispatch' }}"
         uses: pypa/gh-action-pypi-publish@release/v1
+        if: ${{ github.event_name != 'pull_request' }}
         with:
           user: __token__
           password: ${{ secrets.PYPI_API_TOKEN }}
           packages_dir: dist/
+          skip_existing: true

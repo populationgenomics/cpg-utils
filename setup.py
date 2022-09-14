@@ -20,6 +20,7 @@ setup(
         'frozendict',
         'coloredlogs',
         'networkx',
+        'hail',
     ],
     package_data={
         'cpg_utils': ['config-template.toml'],

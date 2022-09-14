@@ -22,7 +22,7 @@ from cpg_utils.workflows.workflow import (
 )
 from cpg_utils.hail_batch import dataset_path, command
 
-tmp_dir_path = to_path('results') / timestamp()
+tmp_dir_path = to_path(__file__).parent / 'results' / timestamp()
 tmp_dir_path = tmp_dir_path.absolute()
 tmp_dir_path.mkdir(parents=True, exist_ok=True)
 
