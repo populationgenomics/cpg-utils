@@ -18,6 +18,7 @@ setup(
         'cloudpathlib[all]',
         'toml',
         'frozendict',
+        'coloredlogs',
     ],
     extras_require={
         'test': [
@@ -26,7 +27,6 @@ setup(
         ],
         'workflows': [
             'hail',
-            'coloredlogs',
             'networkx',
             'sample-metadata',
         ],
