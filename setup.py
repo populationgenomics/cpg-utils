@@ -20,6 +20,17 @@ setup(
         'frozendict',
         'coloredlogs',
     ],
+    extras_require={
+        'test': [
+            'pytest',
+            'pytest-mock',
+        ],
+        'workflows': [
+            'hail',
+            'networkx',
+            'sample-metadata',
+        ],
+    },
     package_data={
         'cpg_utils': ['config-template.toml'],
     },

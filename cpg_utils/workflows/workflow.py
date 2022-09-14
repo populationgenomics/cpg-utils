@@ -12,7 +12,7 @@ Examples of workflows can be found in the `production-workflows` repository.
 """
 
 import functools
-import graphlib
+import networkx as nx
 import logging
 import pathlib
 from abc import ABC, abstractmethod
@@ -474,13 +474,8 @@ class Stage(Generic[TargetT], ABC):
         Collects outputs from all dependencies and create input for this stage
         """
         inputs = StageInput(self)
-        logging.debug(f'Stage._make_inputs stage={self}')
         for prev_stage in self.required_stages:
-            logging.debug(f'Stage._make_inputs stage={self}, prev_stage={prev_stage}')
             for _, stage_output in prev_stage.output_by_target.items():
-                logging.debug(
-                    f'Stage._make_inputs stage={self}, prev_stage={prev_stage}, stage_output={stage_output}'
-                )
                 if stage_output:
                     inputs.add_other_stage_output(stage_output)
         return inputs
@@ -520,9 +515,6 @@ class Stage(Generic[TargetT], ABC):
         if not action:
             action = self._get_action(target)
 
-        logging.info(
-            f'_queue_jobs_with_checks: stage={self}, target={target} action={action}'
-        )
         inputs = self._make_inputs()
         expected_out = self.expected_outputs(target)
 
@@ -589,7 +581,7 @@ class Stage(Generic[TargetT], ABC):
         ) and self.name in d:
             skip_targets = d[self.name]
             if target.target_id in skip_targets:
-                logging.info(f'{self.name}: requested to skip {target}')
+                logging.info(f'{self}: requested to skip {target}')
                 return Action.SKIP
 
         expected_out = self.expected_outputs(target)
@@ -600,7 +592,7 @@ class Stage(Generic[TargetT], ABC):
                 return Action.REUSE
             if get_config()['workflow'].get('skip_samples_with_missing_input'):
                 logging.warning(
-                    f'Skipping {target}: stage {self.name} is required, '
+                    f'Skipping {target}: stage {self} is required, '
                     f'but is marked as skipped, and some expected outputs for the '
                     f'target do not exist: {first_missing_path}'
                 )
@@ -616,7 +608,7 @@ class Stage(Generic[TargetT], ABC):
                 return Action.REUSE
             else:
                 raise ValueError(
-                    f'Stage {self.name} is required, but is skipped, and '
+                    f'Stage {self} is required, but is skipped, and '
                     f'the following expected outputs for target {target} do not exist: '
                     f'{first_missing_path}'
                 )
@@ -624,25 +616,30 @@ class Stage(Generic[TargetT], ABC):
         if reusable and not first_missing_path:
             if target.forced:
                 logging.info(
-                    f'{self.name}: can reuse, but forcing the target '
+                    f'{self}: can reuse, but forcing the target '
                     f'{target} to rerun this stage'
                 )
                 return Action.QUEUE
             elif self.forced:
                 logging.info(
-                    f'{self.name}: can reuse, but forcing the stage '
+                    f'{self}: can reuse, but forcing the stage '
                     f'to rerun, target={target}'
                 )
                 return Action.QUEUE
             else:
-                logging.info(f'{self.name}: reusing results for {target}')
+                logging.info(f'{self}: reusing results for {target}')
                 return Action.REUSE
 
-        logging.info(f'{self.name}: running queue_jobs(target={target})')
+        logging.info(f'{self}: queueing jobs for target {target}')
         return Action.QUEUE
 
     def _is_reusable(self, expected_out: ExpectedResultT) -> tuple[bool, Path | None]:
         if self.assume_outputs_exist:
+            return True, None
+
+        if not expected_out:
+            # Marking is reusable. If the stage does not naturally produce any outputs,
+            # it would still need to create some flag file.
             return True, None
 
         if get_config()['workflow'].get('check_expected_outputs'):
@@ -843,34 +840,50 @@ class Workflow:
         return get_batch().run(wait=wait)
 
     @staticmethod
-    def _validate_first_last_stage(
-        stages: list[Stage],
-    ) -> tuple[int | None, int | None]:
+    def _process_first_last_stages(stages: list[Stage], graph: nx.DiGraph):
         """
-        Validating the first_stage and the last_stage parameters.
+        Applying first_stages and last_stages config options. Would skip all stages
+        before first_stages, and all stages after last_stages (i.e. descendants and
+        ancestors on the stages DAG.)
         """
-        first_stage = get_config()['workflow'].get('first_stage')
-        last_stage = get_config()['workflow'].get('last_stage')
-
+        stages_d = {s.name: s for s in stages}
         stage_names = list(stg.name for stg in stages)
-        lower_stage_names = [s.lower() for s in stage_names]
-        first_stage_num = None
-        if first_stage:
-            if first_stage.lower() not in lower_stage_names:
-                logging.critical(
-                    f'Value for --first-stage {first_stage} '
-                    f'not found in available stages: {", ".join(stage_names)}'
-                )
-            first_stage_num = lower_stage_names.index(first_stage.lower())
-        last_stage_num = None
-        if last_stage:
-            if last_stage.lower() not in lower_stage_names:
-                logging.critical(
-                    f'Value for --last-stage {last_stage} '
-                    f'not found in available stages: {", ".join(stage_names)}'
-                )
-            last_stage_num = lower_stage_names.index(last_stage.lower())
-        return first_stage_num, last_stage_num
+        lower_names = {s.lower() for s in stage_names}
+
+        def _get(param: str) -> list[str]:
+            val = get_config()['workflow'].get(param, [])
+            _names = val if isinstance(val, list) else [val]
+            for _name in _names:
+                if _name.lower() not in lower_names:
+                    raise WorkflowError(
+                        f'Value in workflow/{param} "{_name}" must be a stage name '
+                        f'or a subset of stages from the available list: '
+                        f'{", ".join(stage_names)}'
+                    )
+            return _names
+
+        first_stages = _get('first_stages')
+        last_stages = _get('last_stages')
+
+        for fs in first_stages:
+            for descendant in nx.descendants(graph, fs):
+                if not stages_d[descendant].skipped:
+                    logging.info(f'Skipping stage {descendant} (before first {fs})')
+                    stages_d[descendant].skipped = True
+                for grand_descendant in nx.descendants(graph, descendant):
+                    if not stages_d[grand_descendant].assume_outputs_exist:
+                        logging.info(
+                            f'Not checking expected outputs of not immediately required '
+                            f'stage {grand_descendant} (< {descendant} < {fs})'
+                        )
+                        stages_d[grand_descendant].assume_outputs_exist = True
+
+        for ls in last_stages:
+            for ancestor in nx.ancestors(graph, ls):
+                if not stages_d[ancestor].skipped:
+                    logging.info(f'Skipping stage {ancestor} (after last {ls})')
+                    stages_d[ancestor].skipped = True
+                    stages_d[ancestor].assume_outputs_exist = True
 
     def set_stages(
         self,
@@ -882,73 +895,68 @@ class Workflow:
         """
         _stages_d: dict[str, Stage] = dict()
 
-        # First round: initialising stage objects
+        # Round 1: initialising stage objects.
         for cls in requested_stages:
             if cls.__name__ in _stages_d:
                 continue
             _stages_d[cls.__name__] = cls()
 
-        # Second round: adding implicit stages, following dependencies.
+        skip_stages = get_config()['workflow'].get('skip_stages', [])
+        only_stages = get_config()['workflow'].get('only_stages', [])
+
+        # Round 2: depth search to find implicit stages.
         depth = 0
-        while True:  # Might need several rounds to resolve dependencies recursively.
+        while True:  # might require few iterations to resolve dependencies recursively
             depth += 1
             newly_implicitly_added_d = dict()
             for stg in _stages_d.values():
-                for reqcls in stg.required_stages_classes:  # check dependencies
+                if stg.name in skip_stages:
+                    stg.skipped = True
+                    continue  # not searching deeper
+                if only_stages and stg.name not in only_stages:
+                    stg.skipped = True
+
+                # Iterate dependencies:
+                for reqcls in stg.required_stages_classes:
                     if reqcls.__name__ in _stages_d:  # already added
                         continue
                     # Initialising and adding as explicit.
                     reqstg = reqcls()
                     newly_implicitly_added_d[reqstg.name] = reqstg
-                    if reqcls.__name__ in get_config()['workflow'].get(
-                        'skip_stages', []
-                    ):
-                        reqstg.skipped = True
-                        continue
 
             if newly_implicitly_added_d:
                 logging.info(
                     f'Additional implicit stages: '
                     f'{list(newly_implicitly_added_d.keys())}'
                 )
-                # Adding new stages back into the ordered dict, so they are
-                # executed first.
                 _stages_d |= newly_implicitly_added_d
             else:
-                # No new implicit stages added, can stop here.
+                # No new implicit stages added, so can stop the depth-search here
                 break
 
+        # Round 3: set "stage.required_stages" fields to each stage.
         for stg in _stages_d.values():
             stg.required_stages = [
-                _stages_d[cls.__name__] for cls in stg.required_stages_classes
+                _stages_d[cls.__name__]
+                for cls in stg.required_stages_classes
+                if cls.__name__ in _stages_d
             ]
 
-        # Third round: determining order of execution.
-        stage_graph = dict()
+        # Round 4: determining order of execution.
+        dag_node2nodes = dict()  # building a DAG
         for stg in _stages_d.values():
-            stage_graph[stg.name] = set(dep.name for dep in stg.required_stages)
+            dag_node2nodes[stg.name] = set(dep.name for dep in stg.required_stages)
+        dag = nx.DiGraph(dag_node2nodes)
         try:
-            stage_names = list(graphlib.TopologicalSorter(stage_graph).static_order())
-        except graphlib.CycleError:
+            stage_names = list(reversed(list(nx.topological_sort(dag))))
+        except nx.NetworkXUnfeasible:
             logging.error('Circular dependencies found between stages')
             raise
         logging.info(f'Stages in order of execution: {stage_names}')
         stages = [_stages_d[name] for name in stage_names]
 
-        # Forth round: applying first and last stage options.
-        first_stage_num, last_stage_num = self._validate_first_last_stage(stages)
-        for i, stg in enumerate(stages):
-            if first_stage_num is not None and i < first_stage_num:
-                stg.skipped = True
-                if i < first_stage_num - 1:
-                    # Not checking expected outputs of stages before that
-                    stg.assume_outputs_exist = True
-                logging.info(f'Skipping stage {stg.name}')
-                continue
-            if last_stage_num is not None and i > last_stage_num:
-                stg.skipped = True
-                stg.assume_outputs_exist = True
-                continue
+        # Round 5: applying workflow options first_stages and last_stages.
+        self._process_first_last_stages(stages, dag)
 
         if not (final_set_of_stages := [s.name for s in stages if not s.skipped]):
             raise WorkflowError('No stages to run')
@@ -959,10 +967,10 @@ class Workflow:
                 f'Skipped stages: ' f'{[s.name for s in required_skipped_stages]}'
             )
 
-        # Final round: actually adding jobs from the stages.
+        # Round 6: actually adding jobs from the stages.
         for i, stg in enumerate(stages):
             logging.info(f'*' * 60)
-            logging.info(f'Stage {stg}')
+            logging.info(f'Stage #{i + 1}: {stg}')
             stg.output_by_target = stg.queue_for_cohort(get_cohort())
             if errors := self._process_stage_errors(stg.output_by_target):
                 raise WorkflowError(
@@ -971,9 +979,6 @@ class Workflow:
                 )
 
             logging.info(f'')
-            if last_stage_num is not None and i >= last_stage_num:
-                logging.info(f'Last stage was {stg.name}, stopping here')
-                break
 
     @staticmethod
     def _process_stage_errors(

@@ -23,11 +23,17 @@ access_level = 'standard'
 # Process the following samples even if outputs exist:
 #force_samples = []
 
+# Skip these stages:
+#skip_stages = []
+
+# Skip all other stages:
+#only_stages = []
+
 # Start from this stage:
-#first_stage =
+#first_stages = []
 
 # Finish at this stage:
-#last_stage =
+#last_stages = []
 
 # Map of stages to lists of samples, to skip for specific stages
 #[workflow.skip_samples_stages]
@@ -136,8 +142,8 @@ verifybamid = 'verifybamid:2.0.1'
 multiqc = 'multiqc:v1.12'
 fastqc = 'fastqc:v0.11.9_cv8'
 happy = 'hap.py:v0.3.15'
-hail = 'driver:5d04b6d6bb411ea4b8750f40cf39fd0b701ea288-hail-c4eb2b16220d9872f417412ea565902f78739124'
-sm-api = 'driver:5d04b6d6bb411ea4b8750f40cf39fd0b701ea288-hail-c4eb2b16220d9872f417412ea565902f78739124'
+hail = 'driver:14432044df1c5210237727cc10bee817674700c0-hail-48ff6e3a3f08a11ccb5b0ad5366ede25e43837a8'
+sm-api = 'driver:14432044df1c5210237727cc10bee817674700c0-hail-48ff6e3a3f08a11ccb5b0ad5366ede25e43837a8'
 
 [references]
 # Genome build. Only GRCh38 is currently supported.
@@ -230,14 +236,14 @@ clinvar = 'clinvar.GRCh38.ht'
 
 [references.validation]
 prefix = 'validation'
-[references.validation.genome.syndip]
+[references.validation.syndip]
 truth = 'syndip/truth/full.38.20180222.vcf.gz'
 regions = 'syndip/regions/syndip.b38_20180222.bed'
-[references.validation.genome.HG001]
+[references.validation.HG001]
 truth = 'giab/truth/HG001_GRCh38_GIAB_highconf_CG-IllFB-IllGATKHC-Ion-10X-SOLID_CHROM1-X_v.3.3.2_highconf_PGandRTGphasetransfer.vcf.gz'
 regions = 'giab/regions/HG001_GRCh38_GIAB_highconf_CG-IllFB-IllGATKHC-Ion-10X-SOLID_CHROM1-X_v.3.3.2_highconf_nosomaticdel_noCENorHET7.bed'
 
 # Map internally used validation sample external_id to truth sample names
-[validation.genome]
+[validation.sample_map]
 HG001_NA12878 = 'HG001'
 SYNDIP = 'syndip'
