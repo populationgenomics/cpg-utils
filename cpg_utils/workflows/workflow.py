@@ -646,7 +646,9 @@ class Stage(Generic[TargetT], ABC):
             return True, None
 
         if not expected_out:
-            return False, None
+            # Marking is reusable. If the stage does not naturally produce any outputs,
+            # it would still need to create some flag file.
+            return True, None
 
         if get_config()['workflow'].get('check_expected_outputs'):
             paths = []
