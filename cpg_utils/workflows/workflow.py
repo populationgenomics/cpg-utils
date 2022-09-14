@@ -918,15 +918,11 @@ class Workflow:
             depth += 1
             newly_implicitly_added_d = dict()
             for stg in _stages_d.values():
-                # If skip_stages or only_stages defined, stopping search on the
-                # skipped stages.
-                if (
-                    stg.name in skip_stages
-                    or only_stages
-                    and stg.name not in only_stages
-                ):
+                if stg.name in skip_stages:
                     stg.skipped = True
                     continue  # not searching deeper
+                if only_stages and stg.name not in only_stages:
+                    stg.skipped = True
 
                 # Iterate dependencies:
                 for reqcls in stg.required_stages_classes:
