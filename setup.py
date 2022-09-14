@@ -18,11 +18,19 @@ setup(
         'cloudpathlib[all]',
         'toml',
         'frozendict',
-        'coloredlogs',
-        'networkx',
-        'hail',
-        'pytest',
     ],
+    extras_require={
+        'test': [
+            'pytest',
+            'pytest-mock',
+        ],
+        'workflows': [
+            'hail',
+            'coloredlogs',
+            'networkx',
+            'sample-metadata',
+        ],
+    },
     package_data={
         'cpg_utils': ['config-template.toml'],
     },
