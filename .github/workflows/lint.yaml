@@ -15,11 +15,14 @@ jobs:
       with:
         python-version: '3.10'
         cache: 'pip'
-  
-    - name: pre-commit
-      run: |
-        pip install pre-commit pylint
-        pre-commit run --all-files
 
-    - name: Run tests
-      run: python -m unittest test/test_analysis_runner.py
+    - name: Install packages
+      run: |
+        pip install .
+        pip install -r requirements-dev.txt
+
+    - name: pre-commit
+      run: pre-commit run --all-files
+
+    - name: Run unit tests
+      run: python -m pytest test
