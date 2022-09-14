@@ -474,13 +474,8 @@ class Stage(Generic[TargetT], ABC):
         Collects outputs from all dependencies and create input for this stage
         """
         inputs = StageInput(self)
-        logging.debug(f'Stage._make_inputs stage={self}')
         for prev_stage in self.required_stages:
-            logging.debug(f'Stage._make_inputs stage={self}, prev_stage={prev_stage}')
             for _, stage_output in prev_stage.output_by_target.items():
-                logging.debug(
-                    f'Stage._make_inputs stage={self}, prev_stage={prev_stage}, stage_output={stage_output}'
-                )
                 if stage_output:
                     inputs.add_other_stage_output(stage_output)
         return inputs
@@ -520,9 +515,6 @@ class Stage(Generic[TargetT], ABC):
         if not action:
             action = self._get_action(target)
 
-        logging.debug(
-            f'Stage._queue_jobs_with_checks: stage={self}, target={target} action={action}'
-        )
         inputs = self._make_inputs()
         expected_out = self.expected_outputs(target)
 
@@ -589,7 +581,7 @@ class Stage(Generic[TargetT], ABC):
         ) and self.name in d:
             skip_targets = d[self.name]
             if target.target_id in skip_targets:
-                logging.info(f'{self.name}: requested to skip {target}')
+                logging.info(f'{self}: requested to skip {target}')
                 return Action.SKIP
 
         expected_out = self.expected_outputs(target)
@@ -600,7 +592,7 @@ class Stage(Generic[TargetT], ABC):
                 return Action.REUSE
             if get_config()['workflow'].get('skip_samples_with_missing_input'):
                 logging.warning(
-                    f'Skipping {target}: stage {self.name} is required, '
+                    f'Skipping {target}: stage {self} is required, '
                     f'but is marked as skipped, and some expected outputs for the '
                     f'target do not exist: {first_missing_path}'
                 )
@@ -616,7 +608,7 @@ class Stage(Generic[TargetT], ABC):
                 return Action.REUSE
             else:
                 raise ValueError(
-                    f'Stage {self.name} is required, but is skipped, and '
+                    f'Stage {self} is required, but is skipped, and '
                     f'the following expected outputs for target {target} do not exist: '
                     f'{first_missing_path}'
                 )
@@ -624,21 +616,21 @@ class Stage(Generic[TargetT], ABC):
         if reusable and not first_missing_path:
             if target.forced:
                 logging.info(
-                    f'{self.name}: can reuse, but forcing the target '
+                    f'{self}: can reuse, but forcing the target '
                     f'{target} to rerun this stage'
                 )
                 return Action.QUEUE
             elif self.forced:
                 logging.info(
-                    f'{self.name}: can reuse, but forcing the stage '
+                    f'{self}: can reuse, but forcing the stage '
                     f'to rerun, target={target}'
                 )
                 return Action.QUEUE
             else:
-                logging.info(f'{self.name}: reusing results for {target}')
+                logging.info(f'{self}: reusing results for {target}')
                 return Action.REUSE
 
-        logging.info(f'{self.name}: running queue_jobs(target={target})')
+        logging.info(f'{self}: queueing jobs for target {target}')
         return Action.QUEUE
 
     def _is_reusable(self, expected_out: ExpectedResultT) -> tuple[bool, Path | None]:
