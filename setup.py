@@ -21,6 +21,7 @@ setup(
         'coloredlogs',
         'networkx',
         'hail',
+        'pytest',
     ],
     package_data={
         'cpg_utils': ['config-template.toml'],
