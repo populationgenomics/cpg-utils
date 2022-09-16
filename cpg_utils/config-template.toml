@@ -149,9 +149,6 @@ sm-api = 'driver:14432044df1c5210237727cc10bee817674700c0-hail-48ff6e3a3f08a11cc
 # Genome build. Only GRCh38 is currently supported.
 genome_build = 'GRCh38'
 
-# Paths to reference files. Paths can be absolute
-# or relative to the `workflow.reference_prefix` config option.
-
 # Site list for somalier https://github.com/brentp/somalier/releases/tag/v0.2.15
 somalier_sites = 'somalier/v0/sites.hg38.vcf.gz'
 # Somalier 1kg data for the "ancestry" command

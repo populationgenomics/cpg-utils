@@ -24,6 +24,7 @@ _batch: Optional['Batch'] = None
 
 def get_batch(name: str | None = None) -> 'Batch':
     global _batch
+    backend: hb.Backend
     if _batch is None:
         if get_config()['hail'].get('backend', 'batch') == 'local':
             logging.info('Initialising Hail Batch with local backend')
@@ -59,12 +60,13 @@ class Batch(hb.Batch):
         self.job_by_tool = dict()
         self.total_job_num = 0
         self.pool_label = pool_label
-        self._copy_configs_to_remote()
+        if not get_config()['hail'].get('dry_run') and not isinstance(
+            self._backend, hb.LocalBackend
+        ):
+            self._copy_configs_to_remote()
 
     def _copy_configs_to_remote(self):
         """If configs are local files, copy them to remote"""
-        if isinstance(self._backend, hb.LocalBackend):
-            return
         remote_dir = to_path(self._backend.remote_tmpdir) / 'config'
         config_path = remote_dir / (str(uuid.uuid4()) + '.toml')
         with config_path.open('w') as f:
