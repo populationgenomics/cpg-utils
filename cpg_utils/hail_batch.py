@@ -40,9 +40,9 @@ def init_batch(**kwargs):
         return  # already initialised
     dataset = get_config()['workflow']['dataset']
     kwargs.setdefault('token', os.environ.get('HAIL_TOKEN'))
+    kwargs.setdefault('default_reference', genome_build())
     asyncio.get_event_loop().run_until_complete(
         hl.init_batch(
-            default_reference=genome_build(),
             billing_project=get_config()['hail']['billing_project'],
             remote_tmpdir=remote_tmpdir(f'cpg-{dataset}-hail'),
             **kwargs,
