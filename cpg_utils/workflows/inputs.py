@@ -39,6 +39,9 @@ def create_cohort() -> Cohort:
     for dataset_name in dataset_names:
         dataset = cohort.create_dataset(dataset_name)
         logging.info(f'Getting samples for dataset {dataset_name}')
+        if get_config()['workflow']['access_level'] == 'test':
+            dataset_name += '-test'
+        
         sample_entries = get_metamist().sapi.get_samples(
             body_get_samples={'project_ids': [dataset_name]}
         )

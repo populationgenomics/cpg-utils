@@ -384,11 +384,14 @@ class Metamist:
         """
         dataset = dataset or self.default_dataset
 
+        if get_config()['workflow']['access_level'] == 'test':
+            dataset += '-test'
+
         families = self.fapi.get_families(dataset)
         family_ids = [family['id'] for family in families]
         ped_entries = self.fapi.get_pedigree(
             internal_family_ids=family_ids,
-            response_type='json',
+            export_type='json',
             project=dataset,
             replace_with_participant_external_ids=True,
         )
