@@ -2,9 +2,7 @@
 
 from typing import Optional
 import traceback
-import logging
 import google.auth
-from google.auth.exceptions import DefaultCredentialsError
 from google.auth.transport.requests import Request
 from google.cloud import secretmanager
 from google.oauth2 import id_token
@@ -93,25 +91,14 @@ def write_secret(project_id: str, secret_name: str, secret_value: str) -> None:
 
 
 def get_google_identity_token(audience: str) -> str:
-    """
-    Returns a Google identity token for the given audience.
-    """
-
-    # Suppress DEBUG / WARNING messages from google-auth library,
-    # in case we're not running on GCE. This gets restored at the end.
-    logger = logging.getLogger()
-    previous_level = logger.getEffectiveLevel()
-    logger.setLevel(logging.ERROR)
-
-    # Need to support two distinct cases:
-    # - service accounts on GCE VMs (default),
-    # - human users with default credentials.
-    try:
-        return id_token.fetch_id_token(Request(), audience=audience)
-    except DefaultCredentialsError:
-        # https://stackoverflow.com/a/55804230
-        creds, _ = google.auth.default()
-        creds.refresh(Request())
+    """Returns a Google identity token for the given audience."""
+    # Two distinct cases require separate flows:
+    # - default credentials (either human accounts or credentials set through the
+    #   GOOGLE_APPLICATION_CREDENTIALS environment variable), and
+    # - the service accounts underlying GCE VMs (by querying the GCP metadata
+    #   server).
+    creds, _ = google.auth.default()  # https://stackoverflow.com/a/55804230
+    creds.refresh(Request())
+    if hasattr(creds, 'id_token'):
         return creds.id_token
-    finally:
-        logger.setLevel(previous_level)
+    return id_token.fetch_id_token(Request(), audience=audience)  # GCE VM
