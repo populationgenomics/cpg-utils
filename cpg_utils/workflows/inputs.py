@@ -210,9 +210,11 @@ def _populate_participants(cohort: Cohort) -> None:
     """
     for dataset in cohort.get_datasets():
         logging.info(f'Reading participants IDs for dataset {dataset}')
+        if get_config()['workflow']['access_level'] == 'test':
+            dataset_name = dataset.name + '-test'
         pid_sid_multi = (
             get_metamist().papi.get_external_participant_id_to_internal_sample_id(
-                dataset.name
+                dataset_name
             )
         )
         participant_by_sid = {}
