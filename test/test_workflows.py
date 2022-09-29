@@ -271,7 +271,7 @@ def test_status_reporter(mocker: MockFixture):
         },
     )
 
-    def mock_create_new_analysis(self, project, analysis_model) -> int:
+    def mock_create_new_analysis(_, project, analysis_model) -> int:
         print(f'Analysis model in project {project}: {analysis_model}')
         return 1  # metamist "analysis" entry ID
 
