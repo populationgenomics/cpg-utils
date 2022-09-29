@@ -98,9 +98,6 @@ class Batch(hb.Batch):
         part = attributes.get('part')
         label = attributes.get('label', name)
         tool = attributes.get('tool')
-        reuse = attributes.get('reuse', False)
-        if reuse and not tool:
-            tool = '[reuse]'
 
         assert isinstance(stage, str | None)
         assert isinstance(dataset, str | None)
