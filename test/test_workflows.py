@@ -13,7 +13,6 @@ from cpg_utils.workflows.inputs import get_cohort
 from cpg_utils.workflows.targets import Sample, Cohort
 from cpg_utils.workflows.utils import timestamp
 from cpg_utils.workflows.workflow import (
-    Workflow,
     SampleStage,
     StageInput,
     StageOutput,
