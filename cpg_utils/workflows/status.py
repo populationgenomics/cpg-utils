@@ -10,7 +10,7 @@ from cpg_utils.hail_batch import image_path, command
 from hailtop.batch.job import Job
 from hailtop.batch import Batch, Resource
 
-from .targets import Target, Sample
+from .targets import Target
 from .metamist import get_metamist, AnalysisStatus, MetamistError
 
 
@@ -51,8 +51,7 @@ class StatusReporter(ABC):
 
 class MetamistStatusReporter(StatusReporter):
     """
-    Job status reporter. Works through creating and updating sample-metadata
-    database Analysis entries.
+    Job status reporter. Works through creating and updating metamist Analysis entries.
     """
 
     def __init__(self):
@@ -67,14 +66,12 @@ class MetamistStatusReporter(StatusReporter):
         jobs: list[Job] | None = None,
         prev_jobs: list[Job] | None = None,
         meta: dict | None = None,
+        job_attrs: dict[str, str] | None = None,
     ) -> list[Job]:
         """
         Create "queued" analysis and insert "in_progress" and "completed" updater jobs.
         """
         if not jobs:
-            return []
-
-        if isinstance(target, Sample) and target.dataset.name == 'validation':
             return []
 
         # 1. Create a "queued" analysis
@@ -95,7 +92,7 @@ class MetamistStatusReporter(StatusReporter):
             analysis_id=aid,
             status=AnalysisStatus.IN_PROGRESS,
             analysis_type=analysis_type,
-            job_attrs=target.get_job_attrs(),
+            job_attrs=(job_attrs or {}) | dict(tool='metamist'),
         )
         # 2. Queue a job that updates the status to "completed"
         completed_j = self.add_status_updater_job(
@@ -103,7 +100,7 @@ class MetamistStatusReporter(StatusReporter):
             analysis_id=aid,
             status=AnalysisStatus.COMPLETED,
             analysis_type=analysis_type,
-            job_attrs=target.get_job_attrs(),
+            job_attrs=(job_attrs or {}) | dict(tool='metamist'),
             output_path=output if not isinstance(output, str | dict) else None,
         )
 

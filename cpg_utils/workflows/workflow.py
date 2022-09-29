@@ -556,6 +556,7 @@ class Stage(Generic[TargetT], ABC):
                 jobs=outputs.jobs,
                 prev_jobs=inputs.get_jobs(target),
                 meta=outputs.meta,
+                job_attrs=self.get_job_attrs(target),
             )
         return outputs
 
@@ -773,6 +774,14 @@ def get_workflow() -> 'Workflow':
     if _workflow is None:
         _workflow = Workflow()
     return _workflow
+
+
+def run_workflow(
+    stages: list[StageDecorator] | None = None,
+    wait: bool | None = False,
+) -> 'Workflow':
+    get_workflow().run(stages=stages, wait=wait)
+    return get_workflow()
 
 
 class Workflow:
