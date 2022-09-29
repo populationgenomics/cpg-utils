@@ -98,6 +98,8 @@ class Batch(hb.Batch):
         part = attributes.get('part')
         label = attributes.get('label', name)
         tool = attributes.get('tool')
+        if not tool and name.endswith('Dataproc cluster'):
+            tool = 'hailctl dataproc'
 
         assert isinstance(stage, str | None)
         assert isinstance(dataset, str | None)
