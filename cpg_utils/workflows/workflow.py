@@ -556,6 +556,7 @@ class Stage(Generic[TargetT], ABC):
                 jobs=outputs.jobs,
                 prev_jobs=inputs.get_jobs(target),
                 meta=outputs.meta,
+                job_attrs=self.get_job_attrs(target),
             )
         return outputs
 

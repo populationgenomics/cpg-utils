@@ -4,9 +4,10 @@ Test Hail Query functions.
 
 import hail as hl
 import toml
+from pytest_mock import MockFixture
 
-from cpg_utils import to_path
-from cpg_utils.config import set_config_paths
+from cpg_utils import to_path, Path
+from cpg_utils.config import set_config_paths, update_dict
 from cpg_utils.workflows.batch import get_batch
 from cpg_utils.workflows.inputs import get_cohort
 from cpg_utils.workflows.targets import Sample, Cohort
@@ -26,16 +27,17 @@ tmp_dir_path = to_path(__file__).parent / 'results' / timestamp()
 tmp_dir_path = tmp_dir_path.absolute()
 tmp_dir_path.mkdir(parents=True, exist_ok=True)
 
-config_toml = f"""
+DEFAULT_CONF = f"""
 [workflow]
 dataset_gcp_project = 'fewgenomes'
 access_level = 'test'
 dataset = 'fewgenomes'
+sequencing_type = 'genome'
+
 check_inputs = false
 check_intermediates = false
 check_expected_outputs = false
 path_scheme = 'local'
-local_dir = '{str(tmp_dir_path)}'
 
 [hail]
 billing_project = 'fewgenomes'
@@ -44,20 +46,22 @@ backend = 'local'
 """
 
 
-def _set_config():
-    config_path = tmp_dir_path / 'config.toml'
+def _set_config(dir_path: Path, extra_conf: dict | None = None):
+    d = toml.loads(DEFAULT_CONF)
+    d['workflow']['local_dir'] = str(dir_path)
+    if extra_conf:
+        update_dict(d, extra_conf)
+    config_path = dir_path / 'config.toml'
     with config_path.open('w') as f:
-        toml.dump(toml.loads(config_toml), f)
+        toml.dump(d, f)
     set_config_paths([str(config_path)])
-
-
-_set_config()
 
 
 def test_batch_job():
     """
     Test creating a job and running a batch.
     """
+    _set_config(tmp_dir_path)
     b = get_batch('Test batch job')
     j1 = b.new_job('Jo b1')
     text = 'success'
@@ -84,6 +88,7 @@ def test_batch_python_job():
     """
     Testing calling a python job.
     """
+    _set_config(tmp_dir_path)
     b = get_batch('Test batch python job')
     j = b.new_python_job('Test python job')
 
@@ -107,10 +112,11 @@ def test_batch_python_job():
     assert result == 3, result
 
 
-def test_cohort(mocker):
+def test_cohort(mocker: MockFixture):
     """
     Testing creating a Cohort object from metamist mocks.
     """
+    _set_config(tmp_dir_path)
 
     def mock_get_samples(  # pylint: disable=unused-argument
         *args, **kwargs
@@ -183,10 +189,11 @@ def test_cohort(mocker):
     assert cohort.get_samples()[0].id == 'CPG01'
 
 
-def test_workflow(mocker):
+def test_workflow(mocker: MockFixture):
     """
     Testing running a workflow from a mock cohort.
     """
+    _set_config(tmp_dir_path)
 
     def mock_create_cohort() -> Cohort:
         c = Cohort()
@@ -246,3 +253,61 @@ def test_workflow(mocker):
         result = f.read()
         print(result)
         assert result.split() == ['CPG01_done', 'CPG02_done'], result
+
+
+def test_status_reporter(mocker: MockFixture):
+    """
+    Testing metamist status reporter.
+    """
+    _set_config(
+        tmp_dir_path,
+        {
+            'workflow': {
+                'status_reporter': 'metamist',
+            },
+            'hail': {
+                'dry_run': True,
+            },
+        },
+    )
+
+    def mock_create_new_analysis(self, project, analysis_model) -> int:
+        print(f'Analysis model in project {project}: {analysis_model}')
+        return 1  # metamist "analysis" entry ID
+
+    mocker.patch(
+        'sample_metadata.apis.AnalysisApi.create_new_analysis', mock_create_new_analysis
+    )
+
+    def mock_create_cohort() -> Cohort:
+        c = Cohort()
+        ds = c.create_dataset('my_dataset')
+        ds.add_sample('CPG01', external_id='SAMPLE1')
+        ds.add_sample('CPG02', external_id='SAMPLE2')
+        return c
+
+    mocker.patch('cpg_utils.workflows.inputs.create_cohort', mock_create_cohort)
+
+    @stage(analysis_type='qc')
+    class MyQcStage(SampleStage):
+        """
+        Just a sample-level stage.
+        """
+
+        def expected_outputs(self, sample: Sample) -> ExpectedResultT:
+            return dataset_path(f'{sample.id}.tsv')
+
+        def queue_jobs(self, sample: Sample, inputs: StageInput) -> StageOutput | None:
+            j = self.b.new_job('Echo', self.get_job_attrs(sample) | dict(tool='echo'))
+            j.command(f'echo {sample.id}_done >> {j.output}')
+            self.b.write_output(j.output, str(self.expected_outputs(sample)))
+            print(f'Writing to {self.expected_outputs(sample)}')
+            return self.make_outputs(sample, self.expected_outputs(sample), [j])
+
+    workflow = Workflow(stages=[MyQcStage])
+    workflow.run()
+
+    assert (
+        get_batch().job_by_tool['metamist']['job_n']
+        == len(get_cohort().get_samples()) * 2
+    )
