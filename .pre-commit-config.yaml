@@ -8,8 +8,6 @@ repos:
     exclude: '\.*conda/.*'
   - id: end-of-file-fixer
     exclude: '\.bumpversion\.cfg'
-  - id: trailing-whitespace
-    exclude: '\.txt$|\.tsv$|.*picard_files/.*'
   - id: check-case-conflict
   - id: check-merge-conflict
   - id: detect-private-key
