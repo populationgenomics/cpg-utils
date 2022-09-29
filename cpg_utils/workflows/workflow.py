@@ -776,6 +776,14 @@ def get_workflow() -> 'Workflow':
     return _workflow
 
 
+def run_workflow(
+    stages: list[StageDecorator] | None = None,
+    wait: bool | None = False,
+) -> 'Workflow':
+    get_workflow().run(stages=stages, wait=wait)
+    return get_workflow()
+
+
 class Workflow:
     """
     Encapsulates a Hail Batch object, stages, and a cohort of datasets of samples.

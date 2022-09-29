@@ -12,6 +12,7 @@ from cpg_utils.workflows.batch import get_batch
 from cpg_utils.workflows.inputs import get_cohort
 from cpg_utils.workflows.targets import Sample, Cohort
 from cpg_utils.workflows.utils import timestamp
+from cpg_utils.workflows import workflow
 from cpg_utils.workflows.workflow import (
     SampleStage,
     StageInput,
@@ -19,7 +20,7 @@ from cpg_utils.workflows.workflow import (
     ExpectedResultT,
     CohortStage,
     stage,
-    get_workflow,
+    run_workflow,
 )
 from cpg_utils.hail_batch import dataset_path, command
 
@@ -245,7 +246,8 @@ def test_workflow(mocker: MockFixture):
             print(f'Writing to {self.expected_outputs(cohort)}')
             return self.make_outputs(cohort, self.expected_outputs(cohort))
 
-    get_workflow().run(stages=[MyCohortStage])
+    workflow._workflow = None
+    run_workflow(stages=[MyCohortStage])
 
     print(f'Checking result in {output_path}:')
     with output_path.open() as f:
@@ -303,7 +305,8 @@ def test_status_reporter(mocker: MockFixture):
             print(f'Writing to {self.expected_outputs(sample)}')
             return self.make_outputs(sample, self.expected_outputs(sample), [j])
 
-    get_workflow().run(stages=[MyQcStage])
+    workflow._workflow = None
+    run_workflow(stages=[MyQcStage])
 
     assert (
         get_batch().job_by_tool['metamist']['job_n']
