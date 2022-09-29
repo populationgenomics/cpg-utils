@@ -39,15 +39,16 @@ def create_cohort() -> Cohort:
     for dataset_name in dataset_names:
         dataset = cohort.create_dataset(dataset_name)
         logging.info(f'Getting samples for dataset {dataset_name}')
+        metamist_proj = dataset_name 
         if get_config()['workflow']['access_level'] == 'test':
-            dataset_name += '-test'
+            metamist_proj += '-test'
 
         sample_entries = get_metamist().sapi.get_samples(
-            body_get_samples={'project_ids': [dataset_name]}
+            body_get_samples={'project_ids': [metamist_proj]}
         )
         sample_entries = _filter_samples(
             sample_entries,
-            dataset_name,
+            metamist_proj,
             skip_samples,
             only_samples,
         )
@@ -210,11 +211,12 @@ def _populate_participants(cohort: Cohort) -> None:
     """
     for dataset in cohort.get_datasets():
         logging.info(f'Reading participants IDs for dataset {dataset}')
+        metamist_proj = dataset.name
         if get_config()['workflow']['access_level'] == 'test':
-            dataset_name = dataset.name + '-test'
+            metamist_proj += '-test'
         pid_sid_multi = (
             get_metamist().papi.get_external_participant_id_to_internal_sample_id(
-                dataset_name
+                metamist_proj
             )
         )
         participant_by_sid = {}
