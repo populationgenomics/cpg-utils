@@ -108,7 +108,6 @@ class Batch(hb.Batch):
         assert isinstance(participant_id, str | None)
         assert isinstance(part, str | None)
         assert isinstance(label, str | None)
-        assert isinstance(reuse, bool)
 
         name = make_job_name(
             name=name,
@@ -116,7 +115,6 @@ class Batch(hb.Batch):
             participant_id=participant_id,
             dataset=dataset,
             part=part,
-            reuse=reuse,
         )
 
         if label not in self.job_by_label:
@@ -192,7 +190,6 @@ def make_job_name(
     participant_id: str | None = None,
     dataset: str | None = None,
     part: str | None = None,
-    reuse: bool = False,
 ) -> str:
     """
     Extend the descriptive job name to reflect job attributes.
@@ -205,6 +202,4 @@ def make_job_name(
         name = f'{dataset}: {name}'
     if part:
         name += f', {part}'
-    if reuse:
-        name += ' [reuse]'
     return name

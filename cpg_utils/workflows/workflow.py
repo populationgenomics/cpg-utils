@@ -666,18 +666,6 @@ class Stage(Generic[TargetT], ABC):
             # Do not check the files' existence, assume they don't exist:
             return False, None
 
-    def _queue_reuse_job(
-        self, target: TargetT, found_paths: Path | dict[str, Path]
-    ) -> StageOutput | None:
-        """
-        Queues a [reuse] Job
-        """
-        return self.make_outputs(
-            target=target,
-            data=found_paths,
-            jobs=[get_batch().new_job(f'{self.name} [reuse]', target.get_job_attrs())],
-        )
-
     def get_job_attrs(self, target: TargetT | None = None) -> dict[str, str]:
         """
         Create Hail Batch Job attributes dictionary
