@@ -49,8 +49,6 @@ def test_batch_job():
     """
     Test creating a job and running a batch.
     """
-    from cpg_utils.workflows.batch import get_batch
-
     _set_config(tmp_dir_path)
     b = get_batch('Test batch job')
     j1 = b.new_job('Jo b1')
