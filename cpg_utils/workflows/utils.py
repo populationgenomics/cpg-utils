@@ -16,6 +16,7 @@ from typing import cast
 from hailtop.batch import ResourceFile
 
 from cpg_utils import Path, to_path
+from cpg_utils.config import get_config
 
 
 @lru_cache
@@ -65,7 +66,7 @@ def exists_not_cached(path: Path | str, verbose: bool = True) -> bool:
 
 def can_reuse(
     path: list[Path] | Path | str | None,
-    overwrite: bool,
+    overwrite: bool | None = None,
 ) -> bool:
     """
     Checks if `fpath` is good to reuse in the analysis: it exists
@@ -73,6 +74,9 @@ def can_reuse(
 
     If `fpath` is a collection, it requires all files in it to exist.
     """
+    if overwrite is None:
+        overwrite = get_config()['workflow'].get('check_intermediates', True) is False
+
     if overwrite:
         return False
 
