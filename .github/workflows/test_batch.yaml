@@ -1,4 +1,4 @@
-name: Test
+name: Test workflows/batch
 on:
   # Building on pull-requests, manual dispatch, and pushes to main; but restricting
   # publishing only to main pushes and manual dispatch with `if`s in specific steps.
@@ -9,7 +9,7 @@ on:
       - main
 
 jobs:
-  test:
+  test_workflows_batch:
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -28,4 +28,4 @@ jobs:
         run: python -c "import cpg_utils.cloud"
 
       - name: Run unit tests
-        run: python -m pytest test
+        run: python -m pytest test/test_batch.py
