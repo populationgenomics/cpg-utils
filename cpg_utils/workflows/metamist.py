@@ -5,6 +5,7 @@ Helpers to communicate with the sample-metadata database.
 import logging
 import pprint
 import traceback
+from collections import defaultdict
 from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
@@ -158,6 +159,65 @@ class Metamist:
         self.papi = ParticipantApi()
         self.fapi = FamilyApi()
 
+    def get_sample_entries(self, dataset_name: str) -> list[dict]:
+        """
+        Retrieve sample entries for a dataset, in the context of access level
+        and filtering options.
+        """
+        metamist_proj = dataset_name
+        if get_config()['workflow']['access_level'] == 'test':
+            metamist_proj += '-test'
+
+        skip_samples = get_config()['workflow'].get('skip_samples', [])
+        only_samples = get_config()['workflow'].get('only_samples', [])
+
+        sample_entries = self.sapi.get_samples(
+            body_get_samples={'project_ids': [metamist_proj]}
+        )
+        sample_entries = _filter_sample_entries(
+            sample_entries,
+            dataset_name,
+            skip_samples=skip_samples,
+            only_samples=only_samples,
+        )
+        return sample_entries
+
+    def get_sequence_entries_by_sid(
+        self,
+        sample_ids: list[str],
+        sequencing_type: str,
+    ) -> dict[str, list[dict]]:
+        """
+        Retrieve sample entries for a dataset, in the context of sample IDs
+        and sequencing type.
+        """
+        entries: list[dict] = self.seqapi.get_sequences_by_sample_ids(
+            sample_ids, get_latest_sequence_only=False
+        )
+        entries = [seq for seq in entries if str(seq['type']) == sequencing_type]
+        entries_by_sid = defaultdict(list)
+        for entry in entries:
+            entries_by_sid[entry['sample_id']].append(entry)
+        return entries_by_sid
+
+    def get_participant_entries_by_sid(self, dataset_name: str) -> dict[str, str]:
+        """
+        Retrieve participant entries for a dataset, in the context of access level.
+        """
+        metamist_proj = dataset_name
+        if get_config()['workflow']['access_level'] == 'test':
+            metamist_proj += '-test'
+
+        pid_sid_multi = self.papi.get_external_participant_id_to_internal_sample_id(
+            metamist_proj
+        )
+        participant_by_sid = {}
+        for group in pid_sid_multi:
+            pid = group[0]
+            for sid in group[1:]:
+                participant_by_sid[sid] = pid.strip()
+        return participant_by_sid
+
     def update_analysis(self, analysis: Analysis, status: AnalysisStatus):
         """
         Update "status" of an Analysis entry.
@@ -179,12 +239,12 @@ class Metamist:
         """
         Query the DB to find the last completed joint-calling analysis for the samples.
         """
-        project = dataset or self.default_dataset
+        metamist_proj = dataset or self.default_dataset
         if get_config()['workflow']['access_level'] == 'test':
-            project += '-test'
+            metamist_proj += '-test'
         try:
             data = self.aapi.get_latest_complete_analysis_for_type(
-                project=project,
+                project=metamist_proj,
                 analysis_type=models.AnalysisType('joint-calling'),
             )
         except ApiException:
@@ -198,7 +258,7 @@ class Metamist:
             return None
         return a
 
-    def find_analyses_by_sid(
+    def get_analyses_by_sid(
         self,
         sample_ids: list[str],
         analysis_type: AnalysisType,
@@ -212,16 +272,18 @@ class Metamist:
         sample (e.g. cram, gvcf).
         """
         dataset = dataset or self.default_dataset
-        project = dataset or self.default_dataset
+        metamist_proj = dataset or self.default_dataset
         if get_config()['workflow']['access_level'] == 'test':
-            project += '-test'
+            metamist_proj += '-test'
 
         analysis_per_sid: dict[str, Analysis] = dict()
 
-        logging.info(f'Querying {analysis_type} analysis entries for {project}...')
+        logging.info(
+            f'Querying {analysis_type} analysis entries for {metamist_proj}...'
+        )
         datas = self.aapi.query_analyses(
             models.AnalysisQueryModel(
-                projects=[project],
+                projects=[metamist_proj],
                 sample_ids=sample_ids,
                 type=models.AnalysisType(analysis_type.value),
                 status=models.AnalysisStatus(analysis_status.value),
@@ -238,7 +300,7 @@ class Metamist:
             assert len(a.sample_ids) == 1, data
             analysis_per_sid[list(a.sample_ids)[0]] = a
         logging.info(
-            f'Querying {analysis_type} analysis entries for {project}: '
+            f'Querying {analysis_type} analysis entries for {metamist_proj}: '
             f'found {len(analysis_per_sid)}'
         )
         return analysis_per_sid
@@ -256,9 +318,9 @@ class Metamist:
         Tries to create an Analysis entry, returns its id if successful.
         """
         dataset = dataset or self.default_dataset
-        project = dataset or self.default_dataset
+        metamist_proj = dataset or self.default_dataset
         if get_config()['workflow']['access_level'] == 'test':
-            project += '-test'
+            metamist_proj += '-test'
 
         if isinstance(type_, AnalysisType):
             type_ = type_.value
@@ -273,14 +335,16 @@ class Metamist:
             meta=meta or {},
         )
         try:
-            aid = self.aapi.create_new_analysis(project=project, analysis_model=am)
+            aid = self.aapi.create_new_analysis(
+                project=metamist_proj, analysis_model=am
+            )
         except ApiException:
             traceback.print_exc()
             return None
         else:
             logging.info(
                 f'Created Analysis(id={aid}, type={type_}, status={status}, '
-                f'output={str(output)}) in {project}'
+                f'output={str(output)}) in {metamist_proj}'
             )
             return aid
 
@@ -382,14 +446,16 @@ class Metamist:
         """
         Retrieve PED lines for a specified SM project, with external participant IDs.
         """
-        dataset = dataset or self.default_dataset
+        metamist_proj = dataset or self.default_dataset
+        if get_config()['workflow']['access_level'] == 'test':
+            metamist_proj += '-test'
 
-        families = self.fapi.get_families(dataset)
+        families = self.fapi.get_families(metamist_proj)
         family_ids = [family['id'] for family in families]
         ped_entries = self.fapi.get_pedigree(
             internal_family_ids=family_ids,
             response_type='json',
-            project=dataset,
+            project=metamist_proj,
             replace_with_participant_external_ids=True,
         )
 
@@ -567,3 +633,30 @@ class Sequence:
                 )
 
             return fastq_pairs
+
+
+def _filter_sample_entries(
+    entries: list[dict[str, str]],
+    dataset_name: str,
+    skip_samples: list[str] | None = None,
+    only_samples: list[str] | None = None,
+) -> list[dict]:
+    """
+    Apply the only_samples and skip_samples filters to sample entries.
+    """
+
+    filtered_entries = []
+    for entry in entries:
+        cpgid = entry['id']
+        extid = entry['external_id']
+        if only_samples:
+            if cpgid in only_samples or extid in only_samples:
+                logging.info(f'Picking sample: {dataset_name}|{cpgid}|{extid}')
+            else:
+                continue
+        if skip_samples:
+            if cpgid in skip_samples or extid in skip_samples:
+                logging.info(f'Skipping sample: {dataset_name}|{cpgid}|{extid}')
+                continue
+        filtered_entries.append(entry)
+    return filtered_entries
