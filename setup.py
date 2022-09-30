@@ -18,7 +18,6 @@ setup(
         'cloudpathlib[all]',
         'toml',
         'frozendict',
-        'coloredlogs',
     ],
     extras_require={
         'test': [
