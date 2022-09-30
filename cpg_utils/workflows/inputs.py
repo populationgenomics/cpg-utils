@@ -32,26 +32,11 @@ def create_cohort() -> Cohort:
     skip_datasets = get_config()['workflow'].get('skip_datasets', [])
     dataset_names = [d for d in dataset_names if d not in skip_datasets]
 
-    skip_samples = get_config()['workflow'].get('skip_samples', [])
-    only_samples = get_config()['workflow'].get('only_samples', [])
-
     cohort = Cohort()
     for dataset_name in dataset_names:
         dataset = cohort.create_dataset(dataset_name)
         logging.info(f'Getting samples for dataset {dataset_name}')
-        metamist_proj = dataset_name 
-        if get_config()['workflow']['access_level'] == 'test':
-            metamist_proj += '-test'
-
-        sample_entries = get_metamist().sapi.get_samples(
-            body_get_samples={'project_ids': [metamist_proj]}
-        )
-        sample_entries = _filter_samples(
-            sample_entries,
-            metamist_proj,
-            skip_samples,
-            only_samples,
-        )
+        sample_entries = get_metamist().get_sample_entries(dataset_name)
         for entry in sample_entries:
             dataset.add_sample(
                 id=str(entry['id']),
@@ -61,8 +46,10 @@ def create_cohort() -> Cohort:
 
     if not cohort.get_datasets():
         msg = 'No datasets populated'
-        if skip_samples or only_samples or skip_datasets:
-            msg += ' (after skipping/picking samples)'
+        if 'skip_samples' in get_config()['workflow']:
+            msg += ' (after skipping samples)'
+        if 'only_samples' in get_config()['workflow']:
+            msg += ' (after picking samples)'
         logging.warning(msg)
         return cohort
 
@@ -100,33 +87,6 @@ def _filter_sequencing_type(cohort: Cohort, sequencing_type: str):
                 s.active = False
 
 
-def _filter_samples(
-    entries: list[dict[str, str]],
-    dataset_name: str,
-    skip_samples: list[str] | None = None,
-    only_samples: list[str] | None = None,
-) -> list[dict]:
-    """
-    Apply the only_samples and skip_samples filters.
-    """
-
-    filtered_entries = []
-    for entry in entries:
-        cpgid = entry['id']
-        extid = entry['external_id']
-        if only_samples:
-            if cpgid in only_samples or extid in only_samples:
-                logging.info(f'Picking sample: {dataset_name}|{cpgid}|{extid}')
-            else:
-                continue
-        if skip_samples:
-            if cpgid in skip_samples or extid in skip_samples:
-                logging.info(f'Skipping sample: {dataset_name}|{cpgid}|{extid}')
-                continue
-        filtered_entries.append(entry)
-    return filtered_entries
-
-
 def _populate_alignment_inputs(
     cohort: Cohort,
     sequencing_type: str,
@@ -136,36 +96,28 @@ def _populate_alignment_inputs(
     Populate sequencing inputs for samples.
     """
     assert cohort.get_sample_ids()
-    found_seqs: list[dict] = get_metamist().seqapi.get_sequences_by_sample_ids(
-        cohort.get_sample_ids(), get_latest_sequence_only=False
+
+    seq_entries_by_sid = get_metamist().get_sequence_entries_by_sid(
+        cohort.get_sample_ids(), sequencing_type=sequencing_type
     )
-    found_seqs = [seq for seq in found_seqs if str(seq['type']) == sequencing_type]
-    found_seqs_by_sid = defaultdict(list)
-    for found_seq in found_seqs:
-        found_seqs_by_sid[found_seq['sample_id']].append(found_seq)
 
     # Log sequences without samples, this is a pretty common thing,
     # but useful to log to easier track down samples not processed
-    if sample_wo_seq := [
-        s for s in cohort.get_samples() if s.id not in found_seqs_by_sid
+    if sids_wo_seq := [
+        sid for sid in cohort.get_sample_ids() if sid not in seq_entries_by_sid
     ]:
         msg = f'No {sequencing_type} sequencing data found for samples:\n'
-        ds_sample_count = {
-            ds_name: len(list(ds_samples))
-            for ds_name, ds_samples in groupby(
-                cohort.get_samples(), key=lambda s: s.dataset.name
-            )
-        }
-        for ds, samples in groupby(sample_wo_seq, key=lambda s: s.dataset.name):
+        for ds in cohort.get_datasets():
+            ds_sids_wo_seq = [sid for sid in sids_wo_seq if sid in ds.get_sample_ids()]
             msg += (
-                f'\t{ds}, {len(list(samples))}/{ds_sample_count.get(ds)} samples: '
-                f'{", ".join([s.id for s in samples])}\n'
+                f'\t{ds.name}, {len(ds_sids_wo_seq)}/{len(ds.get_samples())} samples: '
+                f'{", ".join(ds_sids_wo_seq)}\n'
             )
         logging.info(msg)
 
     for sample in cohort.get_samples():
-        for d in found_seqs_by_sid.get(sample.id, []):
-            seq = Sequence.parse(d, check_existence=check_existence)
+        for entry in seq_entries_by_sid.get(sample.id, []):
+            seq = Sequence.parse(entry, check_existence=check_existence)
             sample.seq_by_type[seq.sequencing_type] = seq
             if seq.alignment_input:
                 if seq.sequencing_type in sample.alignment_input_by_seq_type:
@@ -211,19 +163,8 @@ def _populate_participants(cohort: Cohort) -> None:
     """
     for dataset in cohort.get_datasets():
         logging.info(f'Reading participants IDs for dataset {dataset}')
-        metamist_proj = dataset.name
-        if get_config()['workflow']['access_level'] == 'test':
-            metamist_proj += '-test'
-        pid_sid_multi = (
-            get_metamist().papi.get_external_participant_id_to_internal_sample_id(
-                metamist_proj
-            )
-        )
-        participant_by_sid = {}
-        for group in pid_sid_multi:
-            pid = group[0]
-            for sid in group[1:]:
-                participant_by_sid[sid] = pid.strip()
+
+        participant_by_sid = get_metamist().get_participant_entries_by_sid(dataset.name)
 
         for sample in dataset.get_samples():
             if pid := participant_by_sid.get(sample.id):
