@@ -556,6 +556,7 @@ class Stage(Generic[TargetT], ABC):
                 jobs=outputs.jobs,
                 prev_jobs=inputs.get_jobs(target),
                 meta=outputs.meta,
+                job_attrs=self.get_job_attrs(target),
             )
         return outputs
 
@@ -666,18 +667,6 @@ class Stage(Generic[TargetT], ABC):
             # Do not check the files' existence, assume they don't exist:
             return False, None
 
-    def _queue_reuse_job(
-        self, target: TargetT, found_paths: Path | dict[str, Path]
-    ) -> StageOutput | None:
-        """
-        Queues a [reuse] Job
-        """
-        return self.make_outputs(
-            target=target,
-            data=found_paths,
-            jobs=[get_batch().new_job(f'{self.name} [reuse]', target.get_job_attrs())],
-        )
-
     def get_job_attrs(self, target: TargetT | None = None) -> dict[str, str]:
         """
         Create Hail Batch Job attributes dictionary
@@ -785,6 +774,14 @@ def get_workflow() -> 'Workflow':
     if _workflow is None:
         _workflow = Workflow()
     return _workflow
+
+
+def run_workflow(
+    stages: list[StageDecorator] | None = None,
+    wait: bool | None = False,
+) -> 'Workflow':
+    get_workflow().run(stages=stages, wait=wait)
+    return get_workflow()
 
 
 class Workflow:

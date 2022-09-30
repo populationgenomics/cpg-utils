@@ -58,11 +58,11 @@ skip_samples_with_missing_input = false
 check_inputs = true
 
 # Within jobs, check all in-job intermediate files for possible reuse.
-# If set to False, will overwrite all intermediates
+# If set to False, will overwrite all intermediates. Used in `utils.can_reuse(path)`
 check_intermediates = true
 
-# Before running a stage, check if its input already exists. If it exists,
-# submit a [reuse] job instead.
+# Before running a stage, check if input (i.e. expected outputs from required stages) 
+# already exist. If it exists, do not submit stage jobs
 check_expected_outputs = true
 
 # Local directory for temporary files. Usually takes a few kB.

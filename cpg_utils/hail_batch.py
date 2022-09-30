@@ -40,9 +40,9 @@ def init_batch(**kwargs):
         return  # already initialised
     dataset = get_config()['workflow']['dataset']
     kwargs.setdefault('token', os.environ.get('HAIL_TOKEN'))
-    kwargs.setdefault('default_reference', genome_build())
     asyncio.get_event_loop().run_until_complete(
         hl.init_batch(
+            default_reference=genome_build(),
             billing_project=get_config()['hail']['billing_project'],
             remote_tmpdir=remote_tmpdir(f'cpg-{dataset}-hail'),
             **kwargs,
@@ -143,13 +143,17 @@ class AzurePathScheme(PathScheme):
 
 class LocalPathScheme(PathScheme):
     """
-    Local posix path scheme. Requires workflow/local_dir to be set
+    Local posix path scheme. Requires workflow/local_dir to be set.
+    Creates directories automatically (mimicking the cloud FS behaviour).
+
+    Useful only for tests, don't use in production.
     """
 
     def __init__(self):
         if not (local_dir := get_config()['workflow'].get('local_dir')):
             local_dir = tempfile.mkdtemp(prefix='cpg-utils-')
         self.local_dir = to_path(local_dir)
+        self.local_dir.mkdir(exist_ok=True)
         self.scheme = 'local'
 
     def path_prefix(self, dataset: str, category: str) -> str:
@@ -158,7 +162,9 @@ class LocalPathScheme(PathScheme):
 
     def full_path(self, prefix: str, suffix: str) -> str:
         """Build full path from prefix and suffix"""
-        return str(self.local_dir / prefix / suffix)
+        path = self.local_dir / prefix / suffix
+        path.parent.mkdir(parents=True, exist_ok=True)
+        return str(path)
 
 
 class Namespace(Enum):
