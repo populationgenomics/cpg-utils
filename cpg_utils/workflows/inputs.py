@@ -3,8 +3,6 @@ Metamist wrapper to get input samples.
 """
 
 import logging
-from collections import defaultdict
-from itertools import groupby
 
 from cpg_utils.config import get_config
 
@@ -137,12 +135,12 @@ def _populate_analysis(cohort: Cohort) -> None:
     Populate Analysis entries.
     """
     for dataset in cohort.get_datasets():
-        gvcf_by_sid = get_metamist().find_analyses_by_sid(
+        gvcf_by_sid = get_metamist().get_analyses_by_sid(
             dataset.get_sample_ids(),
             analysis_type=AnalysisType.GVCF,
             dataset=dataset.name,
         )
-        cram_by_sid = get_metamist().find_analyses_by_sid(
+        cram_by_sid = get_metamist().get_analyses_by_sid(
             dataset.get_sample_ids(),
             analysis_type=AnalysisType.CRAM,
             dataset=dataset.name,

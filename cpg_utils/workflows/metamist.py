@@ -5,6 +5,7 @@ Helpers to communicate with the sample-metadata database.
 import logging
 import pprint
 import traceback
+from collections import defaultdict
 from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
@@ -257,7 +258,7 @@ class Metamist:
             return None
         return a
 
-    def find_analyses_by_sid(
+    def get_analyses_by_sid(
         self,
         sample_ids: list[str],
         analysis_type: AnalysisType,
