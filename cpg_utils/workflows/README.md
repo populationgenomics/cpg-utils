@@ -169,7 +169,7 @@ j = b.new_job('My job', ...)
 
 The Batch instance derives from a class extended from standard Hail `Batch` class, and it records stats of added jobs and prints statistics before submission, highlighting labelled jobs, e.g.:
 
-```
+```sh
 Will submit 186 jobs:
 BWA: 3 for 3 samples
 Somalier extract (CRAMs): 3 for 3 samples
