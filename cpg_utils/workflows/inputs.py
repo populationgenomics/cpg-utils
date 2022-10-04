@@ -27,7 +27,7 @@ def create_cohort() -> Cohort:
     """
     analysis_dataset_name = get_config()['workflow']['dataset']
     dataset_names = get_config()['workflow'].get(
-        'only_datasets', [analysis_dataset_name]
+        'input_datasets', [analysis_dataset_name]
     )
     skip_datasets = get_config()['workflow'].get('skip_datasets', [])
     dataset_names = [d for d in dataset_names if d not in skip_datasets]

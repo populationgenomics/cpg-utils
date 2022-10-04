@@ -9,7 +9,7 @@ access_level = 'standard'
 
 # Datasets to load inputs. If not provided, datasets will be determined
 # automatically based on the input provider implementation:
-#only_datasets = []
+#input_datasets = []
 
 # Datasets to skip:
 #skip_datasets = []
