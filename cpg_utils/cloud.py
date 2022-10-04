@@ -105,14 +105,14 @@ def write_secret(project_id: str, secret_name: str, secret_value: str) -> None:
 
 
 def get_google_identity_token(
-    target_audience: str | None, request: google.auth.transport.Request = None
+    audience: str | None, request: google.auth.transport.Request = None
 ) -> str:
     """Returns a Google identity token for the given audience."""
     # Unfortunately this requires different handling for at least
     # three different cases and the standard libraries don't provide
     # a single helper function that captures all of them:
     # https://github.com/googleapis/google-auth-library-python/issues/590
-    creds = _get_default_id_token_credentials(target_audience, request)
+    creds = _get_default_id_token_credentials(audience, request)
     creds.refresh(request=requests.Request())
     return creds.token
 
