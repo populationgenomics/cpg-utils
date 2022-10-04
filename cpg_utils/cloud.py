@@ -1,15 +1,27 @@
 """Convenience functions related to cloud infrastructure."""
 
-from typing import Optional
+import json
+import os
 import traceback
-import logging
-import google.auth
-from google.auth.exceptions import DefaultCredentialsError
-from google.auth.transport.requests import Request
-from google.cloud import secretmanager
-from google.oauth2 import id_token
+
+from google.auth import (
+    credentials as google_auth_credentials,
+    environment_vars,
+    exceptions,
+)
 from google.auth import jwt
+from google.auth._default import (
+    _AUTHORIZED_USER_TYPE,
+    _HELP_MESSAGE,
+    _SERVICE_ACCOUNT_TYPE,
+    _VALID_TYPES,
+)
+from google.cloud import secretmanager
+from google.oauth2 import credentials as oauth2_credentials, service_account
 import google.api_core.exceptions
+import google.auth.transport
+from google.auth.transport import requests
+import google.oauth2
 
 
 def email_from_id_token(id_token_jwt: str) -> str:
@@ -26,7 +38,7 @@ def read_secret(
     project_id: str,
     secret_name: str,
     fail_gracefully: bool = True,
-) -> Optional[str]:
+) -> str | None:
     """Reads the latest version of a GCP Secret Manager secret.
 
     Returns None if the secret doesn't exist or there was a problem retrieving it,
@@ -92,26 +104,181 @@ def write_secret(project_id: str, secret_name: str, secret_value: str) -> None:
             secret_manager.disable_secret_version(request={'name': version.name})
 
 
-def get_google_identity_token(audience: str) -> str:
-    """
-    Returns a Google identity token for the given audience.
-    """
+def get_google_identity_token(
+    target_audience: str | None, request: google.auth.transport.Request = None
+) -> str:
+    """Returns a Google identity token for the given audience."""
+    # Unfortunately this requires different handling for at least
+    # three different cases and the standard libraries don't provide
+    # a single helper function that captures all of them:
+    # https://github.com/googleapis/google-auth-library-python/issues/590
+    creds = _get_default_id_token_credentials(target_audience, request)
+    creds.refresh(request=requests.Request())
+    return creds.token
 
-    # Suppress DEBUG / WARNING messages from google-auth library,
-    # in case we're not running on GCE. This gets restored at the end.
-    logger = logging.getLogger()
-    previous_level = logger.getEffectiveLevel()
-    logger.setLevel(logging.ERROR)
 
-    # Need to support two distinct cases:
-    # - service accounts on GCE VMs (default),
-    # - human users with default credentials.
+class IDTokenCredentialsAdapter(google_auth_credentials.Credentials):
+    """Convert Credentials with ``openid`` scope to IDTokenCredentials."""
+
+    def __init__(self, credentials: oauth2_credentials.Credentials):
+        super().__init__()
+        self.credentials = credentials
+        self.token = credentials.id_token
+
+    @property
+    def expired(self):
+        """Returns the expired property."""
+        return self.credentials.expired
+
+    def refresh(self, request):
+        """Refreshes the token."""
+        self.credentials.refresh(request)
+        self.token = self.credentials.id_token
+
+
+def _load_credentials_from_file(
+    filename: str, target_audience: str | None
+) -> google_auth_credentials.Credentials | None:
+    """
+    Loads credentials from a file.
+    The credentials file must be a service account key or a stored authorized user credential.
+    :param filename: The full path to the credentials file.
+    :return: Loaded credentials
+    :rtype: google.auth.credentials.Credentials
+    :raise google.auth.exceptions.DefaultCredentialsError: if the file is in the wrong format or is missing.
+    """
+    if not os.path.exists(filename):
+        raise exceptions.DefaultCredentialsError(f'File {filename} was not found.')
+
+    with open(filename, encoding='utf-8') as file_obj:
+        try:
+            info = json.load(file_obj)
+        except json.JSONDecodeError as exc:
+            raise exceptions.DefaultCredentialsError(
+                f'File {filename} is not a valid json file.'
+            ) from exc
+
+    # The type key should indicate that the file is either a service account
+    # credentials file or an authorized user credentials file.
+    credential_type = info.get('type')
+
+    if credential_type == _AUTHORIZED_USER_TYPE:
+        current_credentials = oauth2_credentials.Credentials.from_authorized_user_info(
+            info, scopes=['openid', 'email']
+        )
+        current_credentials = IDTokenCredentialsAdapter(credentials=current_credentials)
+
+        return current_credentials
+
+    if credential_type == _SERVICE_ACCOUNT_TYPE:
+        try:
+            return service_account.IDTokenCredentials.from_service_account_info(
+                info, target_audience=target_audience
+            )
+        except ValueError as exc:
+            raise exceptions.DefaultCredentialsError(
+                f'Failed to load service account credentials from {filename}'
+            ) from exc
+
+    raise exceptions.DefaultCredentialsError(
+        f'The file {filename} does not have a valid type. Type is {credential_type}, '
+        f'expected one of {_VALID_TYPES}.'
+    )
+
+
+def _get_explicit_environ_credentials(
+    target_audience: str | None,
+) -> google_auth_credentials.Credentials | None:
+    """Gets credentials from the GOOGLE_APPLICATION_CREDENTIALS environment variable."""
+    explicit_file = os.environ.get(environment_vars.CREDENTIALS)
+
+    if explicit_file is None:
+        return None
+
+    current_credentials = _load_credentials_from_file(
+        os.environ[environment_vars.CREDENTIALS], target_audience=target_audience
+    )
+
+    return current_credentials
+
+
+def _get_gcloud_sdk_credentials(
+    target_audience: str | None,
+) -> google_auth_credentials.Credentials | None:
+    """Gets the credentials and project ID from the Cloud SDK."""
+    from google.auth import _cloud_sdk  # pylint: disable=import-outside-toplevel
+
+    # Check if application default credentials exist.
+    credentials_filename = _cloud_sdk.get_application_default_credentials_path()
+
+    if not os.path.isfile(credentials_filename):
+        return None
+
+    current_credentials = _load_credentials_from_file(
+        credentials_filename, target_audience
+    )
+
+    return current_credentials
+
+
+def _get_gce_credentials(
+    target_audience: str | None, request: google.auth.transport.Request | None = None
+) -> google_auth_credentials.Credentials | None:
+    """Gets credentials and project ID from the GCE Metadata Service."""
+    # Ping requires a transport, but we want application default credentials
+    # to require no arguments. So, we'll use the _http_client transport which
+    # uses http.client. This is only acceptable because the metadata server
+    # doesn't do SSL and never requires proxies.
+
+    # While this library is normally bundled with compute_engine, there are
+    # some cases where it's not available, so we tolerate ImportError.
+
+    # pylint: disable=import-outside-toplevel
     try:
-        return id_token.fetch_id_token(Request(), audience=audience)
-    except DefaultCredentialsError:
-        # https://stackoverflow.com/a/55804230
-        creds, _ = google.auth.default()
-        creds.refresh(Request())
-        return creds.id_token
-    finally:
-        logger.setLevel(previous_level)
+        from google.auth import compute_engine
+        from google.auth.compute_engine import _metadata
+    except ImportError:
+        return None
+
+    from google.auth.transport import _http_client
+
+    if request is None:
+        request = _http_client.Request()
+
+    if _metadata.ping(request=request):
+        return compute_engine.IDTokenCredentials(
+            request, target_audience, use_metadata_identity_endpoint=True
+        )
+
+    return None
+
+
+def _get_default_id_token_credentials(
+    target_audience: str | None, request: google.auth.transport.Request = None
+) -> google_auth_credentials.Credentials:
+    """Gets the default ID Token credentials for the current environment.
+    `Application Default Credentials`_ provides an easy way to obtain credentials to call Google APIs for
+    server-to-server or local applications.
+    .. _Application Default Credentials: https://developers.google.com\
+        /identity/protocols/application-default-credentials
+    :param target_audience: The intended audience for these credentials.
+    :param request: An object used to make HTTP requests. This is used to detect whether the application
+            is running on Compute Engine. If not specified, then it will use the standard library http client
+            to make requests.
+    :return: the current environment's credentials.
+    :rtype: google.auth.credentials.Credentials
+    :raises ~google.auth.exceptions.DefaultCredentialsError:
+        If no credentials were found, or if the credentials found were invalid.
+    """
+    checkers = (
+        lambda: _get_explicit_environ_credentials(target_audience),
+        lambda: _get_gcloud_sdk_credentials(target_audience),
+        lambda: _get_gce_credentials(target_audience, request),
+    )
+
+    for checker in checkers:
+        current_credentials = checker()
+        if current_credentials is not None:
+            return current_credentials
+
+    raise exceptions.DefaultCredentialsError(_HELP_MESSAGE)
