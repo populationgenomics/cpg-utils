@@ -127,9 +127,11 @@ class IDTokenCredentialsAdapter(google_auth_credentials.Credentials):
 
     @property
     def expired(self):
+        """Returns the expired property."""
         return self.credentials.expired
 
     def refresh(self, request):
+        """Refreshes the token."""
         self.credentials.refresh(request)
         self.token = self.credentials.id_token
 
