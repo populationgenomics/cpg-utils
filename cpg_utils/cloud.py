@@ -97,7 +97,7 @@ def get_google_identity_token(audience: str) -> str:
     #   GOOGLE_APPLICATION_CREDENTIALS environment variable), and
     # - the service accounts underlying GCE VMs (by querying the GCP metadata
     #   server).
-    creds, _ = google.auth.default()  # https://stackoverflow.com/a/55804230
+    creds, _ = google.auth.default(scopes=[audience])
     creds.refresh(Request())
     if hasattr(creds, 'id_token'):
         return creds.id_token
