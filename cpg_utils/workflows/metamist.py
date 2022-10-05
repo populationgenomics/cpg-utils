@@ -454,7 +454,7 @@ class Metamist:
         family_ids = [family['id'] for family in families]
         ped_entries = self.fapi.get_pedigree(
             internal_family_ids=family_ids,
-            response_type='json',
+            export_type='json',
             project=metamist_proj,
             replace_with_participant_external_ids=True,
         )
