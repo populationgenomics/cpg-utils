@@ -384,17 +384,24 @@ class Dataset(Target):
         """
         return f'{self.name}: '
 
-    def write_ped_file(self, out_path: Path) -> Path:
+    def write_ped_file(
+        self, out_path: Path | None = None, use_participant_id: bool = False
+    ) -> Path:
         """
         Create a PED file for all samples
         """
         datas = []
         for sample in self.get_samples():
             if sample.pedigree:
-                datas.append(sample.pedigree.get_ped_dict())
+                datas.append(
+                    sample.pedigree.get_ped_dict(use_participant_id=use_participant_id)
+                )
         if not datas:
             raise ValueError(f'No pedigree data found for {self.name}')
         df = pd.DataFrame(datas)
+
+        if out_path is None:
+            out_path = self.tmp_prefix() / 'ped' / f'{self.alignment_inputs_hash()}.ped'
 
         with out_path.open('w') as fp:
             df.to_csv(fp, sep='\t', index=False)
