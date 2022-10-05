@@ -153,8 +153,10 @@ def _populate_analysis(cohort: Cohort) -> None:
                     analysis.output,
                     sample.make_gvcf_path().path,
                 )
+                sample.gvcf = sample.make_gvcf_path()
             if (analysis := cram_by_sid.get(sample.id)) and analysis.output:
                 assert analysis.output == sample.make_cram_path().path, analysis.output
+                sample.cram = sample.make_cram_path()
 
 
 def _populate_participants(cohort: Cohort) -> None:
