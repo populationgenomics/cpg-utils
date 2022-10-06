@@ -153,7 +153,7 @@ class LocalPathScheme(PathScheme):
         if not (local_dir := get_config()['workflow'].get('local_dir')):
             local_dir = tempfile.mkdtemp(prefix='cpg-utils-')
         self.local_dir = to_path(local_dir)
-        self.local_dir.mkdir(exist_ok=True)
+        self.local_dir.mkdir(exist_ok=True, parents=True)
         self.scheme = 'local'
 
     def path_prefix(self, dataset: str, category: str) -> str:
