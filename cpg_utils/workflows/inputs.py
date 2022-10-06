@@ -115,8 +115,12 @@ def _populate_alignment_inputs(
             )
         logging.info(msg)
 
+    sid_wo_reads = set()
     for sample in cohort.get_samples():
         for entry in seq_entries_by_sid.get(sample.id, []):
+            if not entry['meta'].get('reads'):
+                sid_wo_reads.add(sample.id)
+                continue
             seq = Sequence.parse(entry, check_existence=check_existence)
             sample.seq_by_type[seq.sequencing_type] = seq
             if seq.alignment_input:
@@ -130,6 +134,11 @@ def _populate_alignment_inputs(
                 sample.alignment_input_by_seq_type[
                     seq.sequencing_type
                 ] = seq.alignment_input
+    if sid_wo_reads:
+        logging.warning(
+            f'Found {len(sid_wo_reads)}/{len(cohort.get_samples())} samples with '
+            f'no meta/rads in corresponding sequence entries'
+        )
 
 
 def _populate_analysis(cohort: Cohort) -> None:
@@ -189,11 +198,10 @@ def _populate_pedigree(cohort: Cohort) -> None:
             part_id = str(ped_entry['individual_id'])
             ped_entry_by_participant_id[part_id] = ped_entry
 
+        sids_wo_ped = []
         for sample in dataset.get_samples():
             if sample.participant_id not in ped_entry_by_participant_id:
-                logging.warning(
-                    f'No pedigree data for participant {sample.participant_id}'
-                )
+                sids_wo_ped.append(sample.id)
                 continue
 
             ped_entry = ped_entry_by_participant_id[sample.participant_id]
@@ -210,6 +218,11 @@ def _populate_pedigree(cohort: Cohort) -> None:
                 dad=paternal_sample,
                 sex=Sex.parse(str(ped_entry['sex'])),
                 phenotype=ped_entry['affected'] or '0',
+            )
+        if sids_wo_ped:
+            logging.warning(
+                f'No pedigree data found for '
+                f'{len(sids_wo_ped)}/{len(dataset.get_samples())} samples'
             )
 
     for dataset in cohort.get_datasets():
