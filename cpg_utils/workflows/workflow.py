@@ -406,7 +406,6 @@ class Stage(Generic[TargetT], ABC):
                 self.required_stages_classes.append(required_stages)
 
         self.tmp_prefix = get_workflow().tmp_prefix / name
-        self.run_id = get_workflow().run_id
 
         # Dependencies. Populated in workflow.run(), after we know all stages.
         self.required_stages: list[Stage] = []
@@ -799,16 +798,28 @@ class Workflow:
                 'Workflow already initialised. Use get_workflow() to get the instance'
             )
 
-        self.run_id = get_config()['workflow'].get('run_id', timestamp())
-        self.tmp_prefix = get_cohort().analysis_dataset.tmp_prefix() / self.run_id
-
         analysis_dataset = get_config()['workflow']['dataset']
         name = get_config()['workflow'].get('name')
         description = get_config()['workflow'].get('description')
         name = name or description or analysis_dataset
         self.name = slugify(name)
+
+        self.output_version: str | None = None
+        if output_version := get_config()['workflow'].get('output_version'):
+            output_version = slugify(output_version)
+            if not output_version.startswith('v'):
+                output_version = f'v{output_version}'
+            self.output_version = output_version
+
+        self.run_timestamp: str = get_config()['workflow'].get(
+            'run_timestamp', timestamp()
+        )
+
+        # Description
         description = description or name
-        description += f': run_id={self.run_id}'
+        if self.output_version:
+            description += f': output_version={self.output_version}'
+        description += f': run_timestamp={self.run_timestamp}'
         if sequencing_type := get_config()['workflow'].get('sequencing_type'):
             description += f' [{sequencing_type}]'
         if ds_set := set(d.name for d in get_cohort().get_datasets()):
@@ -819,6 +830,26 @@ class Workflow:
         if get_config()['workflow'].get('status_reporter') == 'metamist':
             self.status_reporter = MetamistStatusReporter()
         self._stages: list[StageDecorator] | None = stages
+
+    @property
+    def tmp_prefix(self) -> Path:
+        return self._prefix(category='tmp')
+
+    @property
+    def web_prefix(self) -> Path:
+        return self._prefix(category='web')
+
+    @property
+    def prefix(self) -> Path:
+        return self._prefix()
+
+    def _prefix(self, category=None) -> Path:
+        prefix = get_cohort().analysis_dataset.prefix(category=category) / self.name
+        if self.output_version:
+            prefix /= self.output_version
+        else:
+            prefix /= self.run_timestamp
+        return prefix
 
     def run(
         self,
