@@ -142,8 +142,9 @@ verifybamid = 'verifybamid:2.0.1'
 multiqc = 'multiqc:v1.12'
 fastqc = 'fastqc:v0.11.9_cv8'
 happy = 'hap.py:v0.3.15'
-hail = '9eed154129282ac9f7adad18de6bb3f7a9f8447f-hail-7921901af5ba5fabc423f44c0d5fae46073efb9a'
-sm-api = '9eed154129282ac9f7adad18de6bb3f7a9f8447f-hail-7921901af5ba5fabc423f44c0d5fae46073efb9a'
+# > skopeo copy docker://australia-southeast1-docker.pkg.dev/analysis-runner/images/<name> docker://australia-southeast1-docker.pkg.dev/cpg-common/images/<name>
+hail = 'driver:9eed154129282ac9f7adad18de6bb3f7a9f8447f-hail-7921901af5ba5fabc423f44c0d5fae46073efb9a'
+sm-api = 'driver:9eed154129282ac9f7adad18de6bb3f7a9f8447f-hail-7921901af5ba5fabc423f44c0d5fae46073efb9a'
 
 [references]
 # Genome build. Only GRCh38 is currently supported.
