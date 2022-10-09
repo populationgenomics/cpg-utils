@@ -30,6 +30,7 @@ DEFAULT_CONF = f"""
 dataset_gcp_project = 'fewgenomes'
 access_level = 'test'
 dataset = 'fewgenomes'
+driver_image = '<stub>'
 sequencing_type = 'genome'
 
 check_inputs = false
