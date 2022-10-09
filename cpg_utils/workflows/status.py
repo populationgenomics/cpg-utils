@@ -6,12 +6,13 @@ from textwrap import dedent
 from abc import ABC, abstractmethod
 
 from cpg_utils import Path
-from cpg_utils.hail_batch import image_path, command
+from cpg_utils.hail_batch import command
 from hailtop.batch.job import Job
 from hailtop.batch import Batch, Resource
 
 from .targets import Target
 from .metamist import get_metamist, AnalysisStatus, MetamistError
+from ..config import get_config
 
 
 class StatusReporter(ABC):
@@ -151,7 +152,7 @@ class MetamistStatusReporter(StatusReporter):
             job_name += f' (for {analysis_type})'
 
         j = b.new_job(job_name, job_attrs)
-        j.image(image_path('sm-api'))
+        j.image(get_config()['workflow']['driver_image'])
 
         calc_size_cmd = None
         if output_path:
