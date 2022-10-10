@@ -258,7 +258,7 @@ class Metamist:
             return None
         return a
 
-    def get_analyses(
+    def get_analyses_by_sid(
         self,
         sample_ids: list[str],
         sequencing_type: str,
