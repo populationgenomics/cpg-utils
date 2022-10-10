@@ -261,9 +261,9 @@ class Metamist:
     def get_analyses_by_sid(
         self,
         sample_ids: list[str],
-        sequencing_type: str,
         analysis_type: AnalysisType,
         analysis_status: AnalysisStatus = AnalysisStatus.COMPLETED,
+        meta: dict | None = None,
         dataset: str | None = None,
     ) -> dict[str, Analysis]:
         """
@@ -281,13 +281,16 @@ class Metamist:
         logging.info(
             f'Querying {analysis_type} analysis entries for {metamist_proj}...'
         )
+        meta = meta or {}
+        meta['sequencing_type'] = get_config()['workflow']['sequencing_type']
+
         datas = self.aapi.query_analyses(
             models.AnalysisQueryModel(
                 projects=[metamist_proj],
                 sample_ids=sample_ids,
                 type=models.AnalysisType(analysis_type.value),
                 status=models.AnalysisStatus(analysis_status.value),
-                meta={'sequencing_type': sequencing_type},
+                meta=meta,
             )
         )
 
