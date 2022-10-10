@@ -146,13 +146,15 @@ def _populate_analysis(cohort: Cohort) -> None:
     Populate Analysis entries.
     """
     for dataset in cohort.get_datasets():
-        gvcf_by_sid = get_metamist().get_analyses_by_sid(
+        gvcf_by_sid = get_metamist().get_analyses(
             dataset.get_sample_ids(),
+            sequencing_type=get_config()['workflow']['sequencing_type'],
             analysis_type=AnalysisType.GVCF,
             dataset=dataset.name,
         )
-        cram_by_sid = get_metamist().get_analyses_by_sid(
+        cram_by_sid = get_metamist().get_analyses(
             dataset.get_sample_ids(),
+            sequencing_type=get_config()['workflow']['sequencing_type'],
             analysis_type=AnalysisType.CRAM,
             dataset=dataset.name,
         )
@@ -164,7 +166,10 @@ def _populate_analysis(cohort: Cohort) -> None:
                 )
                 sample.gvcf = sample.make_gvcf_path()
             if (analysis := cram_by_sid.get(sample.id)) and analysis.output:
-                assert analysis.output == sample.make_cram_path().path, analysis.output
+                assert analysis.output == sample.make_cram_path().path, (
+                    analysis.output,
+                    sample.make_cram_path().path,
+                )
                 sample.cram = sample.make_cram_path()
 
 

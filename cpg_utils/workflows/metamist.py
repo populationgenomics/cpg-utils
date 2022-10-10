@@ -258,18 +258,18 @@ class Metamist:
             return None
         return a
 
-    def get_analyses_by_sid(
+    def get_analyses(
         self,
         sample_ids: list[str],
+        sequencing_type: str,
         analysis_type: AnalysisType,
         analysis_status: AnalysisStatus = AnalysisStatus.COMPLETED,
-        meta: dict | None = None,
         dataset: str | None = None,
     ) -> dict[str, Analysis]:
         """
-        Query the DB to find the last completed analysis for the type and samples,
-        one Analysis object per sample. Assumes the analysis is defined for a single
-        sample (e.g. cram, gvcf).
+        Query the DB to find the last completed analysis for the type, sample ids,
+        and sequencing type, one Analysis object per sample. Assumes the analysis
+        is defined for a single sample (that is, analysis_type=cram|gvcf|qc).
         """
         dataset = dataset or self.default_dataset
         metamist_proj = dataset or self.default_dataset
@@ -287,7 +287,7 @@ class Metamist:
                 sample_ids=sample_ids,
                 type=models.AnalysisType(analysis_type.value),
                 status=models.AnalysisStatus(analysis_status.value),
-                meta=meta or {},
+                meta={'sequencing_type': sequencing_type},
             )
         )
 
