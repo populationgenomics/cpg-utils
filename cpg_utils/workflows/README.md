@@ -16,7 +16,7 @@ For the GATK-SV workflow, we went with the approach #2. The workflow is quite co
 
 As for the WGS/WES germline variant workflows, we re-engineered them fully in Hail Batch, largely inspired by WARP, but with significant divergence from WARP: we added dataset-specific pedigree checks and dataset-specific MultiQC reports, allele-specific VQSR for WGS, cohort annotation using Hail Query and exporting to the Elasticsearch using scripts from [seqr-loading-pipelines](https://github.com/broadinstitute/seqr-loading-pipelines). There are also several CPG-specific layers, like reading inputs and metadata from [Metamist](https://github.com/populationgenomics/sample-metadata); reporting analysis results back to Metamist; setting global configuration with TOML; and a necessity for a more fine-grained tuning of tool's parameters and compute resources.
 
-To facilitate re-engineering WARP workflows and creating workflows scratch, we implemented some abstractions in this module, namely a workflow "stage" with expected inputs, outputs, and dependencies, and "stage" target ("sample", "dataset", "cohort"). Unlike WDL's concept of nested sub-workflows, Hail Batch is intrinsically lower-level, providing only one layer of jobs, with each job corresponding to on bash script that is run on one cloud VM. That doesn't always match a higher-level task in the application domain. For example, a workflow stage called "genotype" can include multiple jobs to generate calling intervals, partition inputs, run the genotyping tool in parallel instances, gather results, perform post-processing and filtering. That "stage" would sit between an "alignment" stage and a "joint calling" stage, and a user might need to start a workflow from a specific stage, reusing pre-existing outputs; or run the pipeline only up to a specific stage. So it's helpful to abstract a set of jobs related in a domain-specific way as a stage, with an ability to restart/skip/select stages. It also turns out that GATK-SV facilitates from these abstractions too, as it consists of multiple disconnected sub-workflows of different levels.
+To facilitate re-engineering WARP workflows and creating workflows scratch, we implemented some abstractions in this module, namely a workflow "stage" with expected inputs, outputs, and dependencies, and "stage" target ("sample", "dataset", "cohort"). Unlike WDL's concept of nested sub-workflows, Hail Batch is intrinsically lower-level, naturally providing one layer of jobs, with each job corresponding to on bash script that is run on one cloud VM. That doesn't always match a higher-level task in the application domain. For example, a workflow stage called "genotype" can include multiple jobs to generate calling intervals, partition inputs, run the genotyping tool in parallel instances, gather results, perform post-processing and filtering. That "stage" would sit between an "alignment" stage and a "joint calling" stage, and a user might need to start a workflow from a specific stage, reusing pre-existing outputs; or run the pipeline only up to a specific stage. So it's helpful to abstract a set of jobs related in a domain-specific way as a stage, with an ability to restart/skip/select stages. It also turns out that GATK-SV facilitates from these abstractions too, as it consists of multiple disconnected sub-workflows of different levels.
 
 ## Stages
 
@@ -27,8 +27,6 @@ This library provides an abstraction interface on top of Hail Batch jobs, namely
 For example, a stage that performs read alignment to produce a CRAM file, would be derived from `SampleStage`, and be parametrised by `Sample`, and a stage that performs joint-calling would be derived from `CohortStage`, parametrised by `Cohort`.
 
 Each `Stage` final implementation must declare paths to the outputs it would write in the `expected_outputs()` method. It must also define how jobs are added into Hail Batch using the `queue_jobs()` method.
-
-A stage can also be wrapped
 
 For example, out "Align" stage that runs BWA might look like as following:
 
@@ -57,6 +55,8 @@ Stages can depend on each other (i.e. they form a directed acyclic graph), which
 from cpg_utils import Path
 from cpg_utils.workflows.workflow import stage, SampleStage, Sample, StageInput, StageOutput
 
+Align = ...
+
 @stage(required_stages=Align)
 class Genotype(SampleStage):
     def expected_outputs(self, sample: Sample) -> Path:
@@ -72,6 +72,8 @@ Stage of different levels can depend on each other, and the library will resolve
 ```python
 from cpg_utils import Path
 from cpg_utils.workflows.workflow import stage, CohortStage, Cohort, StageInput, StageOutput
+
+Genotype = ...
 
 @stage(required_stages=Genotype)
 class JointCalling(CohortStage):
@@ -92,6 +94,7 @@ To submit a set of defined stages to Hail Batch, just call the `run_workflow(sta
 
 ```python
 from cpg_utils.workflows.workflow import run_workflow
+JointCalling = ...
 run_workflow().run(stages=[JointCalling])
 ```
 
