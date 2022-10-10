@@ -267,9 +267,9 @@ class Metamist:
         dataset: str | None = None,
     ) -> dict[str, Analysis]:
         """
-        Query the DB to find the last completed analysis for the type and samples,
-        one Analysis object per sample. Assumes the analysis is defined for a single
-        sample (e.g. cram, gvcf).
+        Query the DB to find the last completed analysis for the type, sample ids,
+        and sequencing type, one Analysis object per sample. Assumes the analysis
+        is defined for a single sample (that is, analysis_type=cram|gvcf|qc).
         """
         dataset = dataset or self.default_dataset
         metamist_proj = dataset or self.default_dataset
@@ -281,13 +281,16 @@ class Metamist:
         logging.info(
             f'Querying {analysis_type} analysis entries for {metamist_proj}...'
         )
+        meta = meta or {}
+        meta['sequencing_type'] = get_config()['workflow']['sequencing_type']
+
         datas = self.aapi.query_analyses(
             models.AnalysisQueryModel(
                 projects=[metamist_proj],
                 sample_ids=sample_ids,
                 type=models.AnalysisType(analysis_type.value),
                 status=models.AnalysisStatus(analysis_status.value),
-                meta=meta or {},
+                meta=meta,
             )
         )
 
