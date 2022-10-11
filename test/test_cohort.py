@@ -58,7 +58,7 @@ def test_cohort(mocker: MockFixture):
             {'id': 'CPG02', 'external_id': 'SAMPLE2'},
         ]
 
-    def mock_get_sequences_by_sample_ids(  # pylint: disable=unused-argument
+    def get_sequences_for_sample_ids(  # pylint: disable=unused-argument
         *args, **kwargs
     ) -> list[dict]:
         return [
@@ -97,8 +97,8 @@ def test_cohort(mocker: MockFixture):
         mock_get_samples,
     )
     mocker.patch(
-        'sample_metadata.apis.SequenceApi.get_sequences_by_sample_ids',
-        mock_get_sequences_by_sample_ids,
+        'sample_metadata.apis.SequenceApi.get_sequences_for_sample_ids',
+        get_sequences_for_sample_ids,
     )
     mocker.patch(
         'sample_metadata.apis.ParticipantApi.get_external_participant_id_to_internal_sample_id',
