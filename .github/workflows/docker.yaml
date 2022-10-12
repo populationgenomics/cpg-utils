@@ -46,4 +46,6 @@ jobs:
         --tag $IMAGE_NAME:$VERSION docker
 
     - name: push
-      run: docker push $IMAGE_NAME:$VERSION
+      run: |
+        docker push $IMAGE_NAME:$VERSION
+        docker push $IMAGE_NAME:latest
