@@ -5,6 +5,7 @@ import inspect
 import os
 import tempfile
 import textwrap
+import typing
 from enum import Enum
 from typing import Optional, List, Union
 from abc import ABC, abstractmethod
@@ -606,3 +607,45 @@ cat << EOT >> script.py
 EOT
 python3 script.py
 """
+
+
+def start_query_context(
+    query_backend: typing.Literal['spark', 'batch', 'local', 'spark_local']
+    | None = None,
+    log_path: str | None = None,
+    dataset: str | None = None,
+    billing_project: str | None = None,
+):
+    """
+    Start Hail Query context, depending on the backend class specified in
+    the hail/query_backend TOML config value.
+    """
+    query_backend = query_backend or get_config().get('hail', {}).get(
+        'query_backend', 'spark'
+    )
+    if query_backend == 'spark':
+        hl.init(default_reference=genome_build())
+    elif query_backend == 'spark_local':
+        hl.init(
+            default_reference=genome_build(),
+            master='local[2]',
+            quiet=True,
+            log=log_path or dataset_path('hail-log.txt', category='tmp'),
+        )
+    elif query_backend == 'local':
+        hl.utils.java.Env.hc()  # force initialization
+    else:
+        assert query_backend == 'batch'
+        if hl.utils.java.Env._hc:  # pylint: disable=W0212
+            return  # already initialised
+        dataset = dataset or get_config()['workflow']['dataset']
+        billing_project = billing_project or get_config()['hail']['billing_project']
+
+        asyncio.get_event_loop().run_until_complete(
+            hl.init_batch(
+                billing_project=billing_project,
+                remote_tmpdir=f'gs://cpg-{dataset}-hail/batch-tmp',
+                token=os.environ.get('HAIL_TOKEN'),
+                default_reference='GRCh38',
+            )
+        )
