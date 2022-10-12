@@ -1,9 +1,5 @@
 name: Docker
 on:
-  # Building on pull-requests, manual dispatch, and pushes to main; but restricting
-  # publishing only to main pushes and manual dispatch with `if`s in specific steps.
-  pull_request:
-  workflow_dispatch:
   push:
     branches:
       - main
