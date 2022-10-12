@@ -868,7 +868,12 @@ class Workflow:
         return get_batch().run(wait=wait)
 
     @staticmethod
-    def _process_first_last_stages(stages: list[Stage], graph: nx.DiGraph):
+    def _process_first_last_stages(
+        stages: list[Stage],
+        graph: nx.DiGraph,
+        first_stages: list[str],
+        last_stages: list[str],
+    ):
         """
         Applying first_stages and last_stages config options. Would skip all stages
         before first_stages, and all stages after last_stages (i.e. descendants and
@@ -878,20 +883,17 @@ class Workflow:
         stage_names = list(stg.name for stg in stages)
         lower_names = {s.lower() for s in stage_names}
 
-        def _get(param: str) -> list[str]:
-            val = get_config()['workflow'].get(param, [])
-            _names = val if isinstance(val, list) else [val]
-            for _name in _names:
-                if _name.lower() not in lower_names:
+        for param, _stage_list in [
+            ('first_stages', first_stages),
+            ('last_stages', last_stages),
+        ]:
+            for _s_name in _stage_list:
+                if _s_name.lower() not in lower_names:
                     raise WorkflowError(
-                        f'Value in workflow/{param} "{_name}" must be a stage name '
+                        f'Value in workflow/{param} "{_s_name}" must be a stage name '
                         f'or a subset of stages from the available list: '
                         f'{", ".join(stage_names)}'
                     )
-            return _names
-
-        first_stages = _get('first_stages')
-        last_stages = _get('last_stages')
 
         for fs in first_stages:
             for descendant in nx.descendants(graph, fs):
@@ -921,16 +923,25 @@ class Workflow:
         Iterate over stages and call their queue_for_cohort(cohort) methods;
         through that, creates all Hail Batch jobs through Stage.queue_jobs().
         """
-        _stages_d: dict[str, Stage] = dict()
+        # TOML options to configure stages:
+        skip_stages = get_config()['workflow'].get('skip_stages', [])
+        only_stages = get_config()['workflow'].get('only_stages', [])
+        first_stages = get_config()['workflow'].get('first_stages', [])
+        last_stages = get_config()['workflow'].get('last_stages', [])
+
+        if only_stages or last_stages:
+            # If stages are requested explicitly, we don't need other stages from
+            # the default list:
+            requested_stages = [
+                s for s in requested_stages if s.__name__ in only_stages + last_stages
+            ]
 
         # Round 1: initialising stage objects.
+        _stages_d: dict[str, Stage] = {}
         for cls in requested_stages:
             if cls.__name__ in _stages_d:
                 continue
             _stages_d[cls.__name__] = cls()
-
-        skip_stages = get_config()['workflow'].get('skip_stages', [])
-        only_stages = get_config()['workflow'].get('only_stages', [])
 
         # Round 2: depth search to find implicit stages.
         depth = 0
@@ -984,7 +995,7 @@ class Workflow:
         stages = [_stages_d[name] for name in stage_names]
 
         # Round 5: applying workflow options first_stages and last_stages.
-        self._process_first_last_stages(stages, dag)
+        self._process_first_last_stages(stages, dag, first_stages, last_stages)
 
         if not (final_set_of_stages := [s.name for s in stages if not s.skipped]):
             raise WorkflowError('No stages to run')

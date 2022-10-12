@@ -95,7 +95,7 @@ web_url_template = 'https://{namespace}-web.populationgenomics.org.au/{dataset}'
 # Realign CRAM when available, instead of using FASTQ.
 # The parameter value should correspond to CRAM version
 # (e.g. v0 in gs://cpg-fewgenomes-main/cram/v0/CPG01234.cram
-#realign_from_cram_version = 'bwamem'
+#realign_from_cram_version = 'v0'
 
 # Use GnarlyGenotyper instead of GenotypeGVCFs
 use_gnarly = false
