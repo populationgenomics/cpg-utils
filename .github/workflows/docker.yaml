@@ -37,8 +37,7 @@ jobs:
 
     - name: build
       run: |
-        docker build -f docker/Dockerfile \
-        --build-arg VERSION=$VERSION \
+        docker build -f Dockerfile \
         --tag $IMAGE_NAME:$VERSION docker
 
     - name: push
