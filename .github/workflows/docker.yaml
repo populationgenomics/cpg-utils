@@ -40,7 +40,7 @@ jobs:
         gcloud auth configure-docker australia-southeast1-docker.pkg.dev
 
     - name: build
-      run: 
+      run: |
         docker build -f docker/Dockerfile \
         --build-arg VERSION=$VERSION \
         --tag $DOCKER_TAG docker
