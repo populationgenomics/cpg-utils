@@ -418,16 +418,17 @@ class Sex(Enum):
     FEMALE = 2
 
     @staticmethod
-    def parse(sex: str | None) -> 'Sex':
+    def parse(sex: str | int | None) -> 'Sex':
         """
         Parse a string into a Sex object.
         """
         if sex:
-            if sex.lower() in ('m', 'male', '1'):
+            _sex = sex.lower() if isinstance(sex, str) else sex
+            if _sex in ('m', 'male', '1', 1):
                 return Sex.MALE
-            if sex.lower() in ('f', 'female', '2'):
+            if _sex in ('f', 'female', '2', 2):
                 return Sex.FEMALE
-            if sex.lower() in ('u', 'unknown', '0'):
+            if _sex in ('u', 'unknown', '0', 0):
                 return Sex.UNKNOWN
             raise ValueError(f'Unrecognised sex value {sex}')
         return Sex.UNKNOWN

@@ -8,6 +8,7 @@ from pytest_mock import MockFixture
 from cpg_utils import to_path, Path
 from cpg_utils.config import set_config_paths, update_dict
 from cpg_utils.workflows.inputs import get_cohort
+from cpg_utils.workflows.targets import Sex
 from cpg_utils.workflows.utils import timestamp
 
 tmp_dir_path = to_path(__file__).parent / 'results' / timestamp()
@@ -81,7 +82,24 @@ def test_cohort(mocker: MockFixture):
     def mock_get_external_participant_id_to_internal_sample_id(  # pylint: disable=unused-argument
         *args, **kwargs
     ) -> list[list]:
-        return [['CPG01', 'PART1'], ['CPG02', 'PART2']]
+        return [['PART1', 'CPG01'], ['PART2', 'CPG02']]
+
+    def mock_get_participants(  # pylint: disable=unused-argument
+        *args, **kwargs
+    ) -> list[dict]:
+        return [
+            {
+                'external_id': 'PART1',
+                'reported_sex': 1,
+                'meta': {
+                    'Superpopulation name': 'Africa',
+                },
+            },
+            {
+                'external_id': 'PART2',
+                'reported_sex': 2,
+            },
+        ]
 
     def mock_get_families(*args, **kwargs):  # pylint: disable=unused-argument
         return []
@@ -105,6 +123,10 @@ def test_cohort(mocker: MockFixture):
         mock_get_external_participant_id_to_internal_sample_id,
     )
     mocker.patch(
+        'sample_metadata.apis.ParticipantApi.get_participants',
+        mock_get_participants,
+    )
+    mocker.patch(
         'sample_metadata.apis.FamilyApi.get_families',
         mock_get_families,
     )
@@ -119,3 +141,5 @@ def test_cohort(mocker: MockFixture):
 
     cohort = get_cohort()
     assert cohort.get_samples()[0].id == 'CPG01'
+    assert cohort.get_samples()[0].meta['Superpopulation name'] == 'Africa'
+    assert cohort.get_samples()[0].pedigree.sex == Sex.MALE

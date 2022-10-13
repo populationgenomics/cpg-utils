@@ -220,8 +220,7 @@ class Metamist:
         entries = self.papi.get_participants(metamist_proj)
         participant_entry_by_sid = {}
         for entry in entries:
-            pid = sid_by_pid[entry['external_id']]
-            participant_entry_by_sid = {sid_by_pid[pid]: entry}
+            participant_entry_by_sid[sid_by_pid[entry['external_id']]] = entry
         return participant_entry_by_sid
 
     def update_analysis(self, analysis: Analysis, status: AnalysisStatus):
