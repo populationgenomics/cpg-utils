@@ -200,7 +200,7 @@ class Metamist:
             entries_by_sid[entry['sample_id']].append(entry)
         return entries_by_sid
 
-    def get_participant_entries_by_sid(self, dataset_name: str) -> dict[str, str]:
+    def get_participant_entries_by_sid(self, dataset_name: str) -> dict[str, dict]:
         """
         Retrieve participant entries for a dataset, in the context of access level.
         """
@@ -211,12 +211,18 @@ class Metamist:
         pid_sid_multi = self.papi.get_external_participant_id_to_internal_sample_id(
             metamist_proj
         )
-        participant_by_sid = {}
+        sid_by_pid = {}
         for group in pid_sid_multi:
-            pid = group[0]
+            pid = group[0].strip()
             for sid in group[1:]:
-                participant_by_sid[sid] = pid.strip()
-        return participant_by_sid
+                sid_by_pid[pid] = sid
+
+        entries = self.papi.get_participants(metamist_proj)
+        participant_entry_by_sid = {}
+        for entry in entries:
+            pid = sid_by_pid[entry['external_id']]
+            participant_entry_by_sid = {sid_by_pid[pid]: entry}
+        return participant_entry_by_sid
 
     def update_analysis(self, analysis: Analysis, status: AnalysisStatus):
         """
