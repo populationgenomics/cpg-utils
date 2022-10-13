@@ -626,9 +626,10 @@ def start_query_context(
     if query_backend == 'spark':
         hl.init(default_reference=genome_build())
     elif query_backend == 'spark_local':
+        local_threads = 2  # https://stackoverflow.com/questions/32356143/what-does-setmaster-local-mean-in-spark
         hl.init(
             default_reference=genome_build(),
-            master='local[2]',
+            master=f'local[{local_threads}]',  # local[2] means "run spark locally with 2 threads"
             quiet=True,
             log=log_path or dataset_path('hail-log.txt', category='tmp'),
         )
