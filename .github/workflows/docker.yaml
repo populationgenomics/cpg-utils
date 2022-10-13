@@ -5,7 +5,7 @@ on:
       - main
 
 env:
-  VERSION: 4.8.14
+  VERSION: 4.8.15
 
 jobs:
   docker:
@@ -37,8 +37,7 @@ jobs:
 
     - name: build
       run: |
-        docker build -f Dockerfile \
-        --tag $IMAGE_NAME:$VERSION docker
+        docker build -f Dockerfile --tag $IMAGE_NAME:$VERSION .
 
     - name: push
       run: |
