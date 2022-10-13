@@ -185,7 +185,7 @@ def _populate_participants(cohort: Cohort) -> None:
         for sample in dataset.get_samples():
             if entry := participant_entry_by_sid.get(sample.id):
                 sample.participant_id = entry['external_id']
-                if reported_sex := entry['reported_sex']:
+                if reported_sex := entry.get('reported_sex'):
                     sample.pedigree.sex = Sex.parse(reported_sex)
                 update_dict(sample.meta, entry.get('meta', {}))
 

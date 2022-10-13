@@ -613,17 +613,17 @@ class PedigreeInfo:
     sample: Sample
     sex: Sex = Sex.UNKNOWN
     fam_id: str | None = None
-    phenotype: str = '0'
+    phenotype: str | int = 0
     dad: Sample | None = None
     mom: Sample | None = None
 
-    def get_ped_dict(self, use_participant_id: bool = False) -> dict:
+    def get_ped_dict(self, use_participant_id: bool = False) -> dict[str, str]:
         """
         Returns a dictionary of pedigree fields for this sample, corresponding
         a PED file entry.
         """
 
-        def _get_id(_s: Sample | None):
+        def _get_id(_s: Sample | None) -> str:
             if _s is None:
                 return '0'
             if use_participant_id:
@@ -636,5 +636,5 @@ class PedigreeInfo:
             'Father.ID': _get_id(self.dad),
             'Mother.ID': _get_id(self.mom),
             'Sex': str(self.sex.value),
-            'Phenotype': self.phenotype,
+            'Phenotype': str(self.phenotype),
         }

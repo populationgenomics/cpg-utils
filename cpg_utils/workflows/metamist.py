@@ -220,7 +220,14 @@ class Metamist:
         entries = self.papi.get_participants(metamist_proj)
         participant_entry_by_sid = {}
         for entry in entries:
-            participant_entry_by_sid[sid_by_pid[entry['external_id']]] = entry
+            pid = entry['external_id']
+            if not (sid := sid_by_pid.get(pid)):
+                raise MetamistError(
+                    f'papi.get_participants returned participant that was not returned '
+                    f'by papi.get_external_participant_id_to_internal_sample_id: '
+                    f'{entry}'
+                )
+            participant_entry_by_sid[sid] = entry
         return participant_entry_by_sid
 
     def update_analysis(self, analysis: Analysis, status: AnalysisStatus):
@@ -458,8 +465,8 @@ class Metamist:
         if get_config()['workflow']['access_level'] == 'test':
             metamist_proj += '-test'
 
-        families = self.fapi.get_families(metamist_proj)
-        family_ids = [family['id'] for family in families]
+        entries = self.fapi.get_families(metamist_proj)
+        family_ids = [entry['id'] for entry in entries]
         ped_entries = self.fapi.get_pedigree(
             internal_family_ids=family_ids,
             export_type='json',
@@ -506,17 +513,13 @@ class Sequence:
             meta=data['meta'],
             sequencing_type=sequencing_type,
         )
-        if data['meta'].get('reads'):
-            if alignment_input := Sequence._parse_reads(
-                sample_id=sample_id,
-                meta=data['meta'],
-                check_existence=check_existence,
-            ):
-                mm_seq.alignment_input = alignment_input
-        else:
-            logging.warning(
-                f'{sample_id} sequence: no meta/reads found with FASTQ information'
-            )
+        alignment_input = Sequence._parse_reads(
+            sample_id=sample_id,
+            meta=data['meta'],
+            check_existence=check_existence,
+        )
+        assert alignment_input, (sample_id, data)
+        mm_seq.alignment_input = alignment_input
         return mm_seq
 
     @staticmethod
