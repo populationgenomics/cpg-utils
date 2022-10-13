@@ -143,5 +143,5 @@ def test_cohort(mocker: MockFixture):
     assert cohort.get_samples()[0].id == 'CPG01'
     assert cohort.get_samples()[0].meta['Superpopulation name'] == 'Africa'
     assert cohort.get_samples()[0].pedigree
-    if cohort.get_samples()[0].pedigree:
+    if cohort.get_samples()[0].pedigree is not None:
         assert cohort.get_samples()[0].pedigree.sex == Sex.MALE
