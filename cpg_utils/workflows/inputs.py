@@ -186,15 +186,7 @@ def _populate_participants(cohort: Cohort) -> None:
             if entry := participant_entry_by_sid.get(sample.id):
                 sample.participant_id = entry['external_id']
                 if reported_sex := entry['reported_sex']:
-                    sex = Sex.parse(reported_sex)
-                    if sample.pedigree:
-                        sample.pedigree.sex = sex
-                    else:
-                        sample.pedigree = PedigreeInfo(
-                            sample=sample,
-                            fam_id=sample.participant_id,
-                            sex=sex,
-                        )
+                    sample.pedigree.sex = Sex.parse(reported_sex)
                 update_dict(sample.meta, entry.get('meta', {}))
 
 
@@ -240,10 +232,3 @@ def _populate_pedigree(cohort: Cohort) -> None:
                 f'No pedigree data found for '
                 f'{len(sids_wo_ped)}/{len(dataset.get_samples())} samples'
             )
-
-    for dataset in cohort.get_datasets():
-        samples_with_ped = [s for s in dataset.get_samples() if s.pedigree]
-        logging.info(
-            f'{dataset.name}: found pedigree info for {len(samples_with_ped)} '
-            f'samples out of {len(dataset.get_samples())}'
-        )
