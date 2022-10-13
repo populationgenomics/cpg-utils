@@ -4,7 +4,7 @@ Metamist wrapper to get input samples.
 
 import logging
 
-from cpg_utils.config import get_config
+from cpg_utils.config import get_config, update_dict
 
 from .metamist import get_metamist, Sequence, AnalysisType, MetamistError
 from .targets import Cohort, Sex, PedigreeInfo
@@ -178,11 +178,16 @@ def _populate_participants(cohort: Cohort) -> None:
     for dataset in cohort.get_datasets():
         logging.info(f'Reading participants IDs for dataset {dataset}')
 
-        participant_by_sid = get_metamist().get_participant_entries_by_sid(dataset.name)
+        participant_entry_by_sid = get_metamist().get_participant_entries_by_sid(
+            dataset.name
+        )
 
         for sample in dataset.get_samples():
-            if pid := participant_by_sid.get(sample.id):
-                sample.participant_id = pid
+            if entry := participant_entry_by_sid.get(sample.id):
+                sample.participant_id = entry['external_id']
+                if reported_sex := entry.get('reported_sex'):
+                    sample.pedigree.sex = Sex.parse(reported_sex)
+                update_dict(sample.meta, entry.get('meta', {}))
 
 
 def _populate_pedigree(cohort: Cohort) -> None:
@@ -227,10 +232,3 @@ def _populate_pedigree(cohort: Cohort) -> None:
                 f'No pedigree data found for '
                 f'{len(sids_wo_ped)}/{len(dataset.get_samples())} samples'
             )
-
-    for dataset in cohort.get_datasets():
-        samples_with_ped = [s for s in dataset.get_samples() if s.pedigree]
-        logging.info(
-            f'{dataset.name}: found pedigree info for {len(samples_with_ped)} '
-            f'samples out of {len(dataset.get_samples())}'
-        )

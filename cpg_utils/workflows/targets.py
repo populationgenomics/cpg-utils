@@ -392,10 +392,9 @@ class Dataset(Target):
         """
         datas = []
         for sample in self.get_samples():
-            if sample.pedigree:
-                datas.append(
-                    sample.pedigree.get_ped_dict(use_participant_id=use_participant_id)
-                )
+            datas.append(
+                sample.pedigree.get_ped_dict(use_participant_id=use_participant_id)
+            )
         if not datas:
             raise ValueError(f'No pedigree data found for {self.name}')
         df = pd.DataFrame(datas)
@@ -418,16 +417,17 @@ class Sex(Enum):
     FEMALE = 2
 
     @staticmethod
-    def parse(sex: str | None) -> 'Sex':
+    def parse(sex: str | int | None) -> 'Sex':
         """
         Parse a string into a Sex object.
         """
         if sex:
-            if sex.lower() in ('m', 'male', '1'):
+            _sex = sex.lower() if isinstance(sex, str) else sex
+            if _sex in ('m', 'male', '1', 1):
                 return Sex.MALE
-            if sex.lower() in ('f', 'female', '2'):
+            if _sex in ('f', 'female', '2', 2):
                 return Sex.FEMALE
-            if sex.lower() in ('u', 'unknown', '0'):
+            if _sex in ('u', 'unknown', '0', 0):
                 return Sex.UNKNOWN
             raise ValueError(f'Unrecognised sex value {sex}')
         return Sex.UNKNOWN
@@ -460,13 +460,13 @@ class Sample(Target):
         self.dataset = dataset
         self._participant_id = participant_id
         self.meta: dict = meta or dict()
-        self.pedigree: PedigreeInfo | None = pedigree
+        self.pedigree: PedigreeInfo = pedigree or PedigreeInfo(
+            sample=self,
+            fam_id=self.participant_id,
+            sex=sex or Sex.UNKNOWN,
+        )
         if sex:
-            self.pedigree = PedigreeInfo(
-                sample=self,
-                fam_id=self.participant_id,
-                sex=sex,
-            )
+            self.pedigree.sex = sex
         self.alignment_input_by_seq_type: dict[str, AlignmentInput] = (
             alignment_input_by_seq_type or dict()
         )
@@ -489,7 +489,7 @@ class Sample(Target):
                     for seq_t, al_inp in self.alignment_input_by_seq_type.items()
                 ]
             ),
-            'pedigree': self.pedigree if self.pedigree else '',
+            'pedigree': self.pedigree,
         }
         retval = f'Sample({self.dataset.name}/{self.id}'
         if self._external_id:
@@ -546,16 +546,7 @@ class Sample(Target):
         Returns a dictionary of pedigree fields for this sample, corresponding
         a PED file entry.
         """
-        if self.pedigree:
-            return self.pedigree.get_ped_dict(use_participant_id)
-        return {
-            'Family.ID': self.participant_id if use_participant_id else self.id,
-            'Individual.ID': self.participant_id if use_participant_id else self.id,
-            'Father.ID': '0',
-            'Mother.ID': '0',
-            'Sex': '0',
-            'Phenotype': '0',
-        }
+        return self.pedigree.get_ped_dict(use_participant_id)
 
     def make_cram_path(self, access_level: str | None = None) -> CramPath:
         """
@@ -620,19 +611,19 @@ class PedigreeInfo:
     """
 
     sample: Sample
-    sex: Sex
+    sex: Sex = Sex.UNKNOWN
     fam_id: str | None = None
-    phenotype: str | None = None
+    phenotype: str | int = 0
     dad: Sample | None = None
     mom: Sample | None = None
 
-    def get_ped_dict(self, use_participant_id: bool = False) -> dict:
+    def get_ped_dict(self, use_participant_id: bool = False) -> dict[str, str]:
         """
         Returns a dictionary of pedigree fields for this sample, corresponding
         a PED file entry.
         """
 
-        def _get_id(_s: Sample | None):
+        def _get_id(_s: Sample | None) -> str:
             if _s is None:
                 return '0'
             if use_participant_id:
@@ -645,5 +636,5 @@ class PedigreeInfo:
             'Father.ID': _get_id(self.dad),
             'Mother.ID': _get_id(self.mom),
             'Sex': str(self.sex.value),
-            'Phenotype': self.phenotype,
+            'Phenotype': str(self.phenotype),
         }
