@@ -222,11 +222,10 @@ class Metamist:
         for entry in entries:
             pid = entry['external_id']
             if not (sid := sid_by_pid.get(pid)):
-                raise MetamistError(
-                    f'papi.get_participants returned participant that was not returned '
-                    f'by papi.get_external_participant_id_to_internal_sample_id: '
-                    f'{entry}'
-                )
+                # This is an expected behaviour: dummy participant entries might be
+                # created to fill in the PED data. We should just ignore participants
+                # with no associated samples.
+                continue
             participant_entry_by_sid[sid] = entry
         return participant_entry_by_sid
 
@@ -513,13 +512,11 @@ class Sequence:
             meta=data['meta'],
             sequencing_type=sequencing_type,
         )
-        alignment_input = Sequence._parse_reads(
+        mm_seq.alignment_input = Sequence._parse_reads(
             sample_id=sample_id,
             meta=data['meta'],
             check_existence=check_existence,
         )
-        assert alignment_input, (sample_id, data)
-        mm_seq.alignment_input = alignment_input
         return mm_seq
 
     @staticmethod

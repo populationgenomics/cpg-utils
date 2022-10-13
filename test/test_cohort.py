@@ -225,9 +225,12 @@ def test_cohort(mocker: MockFixture):
 
     cohort = get_cohort()
     # the 5th sample doesn't have associated seq/meta/reads
-    assert len(cohort.get_samples()) == 4
-    assert cohort.get_sample_ids() == ['CPG00', 'CPG01', 'CPG02', 'CPG03']
+    assert len(cohort.get_samples()) == 5
+    assert cohort.get_sample_ids() == ['CPG00', 'CPG01', 'CPG02', 'CPG03', 'CPG04']
     assert cohort.get_samples()[0].id == 'CPG00'
+    assert isinstance(
+        cohort.get_samples()[0].alignment_input_by_seq_type['genome'], BamPath
+    )
     assert isinstance(
         cohort.get_samples()[0].alignment_input_by_seq_type['genome'], BamPath
     )
@@ -245,3 +248,4 @@ def test_cohort(mocker: MockFixture):
     assert cohort.get_samples()[3].pedigree.sex == Sex.UNKNOWN
     assert cohort.get_samples()[3].pedigree.mom is None
     assert cohort.get_samples()[3].pedigree.dad is None
+    assert cohort.get_samples()[4].seq_by_type['genome'].alignment_input is None
