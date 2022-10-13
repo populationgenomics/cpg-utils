@@ -12,7 +12,6 @@ from hailtop.batch import Batch, Resource
 
 from .targets import Target
 from .metamist import get_metamist, AnalysisStatus, MetamistError
-from ..config import get_config
 
 
 class StatusReporter(ABC):
