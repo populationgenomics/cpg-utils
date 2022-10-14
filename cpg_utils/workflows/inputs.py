@@ -50,8 +50,7 @@ def create_cohort() -> Cohort:
             msg += ' (after skipping samples)'
         if 'only_samples' in get_config()['workflow']:
             msg += ' (after picking samples)'
-        logging.warning(msg)
-        return cohort
+        raise MetamistError(msg)
 
     if sequencing_type := get_config()['workflow'].get('sequencing_type'):
         _populate_alignment_inputs(cohort, sequencing_type)
@@ -59,6 +58,7 @@ def create_cohort() -> Cohort:
     _populate_analysis(cohort)
     _populate_participants(cohort)
     _populate_pedigree(cohort)
+    assert cohort.get_samples()
     return cohort
 
 
@@ -118,26 +118,24 @@ def _populate_alignment_inputs(
     sid_wo_reads = set()
     for sample in cohort.get_samples():
         for entry in seq_entries_by_sid.get(sample.id, []):
-            if not entry['meta'].get('reads'):
+            seq = Sequence.parse(entry, check_existence=check_existence)
+            if seq.sequencing_type in sample.seq_by_type:
+                raise MetamistError(
+                    f'{sample}: found more than one associated sequencing entry with '
+                    f'sequencing type: {seq.sequencing_type}. Make sure there is only '
+                    f'one data source of sequencing type per sample.'
+                )
+            sample.seq_by_type[seq.sequencing_type] = seq
+            if not seq.alignment_input:
                 sid_wo_reads.add(sample.id)
                 continue
-            seq = Sequence.parse(entry, check_existence=check_existence)
-            sample.seq_by_type[seq.sequencing_type] = seq
-            if seq.alignment_input:
-                if seq.sequencing_type in sample.alignment_input_by_seq_type:
-                    raise MetamistError(
-                        f'{sample}: found more than 1 alignment input with '
-                        f'sequencing type: {seq.sequencing_type}. Check your '
-                        f'input provider to make sure there is only one data source '
-                        f'of sequencing type per sample.'
-                    )
-                sample.alignment_input_by_seq_type[
-                    seq.sequencing_type
-                ] = seq.alignment_input
+            sample.alignment_input_by_seq_type[
+                seq.sequencing_type
+            ] = seq.alignment_input
     if sid_wo_reads:
         logging.warning(
             f'Found {len(sid_wo_reads)}/{len(cohort.get_samples())} samples with '
-            f'no meta/rads in corresponding sequence entries'
+            f'no meta/reads in corresponding sequence entries'
         )
 
 
