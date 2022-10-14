@@ -118,7 +118,7 @@ def _populate_alignment_inputs(
     sid_wo_reads = set()
     for sample in cohort.get_samples():
         for entry in seq_entries_by_sid.get(sample.id, []):
-            seq = Sequence.parse(entry, check_existence=check_existence)
+            seq = Sequence.parse(entry, parse_reads=False)
             if seq.sequencing_type in sample.seq_by_type:
                 raise MetamistError(
                     f'{sample}: found more than one associated sequencing entry with '
@@ -126,12 +126,18 @@ def _populate_alignment_inputs(
                     f'one data source of sequencing type per sample.'
                 )
             sample.seq_by_type[seq.sequencing_type] = seq
-            if not seq.alignment_input:
+
+            if not entry.get('meta', {}).get('reads'):
                 sid_wo_reads.add(sample.id)
                 continue
-            sample.alignment_input_by_seq_type[
-                seq.sequencing_type
-            ] = seq.alignment_input
+
+            alignment_input = Sequence.parse_reads(
+                sample_id=sample.id,
+                meta=entry['meta'],
+                check_existence=check_existence,
+            )
+            seq.alignment_input = alignment_input
+            sample.alignment_input_by_seq_type[seq.sequencing_type] = alignment_input
     if sid_wo_reads:
         logging.warning(
             f'Found {len(sid_wo_reads)}/{len(cohort.get_samples())} samples with '
