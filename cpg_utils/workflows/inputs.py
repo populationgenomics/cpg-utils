@@ -57,7 +57,8 @@ def create_cohort() -> Cohort:
         _filter_sequencing_type(cohort, sequencing_type)
     _populate_analysis(cohort)
     _populate_participants(cohort)
-    _populate_pedigree(cohort)
+    if get_config()['workflow'].get('read_pedigree', True):
+        _populate_pedigree(cohort)
     assert cohort.get_samples()
     return cohort
 
