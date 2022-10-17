@@ -200,7 +200,7 @@ class Metamist:
             entries_by_sid[entry['sample_id']].append(entry)
         return entries_by_sid
 
-    def get_participant_entries_by_sid(self, dataset_name: str) -> dict[str, str]:
+    def get_participant_entries_by_sid(self, dataset_name: str) -> dict[str, dict]:
         """
         Retrieve participant entries for a dataset, in the context of access level.
         """
@@ -211,12 +211,23 @@ class Metamist:
         pid_sid_multi = self.papi.get_external_participant_id_to_internal_sample_id(
             metamist_proj
         )
-        participant_by_sid = {}
+        sid_by_pid = {}
         for group in pid_sid_multi:
-            pid = group[0]
+            pid = group[0].strip()
             for sid in group[1:]:
-                participant_by_sid[sid] = pid.strip()
-        return participant_by_sid
+                sid_by_pid[pid] = sid
+
+        entries = self.papi.get_participants(metamist_proj)
+        participant_entry_by_sid = {}
+        for entry in entries:
+            pid = entry['external_id']
+            if not (sid := sid_by_pid.get(pid)):
+                # This is an expected behaviour: dummy participant entries might be
+                # created to fill in the PED data. We should just ignore participants
+                # with no associated samples.
+                continue
+            participant_entry_by_sid[sid] = entry
+        return participant_entry_by_sid
 
     def update_analysis(self, analysis: Analysis, status: AnalysisStatus):
         """
@@ -267,9 +278,9 @@ class Metamist:
         dataset: str | None = None,
     ) -> dict[str, Analysis]:
         """
-        Query the DB to find the last completed analysis for the type and samples,
-        one Analysis object per sample. Assumes the analysis is defined for a single
-        sample (e.g. cram, gvcf).
+        Query the DB to find the last completed analysis for the type, sample ids,
+        and sequencing type, one Analysis object per sample. Assumes the analysis
+        is defined for a single sample (that is, analysis_type=cram|gvcf|qc).
         """
         dataset = dataset or self.default_dataset
         metamist_proj = dataset or self.default_dataset
@@ -281,13 +292,16 @@ class Metamist:
         logging.info(
             f'Querying {analysis_type} analysis entries for {metamist_proj}...'
         )
+        meta = meta or {}
+        meta['sequencing_type'] = get_config()['workflow']['sequencing_type']
+
         datas = self.aapi.query_analyses(
             models.AnalysisQueryModel(
                 projects=[metamist_proj],
                 sample_ids=sample_ids,
                 type=models.AnalysisType(analysis_type.value),
                 status=models.AnalysisStatus(analysis_status.value),
-                meta=meta or {},
+                meta=meta,
             )
         )
 
@@ -450,8 +464,8 @@ class Metamist:
         if get_config()['workflow']['access_level'] == 'test':
             metamist_proj += '-test'
 
-        families = self.fapi.get_families(metamist_proj)
-        family_ids = [family['id'] for family in families]
+        entries = self.fapi.get_families(metamist_proj)
+        family_ids = [entry['id'] for entry in entries]
         ped_entries = self.fapi.get_pedigree(
             internal_family_ids=family_ids,
             export_type='json',
@@ -478,7 +492,11 @@ class Sequence:
     alignment_input: AlignmentInput | None = None
 
     @staticmethod
-    def parse(data: dict, check_existence: bool = False) -> 'Sequence':
+    def parse(
+        data: dict,
+        check_existence: bool = False,
+        parse_reads: bool = True,
+    ) -> 'Sequence':
         """
         Create from a dictionary.
         """
@@ -498,29 +516,23 @@ class Sequence:
             meta=data['meta'],
             sequencing_type=sequencing_type,
         )
-        if data['meta'].get('reads'):
-            if alignment_input := Sequence._parse_reads(
+        if parse_reads:
+            mm_seq.alignment_input = Sequence.parse_reads(
                 sample_id=sample_id,
                 meta=data['meta'],
                 check_existence=check_existence,
-            ):
-                mm_seq.alignment_input = alignment_input
-        else:
-            logging.warning(
-                f'{sample_id} sequence: no meta/reads found with FASTQ information'
             )
         return mm_seq
 
     @staticmethod
-    def _parse_reads(  # pylint: disable=too-many-return-statements
+    def parse_reads(  # pylint: disable=too-many-return-statements
         sample_id: str,
         meta: dict,
         check_existence: bool,
-    ) -> AlignmentInput | None:
+    ) -> AlignmentInput:
         """
         Parse a AlignmentInput object from the meta dictionary.
-
-        @param check_existence: check if fastq/crams exist on buckets.
+        `check_existence`: check if fastq/crams exist on buckets.
         Default value is pulled from self.metamist and can be overridden.
         """
         reads_data = meta.get('reads')
@@ -528,38 +540,34 @@ class Sequence:
         reference_assembly = meta.get('reference_assembly', {}).get('location')
 
         if not reads_data:
-            logging.error(f'{sample_id}: no "meta/reads" field in meta')
-            return None
+            raise MetamistError(f'{sample_id}: no "meta/reads" field in meta')
         if not reads_type:
-            logging.error(f'{sample_id}: no "meta/reads_type" field in meta')
-            return None
+            raise MetamistError(f'{sample_id}: no "meta/reads_type" field in meta')
         supported_types = ('fastq', 'bam', 'cram')
         if reads_type not in supported_types:
-            logging.error(
+            raise MetamistError(
                 f'{sample_id}: ERROR: "reads_type" is expected to be one of '
                 f'{supported_types}'
             )
-            return None
 
         if reads_type in ('bam', 'cram'):
             if len(reads_data) > 1:
-                logging.error(f'{sample_id}: supporting only single bam/cram input')
-                return None
+                raise MetamistError(
+                    f'{sample_id}: supporting only single bam/cram input'
+                )
 
             location = reads_data[0]['location']
             if not (location.endswith('.cram') or location.endswith('.bam')):
-                logging.error(
+                raise MetamistError(
                     f'{sample_id}: ERROR: expected the file to have an extension '
                     f'.cram or .bam, got: {location}'
                 )
-                return None
             if get_config()['workflow']['access_level'] == 'test':
                 location = location.replace('-main-upload/', '-test-upload/')
             if check_existence and not exists(location):
-                logging.error(
+                raise MetamistError(
                     f'{sample_id}: ERROR: index file does not exist: {location}'
                 )
-                return None
 
             # Index:
             index_location = None
@@ -571,7 +579,7 @@ class Sequence:
                     or location.endswith('.bai')
                     and not index_location.endswith('.bai')
                 ):
-                    logging.error(
+                    raise MetamistError(
                         f'{sample_id}: ERROR: expected the index file to have an extension '
                         f'.crai or .bai, got: {index_location}'
                     )
@@ -580,10 +588,9 @@ class Sequence:
                         '-main-upload/', '-test-upload/'
                     )
                 if check_existence and not exists(index_location):
-                    logging.error(
+                    raise MetamistError(
                         f'{sample_id}: ERROR: index file does not exist: {index_location}'
                     )
-                    return None
 
             if location.endswith('.cram'):
                 return CramPath(
@@ -613,17 +620,15 @@ class Sequence:
                         '-main-upload/', '-test-upload/'
                     )
                 if check_existence and not exists(lane_pair[0]['location']):
-                    logging.error(
+                    raise MetamistError(
                         f'{sample_id}: ERROR: read 1 file does not exist: '
                         f'{lane_pair[0]["location"]}'
                     )
-                    return None
                 if check_existence and not exists(lane_pair[1]['location']):
-                    logging.error(
+                    raise MetamistError(
                         f'{sample_id}: ERROR: read 2 file does not exist: '
                         f'{lane_pair[1]["location"]}'
                     )
-                    return None
 
                 fastq_pairs.append(
                     FastqPair(
