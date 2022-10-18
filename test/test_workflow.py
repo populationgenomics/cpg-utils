@@ -15,7 +15,6 @@ from cpg_utils.workflows.workflow import (
     SampleStage,
     StageInput,
     StageOutput,
-    ExpectedResultT,
     CohortStage,
     stage,
     run_workflow,
@@ -80,8 +79,8 @@ def test_workflow(mocker: MockFixture):
         Just a sample-level stage.
         """
 
-        def expected_outputs(self, sample: Sample) -> ExpectedResultT:
-            return dataset_path(f'{sample.id}.tsv')
+        def expected_outputs(self, sample: Sample) -> Path:
+            return to_path(dataset_path(f'{sample.id}.tsv'))
 
         def queue_jobs(self, sample: Sample, inputs: StageInput) -> StageOutput | None:
             j = self.b.new_job('Sample job', self.get_job_attrs(sample))
@@ -96,7 +95,7 @@ def test_workflow(mocker: MockFixture):
         Just a cohort-level stage.
         """
 
-        def expected_outputs(self, cohort: Cohort) -> ExpectedResultT:
+        def expected_outputs(self, cohort: Cohort) -> Path:
             return output_path
 
         def queue_jobs(self, cohort: Cohort, inputs: StageInput) -> StageOutput | None:

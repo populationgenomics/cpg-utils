@@ -21,10 +21,9 @@ from enum import Enum
 from typing import cast, Callable, Union, TypeVar, Generic, Optional, Type
 
 from cloudpathlib import CloudPath
-import hailtop.batch as hb
 from hailtop.batch.job import Job
 from cpg_utils.config import get_config
-from cpg_utils import Path, to_path
+from cpg_utils import Path
 
 from .batch import get_batch
 from .status import MetamistStatusReporter
@@ -43,7 +42,7 @@ TargetT = TypeVar('TargetT', bound=Target)
 
 ExpectedResultT = Union[Path, dict[str, Path], dict[str, str], str, None]
 
-StageOutputData = Union[Path, hb.Resource, dict[str, Path], dict[str, hb.Resource]]
+StageOutputData = Union[Path, dict[str, Path]]
 
 
 class WorkflowError(Exception):
@@ -69,7 +68,7 @@ class StageOutput:
     def __init__(
         self,
         target: 'Target',
-        data: StageOutputData | str | dict[str, str] | None = None,
+        data: StageOutputData | None = None,
         jobs: list[Job] | Job | None = None,
         meta: dict | None = None,
         reusable: bool = False,
@@ -78,14 +77,7 @@ class StageOutput:
         stage: Optional['Stage'] = None,
     ):
         # Converting str into Path objects.
-        self.data: StageOutputData | None
-        if isinstance(data, dict):
-            self.data = {k: to_path(v) for k, v in data.items()}
-        elif data is not None:
-            self.data = to_path(data)
-        else:
-            self.data = data
-
+        self.data = data
         self.stage = stage
         self.target = target
         self.jobs: list[Job] = [jobs] if isinstance(jobs, Job) else (jobs or [])
@@ -107,9 +99,9 @@ class StageOutput:
         )
         return res
 
-    def as_path_or_resource(self, id=None) -> Path | hb.Resource:
+    def as_path(self, id=None) -> Path:
         """
-        Cast the result to Union[str, hb.Resource], throw an error if can't cast.
+        Cast the result to a path object. Throw an exception when can't cast.
         `id` is used to extract the value when the result is a dictionary.
         """
         if self.data is None:
@@ -120,60 +112,22 @@ class StageOutput:
                 raise ValueError(
                     f'{self.stage}: {self.data} is not a dictionary, can\'t get "{id}"'
                 )
-            return cast(dict, self.data)[id]
+            res = cast(dict, self.data)[id]
+        else:
+            res = self.data
 
-        if isinstance(self.data, dict):
-            res = cast(dict, self.data)
-            if len(res.values()) > 1:
-                raise ValueError(
-                    f'{res} is a dictionary with more than 1 element, '
-                    f'please set the `id` parameter'
-                )
-            return list(res.values())[0]
-
-        return self.data
-
-    def as_path(self, id=None) -> Path:
-        """
-        Cast the result to path. Though exception if failed to cast.
-        `id` is used to extract the value when the result is a dictionary.
-        """
-        res = self.as_path_or_resource(id)
         if not isinstance(res, CloudPath | pathlib.Path):
-            raise ValueError(f'{res} is not a path.')
+            raise ValueError(f'{res} is not a path object.')
+
         return cast(Path, res)
 
-    def as_resource(self, id=None) -> hb.Resource:
-        """
-        Cast the result to Hail Batch Resource, or throw an error if the cast failed.
-        `id` is used to extract the value when the result is a dictionary.
-        """
-        res = self.as_path_or_resource(id)
-        if not isinstance(res, hb.Resource):
-            raise ValueError(f'{res} is not a Hail Batch Resource.')
-        return cast(hb.Resource, res)
-
-    def as_dict(self) -> dict[str, Path | hb.Resource]:
+    def as_dict(self) -> dict[str, Path]:
         """
         Cast the result to a dictionary, or throw an error if the cast failed.
         """
         if not isinstance(self.data, dict):
             raise ValueError(f'{self.data} is not a dictionary.')
         return self.data
-
-    def as_resource_dict(self) -> dict[str, hb.Resource]:
-        """
-        Cast the result to a dictionary of Hail Batch Resources,
-        or throw an error if the cast failed
-        """
-        return {k: self.as_resource(id=k) for k in self.as_dict()}
-
-    def as_path_dict(self) -> dict[str, Path]:
-        """
-        Cast the result to a dictionary of strings,
-        or throw an error if the cast failed.
-        """
-        return {k: self.as_path(id=k) for k in self.as_dict()}
 
 
 # noinspection PyShadowingNames
@@ -250,30 +204,11 @@ class StageInput:
         """
         return self._each(fun=(lambda r: r.as_path(id=id)), stage=stage)
 
-    def as_resource_by_target(
-        self,
-        stage: StageDecorator,
-        id: str | None = None,
-    ) -> dict[str, hb.Resource]:
-        """
-        Get a single file path result, indexed by target for a specific stage
-        """
-        return self._each(fun=(lambda r: r.as_resource(id=id)), stage=stage)
-
     def as_dict_by_target(self, stage: StageDecorator) -> dict[str, dict[str, Path]]:
         """
         Get as a dict of files/resources for a specific stage, indexed by target
         """
         return self._each(fun=(lambda r: r.as_dict()), stage=stage)
-
-    def as_resource_dict_by_target(
-        self,
-        stage: StageDecorator,
-    ) -> dict[str, dict[str, hb.Resource]]:
-        """
-        Get a dict of resources for a specific stage, and indexed by target
-        """
-        return self._each(fun=(lambda r: r.as_resource_dict()), stage=stage)
 
     def as_path_dict_by_target(
         self,
@@ -314,40 +249,12 @@ class StageInput:
         res = self._get(target=target, stage=stage)
         return res.as_path(id)
 
-    def as_resource(
-        self,
-        target: 'Target',
-        stage: StageDecorator,
-        id: str | None = None,
-    ) -> hb.Resource:
-        """
-        Get Hail Batch Resource for a specific target and stage
-        """
-        res = self._get(target=target, stage=stage)
-        return res.as_resource(id)
-
     def as_dict(self, target: 'Target', stage: StageDecorator) -> dict[str, Path]:
         """
-        Get a dict of files or Resources for a specific target and stage
+        Get a dict of paths for a specific target and stage
         """
         res = self._get(target=target, stage=stage)
         return res.as_dict()
-
-    def as_path_dict(self, target: 'Target', stage: StageDecorator) -> dict[str, Path]:
-        """
-        Get a dict of files for a specific target and stage
-        """
-        res = self._get(target=target, stage=stage)
-        return res.as_path_dict()
-
-    def as_resource_dict(
-        self, target: 'Target', stage: StageDecorator
-    ) -> dict[str, hb.Resource]:
-        """
-        Get a dict of  Resources for a specific target and stage
-        """
-        res = self._get(target=target, stage=stage)
-        return res.as_resource_dict()
 
     def get_jobs(self, target: 'Target') -> list[Job]:
         """
