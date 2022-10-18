@@ -121,7 +121,7 @@ class StageOutput:
 
         return cast(Path, res)
 
-    def as_dict(self) -> dict[str, str | Path]:
+    def as_dict(self) -> dict[str, Path]:
         """
         Cast the result to a dictionary, or throw an error if the cast failed.
         """
