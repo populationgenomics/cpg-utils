@@ -66,58 +66,71 @@ def test_cohort(mocker: MockFixture):
             {'id': 'CPG04', 'external_id': 'SAMPLE4'},
         ]
 
-    def mock_get_sequences_by_sample_ids(  # pylint: disable=unused-argument
+    def get_sequences_by_sample_ids(  # pylint: disable=unused-argument
         *args, **kwargs
-    ) -> list[dict]:
-        return [
-            {
-                'id': 0,
-                'sample_id': 'CPG00',
-                'type': 'genome',
-                'status': 'completed',
-                'meta': {'reads': [{'location': 'file.bam'}], 'reads_type': 'bam'},
-            },
-            {
-                'id': 1,
-                'sample_id': 'CPG00',
-                'type': 'exome',
-                'status': 'completed',
-                'meta': {'reads': [{'location': 'file.bam'}], 'reads_type': 'bam'},
-            },
-            {
-                'id': 2,
-                'sample_id': 'CPG01',
-                'type': 'genome',
-                'status': 'completed',
-                'meta': {
-                    'reads': [
-                        [{'location': 'file.R1.fq.gz'}, {'location': 'file.R2.fq.gz'}]
-                    ],
-                    'reads_type': 'fastq',
+    ) -> dict:
+        return {
+            'CPG00': [
+                {
+                    'id': 0,
+                    'sample_id': 'CPG00',
+                    'type': 'genome',
+                    'status': 'completed',
+                    'meta': {'reads': [{'location': 'file.bam'}], 'reads_type': 'bam'},
                 },
-            },
-            {
-                'id': 3,
-                'sample_id': 'CPG02',
-                'type': 'genome',
-                'status': 'completed',
-                'meta': {'reads': [{'location': 'file.bam'}], 'reads_type': 'bam'},
-            },
-            {
-                'id': 4,
-                'sample_id': 'CPG03',
-                'type': 'genome',
-                'status': 'completed',
-                'meta': {'reads': [{'location': 'file.bam'}], 'reads_type': 'bam'},
-            },
-            {
-                'id': 5,
-                'sample_id': 'CPG04',
-                'type': 'genome',
-                'status': 'incomplete',
-                'meta': {},
-            },
-        ]
+                {
+                    'id': 1,
+                    'sample_id': 'CPG00',
+                    'type': 'exome',
+                    'status': 'completed',
+                    'meta': {'reads': [{'location': 'file.bam'}], 'reads_type': 'bam'},
+                },
+            ],
+            'CPG01': [
+                {
+                    'id': 2,
+                    'sample_id': 'CPG01',
+                    'type': 'genome',
+                    'status': 'completed',
+                    'meta': {
+                        'reads': [
+                            [
+                                {'location': 'file.R1.fq.gz'},
+                                {'location': 'file.R2.fq.gz'},
+                            ]
+                        ],
+                        'reads_type': 'fastq',
+                    },
+                }
+            ],
+            'CPG02': [
+                {
+                    'id': 3,
+                    'sample_id': 'CPG02',
+                    'type': 'genome',
+                    'status': 'completed',
+                    'meta': {'reads': [{'location': 'file.bam'}], 'reads_type': 'bam'},
+                }
+            ],
+            'CPG03': [
+                {
+                    'id': 4,
+                    'sample_id': 'CPG03',
+                    'type': 'genome',
+                    'status': 'completed',
+                    'meta': {'reads': [{'location': 'file.bam'}], 'reads_type': 'bam'},
+                }
+            ],
+            'CPG04': [
+                {
+                    'id': 5,
+                    'sample_id': 'CPG04',
+                    'type': 'genome',
+                    'status': 'incomplete',
+                    'meta': {},
+                }
+            ],
+        }
 
     def mock_get_external_participant_id_to_internal_sample_id(  # pylint: disable=unused-argument
         *args, **kwargs
@@ -200,7 +213,7 @@ def test_cohort(mocker: MockFixture):
     )
     mocker.patch(
         'sample_metadata.apis.SequenceApi.get_sequences_by_sample_ids',
-        mock_get_sequences_by_sample_ids,
+        get_sequences_by_sample_ids,
     )
     mocker.patch(
         'sample_metadata.apis.ParticipantApi.get_external_participant_id_to_internal_sample_id',
