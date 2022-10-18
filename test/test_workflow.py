@@ -15,7 +15,6 @@ from cpg_utils.workflows.workflow import (
     SampleStage,
     StageInput,
     StageOutput,
-    ExpectedResultT,
     CohortStage,
     stage,
     run_workflow,
