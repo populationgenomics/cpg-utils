@@ -466,12 +466,29 @@ class Metamist:
 
         entries = self.fapi.get_families(metamist_proj)
         family_ids = [entry['id'] for entry in entries]
-        ped_entries = self.fapi.get_pedigree(
-            internal_family_ids=family_ids,
-            export_type='json',
-            project=metamist_proj,
-            replace_with_participant_external_ids=True,
-        )
+
+        # Since `fapi.get_pedigree` is a GET endpoint, it is limited by the length of
+        # the request string. It would stall with the number of families above ~600.
+        # To mitigate this, we split the input into chunks. 500 families should be
+        # a safe number of families in one chunk.
+        def _chunks(seq, size):
+            return (seq[pos : pos + size] for pos in range(0, len(seq), size))
+
+        ped_entries = []
+        chunk_size = 500
+        for i, fam_ids_chunk in enumerate(_chunks(family_ids, chunk_size)):
+            logging.info(
+                f'Running fapi.get_pedigree on families #{i * chunk_size}..'
+                f'{i * chunk_size + 1 + len(fam_ids_chunk)} (out of {len(family_ids)})'
+            )
+            ped_entries.extend(
+                self.fapi.get_pedigree(
+                    internal_family_ids=fam_ids_chunk,
+                    export_type='json',
+                    project=metamist_proj,
+                    replace_with_participant_external_ids=True,
+                )
+            )
 
         return ped_entries
 
