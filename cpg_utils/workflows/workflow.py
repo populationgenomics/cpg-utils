@@ -99,20 +99,20 @@ class StageOutput:
         )
         return res
 
-    def as_path(self, id=None) -> Path:
+    def as_path(self, key=None) -> Path:
         """
         Cast the result to a path object. Throw an exception when can't cast.
-        `id` is used to extract the value when the result is a dictionary.
+        `key` is used to extract the value when the result is a dictionary.
         """
         if self.data is None:
             raise ValueError(f'{self.stage}: output data is not available')
 
-        if id is not None:
+        if key is not None:
             if not isinstance(self.data, dict):
                 raise ValueError(
-                    f'{self.stage}: {self.data} is not a dictionary, can\'t get "{id}"'
+                    f'{self.stage}: {self.data} is not a dictionary, can\'t get "{key}"'
                 )
-            res = cast(dict, self.data)[id]
+            res = cast(dict, self.data)[key]
         else:
             res = self.data
 
@@ -197,12 +197,12 @@ class StageInput:
     def as_path_by_target(
         self,
         stage: StageDecorator,
-        id: str | None = None,
+        key: str | None = None,
     ) -> dict[str, Path]:
         """
         Get a single file path result, indexed by target for a specific stage
         """
-        return self._each(fun=(lambda r: r.as_path(id=id)), stage=stage)
+        return self._each(fun=(lambda r: r.as_path(key=key)), stage=stage)
 
     def as_dict_by_target(self, stage: StageDecorator) -> dict[str, dict[str, Path]]:
         """
@@ -240,14 +240,14 @@ class StageInput:
         self,
         target: 'Target',
         stage: StageDecorator,
-        id: str | None = None,
+        key: str | None = None,
     ) -> Path:
         """
         Represent as a path to a file, otherwise fail.
         `stage` can be callable, or a subclass of Stage
         """
         res = self._get(target=target, stage=stage)
-        return res.as_path(id)
+        return res.as_path(key)
 
     def as_dict(self, target: 'Target', stage: StageDecorator) -> dict[str, Path]:
         """
