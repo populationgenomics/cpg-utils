@@ -27,7 +27,7 @@ setup(
         'workflows': [
             'hail',
             'networkx',
-            'sample-metadata',
+            'sample-metadata>=5.0.1',
             'analysis-runner',
             'gnomad',
             'pandas',
@@ -39,7 +39,6 @@ setup(
             'bokeh',
             'numpy',
             'click',
-            'elasticsearch == 8.*',
             'slack_sdk',
         ],
     },
