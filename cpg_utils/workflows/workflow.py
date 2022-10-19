@@ -547,7 +547,10 @@ class Stage(Generic[TargetT], ABC):
                 )
                 return Action.QUEUE
             else:
-                logging.info(f'{self.name}: {target} [REUSE] (expected outputs exist)')
+                logging.info(
+                    f'{self.name}: {target} [REUSE] (expected outputs exist: '
+                    f'{expected_out})'
+                )
                 return Action.REUSE
 
         logging.info(f'{self.name}: {target} [QUEUE]')
