@@ -487,8 +487,9 @@ class Metamist:
         chunk_size = 500
         for i, fam_ids_chunk in enumerate(_chunks(family_ids, chunk_size)):
             logging.info(
-                f'Running fapi.get_pedigree on families #{i * chunk_size}..'
-                f'{i * chunk_size + 1 + len(fam_ids_chunk)} (out of {len(family_ids)})'
+                f'Running fapi.get_pedigree on families #{i * chunk_size + 1}..'
+                f'{i * chunk_size + 1 + len(fam_ids_chunk) - 1} '
+                f'(out of {len(family_ids)})'
             )
             ped_entries.extend(
                 self.fapi.get_pedigree(
