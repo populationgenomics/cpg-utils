@@ -765,10 +765,7 @@ class Workflow:
 
     def _prefix(self, category=None) -> Path:
         prefix = get_cohort().analysis_dataset.prefix(category=category) / self.name
-        if self.output_version:
-            prefix /= self.output_version
-        else:
-            prefix /= self.run_timestamp
+        prefix /= self.output_version or get_cohort().alignment_inputs_hash()
         return prefix
 
     def run(
