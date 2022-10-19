@@ -117,7 +117,7 @@ def slugify(line: str):
     """
 
     return re.sub(
-        r'[-\s]+',
+        r'[-.\s]+',
         '-',
         re.sub(
             r'[^\w\s-]',
