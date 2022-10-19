@@ -116,17 +116,14 @@ def slugify(line: str):
     'hello-w-1'
     """
 
-    return re.sub(
-        r'[-.\s]+',
+    line = unicodedata.normalize('NFKD', line).encode('ascii', 'ignore').decode()
+    line = line.strip().lower()
+    line = re.sub(
+        r'[\s.]+',
         '-',
-        re.sub(
-            r'[^\w\s-]',
-            '',
-            unicodedata.normalize('NFKD', line).encode('ascii', 'ignore').decode(),
-        )
-        .strip()
-        .lower(),
+        line,
     )
+    return line
 
 
 def rich_sample_id_seds(
