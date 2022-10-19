@@ -5,7 +5,7 @@ from setuptools import find_packages, setup
 setup(
     name='cpg-utils',
     # This tag is automatically updated by bumpversion
-    version='4.8.19',
+    version='4.9.0',
     description='Library of convenience functions specific to the CPG',
     long_description=open('README.md').read(),
     long_description_content_type='text/markdown',
@@ -27,7 +27,7 @@ setup(
         'workflows': [
             'hail',
             'networkx',
-            'sample-metadata',
+            'sample-metadata>=5.0.1',
             'analysis-runner',
             'gnomad',
             'pandas',
@@ -39,7 +39,6 @@ setup(
             'bokeh',
             'numpy',
             'click',
-            'elasticsearch == 8.*',
             'slack_sdk',
         ],
     },
