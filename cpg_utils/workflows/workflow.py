@@ -997,7 +997,7 @@ class SampleStage(Stage[Sample], ABC):
             )
             return output_by_target
 
-        for ds_i, dataset in enumerate(datasets):
+        for dataset in datasets:
             if not dataset.get_samples():
                 logging.warning(
                     f'{dataset}: '
@@ -1011,7 +1011,7 @@ class SampleStage(Stage[Sample], ABC):
                 continue
 
             logging.info(f'Dataset {dataset}:')
-            for sample_i, sample in enumerate(dataset.get_samples()):
+            for sample in dataset.get_samples():
                 action = self._get_action(sample)
                 output_by_target[sample.target_id] = self._queue_jobs_with_checks(
                     sample, action
