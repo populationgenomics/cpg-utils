@@ -481,6 +481,7 @@ class Stage(Generic[TargetT], ABC):
         to do with the target: queue, skip or reuse, etc..
         """
         if target.forced and not self.skipped:
+            logging.info(f'{self.name}: {target} [QUEUE] (target is forced)')
             return Action.QUEUE
 
         if (
@@ -488,7 +489,9 @@ class Stage(Generic[TargetT], ABC):
         ) and self.name in d:
             skip_targets = d[self.name]
             if target.target_id in skip_targets:
-                logging.info(f'{self}: requested to skip {target}')
+                logging.info(
+                    f'{self.name}: {target} [SKIP] (is in workflow/skip_samples_stages)'
+                )
                 return Action.SKIP
 
         expected_out = self.expected_outputs(target)
@@ -496,12 +499,17 @@ class Stage(Generic[TargetT], ABC):
 
         if self.skipped:
             if reusable and not first_missing_path:
+                logging.info(
+                    f'{self.name}: {target} [REUSE] (stage skipped, and outputs exist)'
+                )
                 return Action.REUSE
             if get_config()['workflow'].get('skip_samples_with_missing_input'):
                 logging.warning(
-                    f'Skipping {target}: stage {self} is required, '
-                    f'but is marked as skipped, and some expected outputs for the '
-                    f'target do not exist: {first_missing_path}'
+                    f'{self.name}: {target} [SKIP] (stage is required, '
+                    f'but is marked as "skipped", '
+                    f'workflow/skip_samples_with_missing_input=true '
+                    f'and some expected outputs for the target do not exist: '
+                    f'{first_missing_path}'
                 )
                 # `workflow/skip_samples_with_missing_input` means that we can ignore
                 # samples/datasets that have missing results from skipped stages.
@@ -512,10 +520,15 @@ class Stage(Generic[TargetT], ABC):
             if self.name in get_config()['workflow'].get(
                 'allow_missing_outputs_for_stages', []
             ):
+                logging.info(
+                    f'{self.name}: {target} [REUSE] (stage is skipped, some outputs are'
+                    f'missing, but stage is listed in '
+                    f'workflow/allow_missing_outputs_for_stages)'
+                )
                 return Action.REUSE
             else:
                 raise ValueError(
-                    f'Stage {self} is required, but is skipped, and '
+                    f'{self.name}: stage is required, but is skipped, and '
                     f'the following expected outputs for target {target} do not exist: '
                     f'{first_missing_path}'
                 )
@@ -523,21 +536,21 @@ class Stage(Generic[TargetT], ABC):
         if reusable and not first_missing_path:
             if target.forced:
                 logging.info(
-                    f'{self}: can reuse, but forcing the target '
-                    f'{target} to rerun this stage'
+                    f'{self.name}: {target} [QUEUE] (can reuse, but forcing the target '
+                    f'to rerun this stage)'
                 )
                 return Action.QUEUE
             elif self.forced:
                 logging.info(
-                    f'{self}: can reuse, but forcing the stage '
-                    f'to rerun, target={target}'
+                    f'{self.name}: {target} [QUEUE] (can reuse, but forcing the stage '
+                    f'to rerun)'
                 )
                 return Action.QUEUE
             else:
-                logging.info(f'{self}: reusing results for {target}')
+                logging.info(f'{self.name}: {target} [REUSE] (expected outputs exist)')
                 return Action.REUSE
 
-        logging.info(f'{self}: queueing jobs for target {target}')
+        logging.info(f'{self.name}: {target} [QUEUE]')
         return Action.QUEUE
 
     def _is_reusable(self, expected_out: ExpectedResultT) -> tuple[bool, Path | None]:
@@ -805,13 +818,16 @@ class Workflow:
         for fs in first_stages:
             for descendant in nx.descendants(graph, fs):
                 if not stages_d[descendant].skipped:
-                    logging.info(f'Skipping stage {descendant} (before first {fs})')
+                    logging.info(
+                        f'Skipping stage {descendant} (precedes {fs} listed in '
+                        f'first_stages)'
+                    )
                     stages_d[descendant].skipped = True
                 for grand_descendant in nx.descendants(graph, descendant):
                     if not stages_d[grand_descendant].assume_outputs_exist:
                         logging.info(
-                            f'Not checking expected outputs of not immediately required '
-                            f'stage {grand_descendant} (< {descendant} < {fs})'
+                            f'Not checking expected outputs of not immediately '
+                            f'required stage {grand_descendant} (< {descendant} < {fs})'
                         )
                         stages_d[grand_descendant].assume_outputs_exist = True
 
@@ -906,11 +922,11 @@ class Workflow:
 
         if not (final_set_of_stages := [s.name for s in stages if not s.skipped]):
             raise WorkflowError('No stages to run')
-        logging.info(f'Setting stages: {final_set_of_stages}')
+        logging.info(f'Setting stages: {", ".join(final_set_of_stages)}')
         required_skipped_stages = [s for s in stages if s.skipped]
         if required_skipped_stages:
             logging.info(
-                f'Skipped stages: ' f'{[s.name for s in required_skipped_stages]}'
+                f'Skipped stages: {", ".join(s.name for s in required_skipped_stages)}'
             )
 
         # Round 6: actually adding jobs from the stages.
@@ -997,40 +1013,12 @@ class SampleStage(Stage[Sample], ABC):
                 )
                 continue
 
-            # Checking if all samples can be reused, queuing only one job per target:
-            action_by_sid = dict()
+            logging.info(f'Dataset {dataset}:')
             for sample_i, sample in enumerate(dataset.get_samples()):
-                logging.info(f'{self.name}: #{sample_i + 1}/{sample}')
                 action = self._get_action(sample)
-                action_by_sid[sample.id] = action
-                if action == Action.REUSE:
-                    if self.analysis_type and self.status_reporter:
-                        self.status_reporter.create_analysis(
-                            output=str(self.expected_outputs(sample)),
-                            analysis_type=self.analysis_type,
-                            analysis_status='completed',
-                            target=sample,
-                            meta=sample.get_job_attrs(),
-                        )
-
-            if len(set(action_by_sid.values())) == 1:
-                action = list(action_by_sid.values())[0]
-                if action == Action.REUSE:
-                    for _, sample in enumerate(dataset.get_samples()):
-                        output_by_target[sample.target_id] = self.make_outputs(
-                            target=sample,
-                            data=self.expected_outputs(sample),
-                        )
-                    continue
-
-            # Some samples can't be reused, queuing each sample:
-            logging.info(f'{self.name}: #{ds_i + 1} {dataset}')
-            for sample_i, sample in enumerate(dataset.get_samples()):
-                logging.info(f'{self.name}: #{sample_i + 1}/{sample}')
                 output_by_target[sample.target_id] = self._queue_jobs_with_checks(
-                    sample, action=action_by_sid[sample.id]
+                    sample, action
                 )
-            logging.info('-#-#-#-')
 
         return output_by_target
 
@@ -1067,8 +1055,12 @@ class DatasetStage(Stage, ABC):
                 f'via workflow.skip_datasets`'
             )
             return output_by_target
-        for _, dataset in enumerate(datasets):
-            output_by_target[dataset.target_id] = self._queue_jobs_with_checks(dataset)
+        for dataset_i, dataset in enumerate(datasets):
+            action = self._get_action(dataset)
+            logging.info(f'{self.name}: #{dataset_i + 1}/{dataset} [{action.name}]')
+            output_by_target[dataset.target_id] = self._queue_jobs_with_checks(
+                dataset, action
+            )
         return output_by_target
 
 
