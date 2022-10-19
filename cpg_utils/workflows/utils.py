@@ -112,8 +112,8 @@ def slugify(line: str):
     Slugify a string.
 
     Example:
-    >>> slugify(u"Héllø Wörld")
-    u"hello-world"
+    >>> slugify(u'Héllø W.1')
+    'hello-w-1'
     """
 
     return re.sub(
