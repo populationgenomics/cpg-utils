@@ -34,22 +34,22 @@ def exists(path: Path | str, verbose: bool = True) -> bool:
 
 def exists_not_cached(path: Path | str, verbose: bool = True) -> bool:
     """
-    Check if the object exists, where the object can be:
-        * local file
-        * local directory
-        * cloud object
-        * cloud URL representing a *.mt or *.ht Hail data,
-          in which case it will check for the existence of a
-          *.mt/_SUCCESS or *.ht/_SUCCESS file.
+    Check if the object by path exists, where the object can be:
+        * local file,
+        * local directory,
+        * cloud object,
+        * cloud or local *.mt, *.ht, or *.vds Hail data, in which case it will check
+          for the existence of a corresponding _SUCCESS object instead.
     @param path: path to the file/directory/object/mt/ht
     @param verbose: print on each check
     @return: True if the object exists
     """
     path = cast(Path, to_path(path))
 
-    # rstrip to ".mt/" -> ".mt"
-    if any(str(path).rstrip('/').endswith(f'.{suf}') for suf in ['mt', 'ht']):
-        path = path / '_SUCCESS'
+    if path.suffix in ['.mt', '.ht']:
+        path /= '_SUCCESS'
+    if path.suffix in ['.vds']:
+        path /= 'variant_data/_SUCCESS'
 
     if verbose:
         # noinspection PyBroadException
