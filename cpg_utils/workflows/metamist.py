@@ -191,14 +191,22 @@ class Metamist:
         Retrieve sample entries for a dataset, in the context of sample IDs
         and sequencing type.
         """
-        entries: dict[str, list[dict]] = self.seqapi.get_sequences_by_sample_ids(
-            sample_ids
-        )
         entries_by_sid = defaultdict(list)
-        for sample_id, sample_sequences in entries.items():
-            for seq in sample_sequences:
-                if str(seq['type']) == sequencing_type:
-                    entries_by_sid[sample_id].append(seq)
+
+        entries = self.seqapi.get_sequences_by_sample_ids(sample_ids)
+        if isinstance(entries, list):
+            entries_list: list[dict] = entries
+            for entry in entries_list:
+                if str(entry['type']) == sequencing_type:
+                    entries_by_sid[entry['sample_id']].append(entry)
+        else:
+            assert isinstance(entries, dict)
+            entries_dict: dict[str, list[dict]] = entries
+            for sample_id, sample_sequences in entries_dict.items():
+                for seq in sample_sequences:
+                    if str(seq['type']) == sequencing_type:
+                        entries_by_sid[sample_id].append(seq)
+
         return entries_by_sid
 
     def get_participant_entries_by_sid(self, dataset_name: str) -> dict[str, dict]:
