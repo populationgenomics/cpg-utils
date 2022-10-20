@@ -416,6 +416,7 @@ def fasta_res_group(b: hb.Batch, indices: list[str] | None = None):
     ref_fasta = get_config()['workflow'].get('ref_fasta') or reference_path(
         'broad/ref_fasta'
     )
+    ref_fasta = to_path(ref_fasta)
     d = dict(
         base=str(ref_fasta),
         fai=str(ref_fasta) + '.fai',
