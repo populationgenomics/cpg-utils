@@ -407,13 +407,16 @@ def genome_build() -> str:
     return get_config()['references'].get('genome_build', 'GRCh38')
 
 
-def fasta_res_group(b, indices: Optional[List] = None):
+def fasta_res_group(b: hb.Batch, indices: list[str] | None = None):
     """
     Hail Batch resource group for fasta reference files.
     @param b: Hail Batch object.
     @param indices: list of extensions to add to the base fasta file path.
     """
-    ref_fasta = reference_path('broad/ref_fasta')
+    ref_fasta = get_config()['workflow'].get('ref_fasta') or reference_path(
+        'broad/ref_fasta'
+    )
+    ref_fasta = to_path(ref_fasta)
     d = dict(
         base=str(ref_fasta),
         fai=str(ref_fasta) + '.fai',
