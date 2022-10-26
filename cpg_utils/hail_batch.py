@@ -3,20 +3,16 @@
 import asyncio
 import inspect
 import os
-import tempfile
 import textwrap
 import typing
-from enum import Enum
 from typing import Optional, List, Union
-from abc import ABC, abstractmethod
 
 import hail as hl
 import hailtop.batch as hb
 from hail.utils.java import Env
 
-from cpg_utils.config import get_config
 from cpg_utils import to_path, Path
-
+from cpg_utils.config import get_config
 
 # template commands strings
 GCLOUD_AUTH_COMMAND = """\
