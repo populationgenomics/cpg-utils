@@ -36,7 +36,11 @@ backend = 'local'
 
 def _set_config(dir_path: Path, extra_conf: dict | None = None):
     d = toml.loads(DEFAULT_CONF)
-    d['workflow']['local_dir'] = str(dir_path)
+    d['path_schemes'] = {
+        'local': {
+            'default': f'{dir_path}',
+        }
+    }
     if extra_conf:
         update_dict(d, extra_conf)
     config_path = dir_path / 'config.toml'

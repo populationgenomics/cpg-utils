@@ -141,9 +141,10 @@ def dataset_path(
             'or set required values in your configuration file provided by '
             'CPG_CONFIG_PATH.'
         )
-    scheme = config['path_schemes'][
+    scheme_by_category = config['path_schemes'][
         path_scheme or config['workflow'].get('path_scheme', 'google_storage')
-    ].get(category, 'default')
+    ]
+    scheme = scheme_by_category.get(category) or scheme_by_category['default']
     namespace = 'test' if access_level == 'test' else 'main'
     prefix = scheme.format(**{'dataset': dataset, 'main/test': namespace})
     return os.path.join(prefix, suffix)
