@@ -39,9 +39,12 @@ def get_batch(name: str | None = None) -> 'Batch':
                 token=os.environ.get('HAIL_TOKEN'),
             )
         _batch = Batch(
-            name=name,
+            name=name or get_config()['hail'].get('name'),
             backend=backend,
             pool_label=get_config()['hail'].get('pool_label'),
+            cancel_after_n_failures=get_config()['hail'].get('cancel_after_n_failures'),
+            default_timeout=get_config()['hail'].get('default_timeout'),
+            default_memory=get_config()['hail'].get('default_memory'),
         )
     return _batch
 

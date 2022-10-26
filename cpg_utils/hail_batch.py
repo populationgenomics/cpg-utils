@@ -78,131 +78,12 @@ def remote_tmpdir(hail_bucket: Optional[str] = None) -> str:
     return f'gs://{bucket}/batch-tmp'
 
 
-class PathScheme(ABC):
-    """
-    Cloud storage path scheme. Constructs full paths to buckets and files.
-    """
-
-    @abstractmethod
-    def path_prefix(self, dataset: str, category: str) -> str:
-        """Build path prefix used in dataset_path"""
-
-    @abstractmethod
-    def full_path(self, prefix: str, suffix: str) -> str:
-        """Build full path from prefix and suffix"""
-
-    @staticmethod
-    def parse(val: str) -> 'PathScheme':
-        """Parse subclass name from string"""
-        if val == 'gs':
-            return GSPathScheme()
-        if val == 'hail-az':
-            return AzurePathScheme()
-        if val == 'local':
-            return LocalPathScheme()
-        raise ValueError(
-            f'Unsupported path format: {val}. Available: gs, hail-az, local'
-        )
-
-
-class GSPathScheme(PathScheme):
-    """
-    Google Cloud Storage path scheme.
-    """
-
-    def __init__(self):
-        self.scheme = 'gs'
-        self.prefix = 'cpg'
-
-    def path_prefix(self, dataset: str, category: str) -> str:
-        """Build path prefix used in dataset_path"""
-        return f'{self.prefix}-{dataset}-{category}'
-
-    def full_path(self, prefix: str, suffix: str) -> str:
-        """Build full path from prefix and suffix"""
-        return os.path.join(f'{self.scheme}://', prefix, suffix)
-
-
-class AzurePathScheme(PathScheme):
-    """
-    Azure Blob Storage path scheme, following the Hail Batch hail-az format.
-    """
-
-    def __init__(self, account: Optional[str] = 'cpg'):
-        config = get_config()
-        self.scheme = 'hail-az'
-        self.account = config['workflow'].get('azure_account', account)
-
-    def path_prefix(self, dataset: str, category: str) -> str:
-        """Build path prefix used in dataset_path"""
-        return f'{self.account}/{dataset}-{category}'
-
-    def full_path(self, prefix: str, suffix: str) -> str:
-        """Build full path from prefix and suffix"""
-        return os.path.join(f'{self.scheme}://', prefix, suffix)
-
-
-class LocalPathScheme(PathScheme):
-    """
-    Local posix path scheme. Requires workflow/local_dir to be set.
-    Creates directories automatically (mimicking the cloud FS behaviour).
-
-    Useful only for tests, don't use in production.
-    """
-
-    def __init__(self):
-        if not (local_dir := get_config()['workflow'].get('local_dir')):
-            local_dir = tempfile.mkdtemp(prefix='cpg-utils-')
-        self.local_dir = to_path(local_dir)
-        self.local_dir.mkdir(exist_ok=True, parents=True)
-        self.scheme = 'local'
-
-    def path_prefix(self, dataset: str, category: str) -> str:
-        """Build path prefix used in dataset_path"""
-        return f'{dataset}-{category}'
-
-    def full_path(self, prefix: str, suffix: str) -> str:
-        """Build full path from prefix and suffix"""
-        path = self.local_dir / prefix / suffix
-        path.parent.mkdir(parents=True, exist_ok=True)
-        return str(path)
-
-
-class Namespace(Enum):
-    """
-    Storage namespace.
-    https://github.com/populationgenomics/team-docs/tree/main/storage_policies#main-vs-test
-    """
-
-    MAIN = 'main'
-    TEST = 'test'
-
-    @staticmethod
-    def from_access_level(str_val: str) -> 'Namespace':
-        """
-        Parse value from an access level string.
-        >>> Namespace.from_access_level('test')
-        Namespace.TEST
-        >>> Namespace.from_access_level('standard')
-        Namespace.MAIN
-        >>> Namespace.from_access_level('main')
-        Namespace.MAIN
-        """
-        for val, str_vals in {
-            Namespace.MAIN: ['main', 'standard', 'full'],
-            Namespace.TEST: ['test'],
-        }.items():
-            if str_val in str_vals:
-                return val
-        raise ValueError(f'Cannot parse namespace or access level {str_val}')
-
-
 def dataset_path(
     suffix: str,
-    category: Optional[str] = None,
-    dataset: Optional[str] = None,
-    access_level: Optional[str] = None,
-    path_scheme: Optional[str] = None,
+    category: str | None = None,
+    dataset: str | None = None,
+    access_level: str | None = None,
+    path_scheme: str | None = None,
 ) -> str:
     """
     Returns a full path for the current dataset, given a category and path suffix.
@@ -211,42 +92,40 @@ def dataset_path(
     function, dataset_path does _not_ take the `workflow/output_prefix` config variable
     into account.
 
+    Path schemes can be customised using the `path_schemes` section in the config.
+    See the `config-template.toml` file for examples and default values.
+
     Examples
     --------
     Assuming that the analysis-runner has been invoked with
-    `--dataset fewgenomes --access-level test --output 1kg_pca/v42`:
+    `--dataset fewgenomes --access-level test`:
 
     >>> from cpg_utils.hail_batch import dataset_path
     >>> dataset_path('1kg_densified/combined.mt')
     'gs://cpg-fewgenomes-test/1kg_densified/combined.mt'
     >>> dataset_path('1kg_densified/report.html', 'web')
     'gs://cpg-fewgenomes-test-web/1kg_densified/report.html'
-    >>> dataset_path('1kg_densified/report.html', path_scheme='hail-az')
-    'hail-az://cpg/fewgenomes-test/1kg_densified/report.html'
 
     Notes
     -----
     Requires either the
-    * `workflow/dataset` and `workflow/access_level` config variables, or the
-    * `workflow/dataset_path` config variable
-    to be set, where the former takes precedence.
+    * `workflow/dataset` and `workflow/access_level` config variables to be set.
 
     Parameters
     ----------
     suffix : str
         A path suffix to append to the bucket.
     category : str, optional
-        A category like "upload", "tmp", "web". If omitted, defaults to the "main" and
-        "test" buckets based on the access level. See
-        https://github.com/populationgenomics/team-docs/tree/main/storage_policies
-        for a full list of categories and their use cases.
+        A category like "upload", "tmp", "web". Corresponds to the keys in your
+        path_scheme configuration (see config-template.toml for examples); defaults
+        to the "default" key if ommited.
     dataset : str, optional
         Dataset name, takes precedence over the `workflow/dataset` config variable
     access_level : str, optional
         Access level, takes precedence over the `workflow/access_level` config variable
     path_scheme: str, optional
         Cloud storage path scheme, takes precedence over the `workflow/path_scheme`
-        config variable
+        config variable.
 
     Returns
     -------
@@ -255,64 +134,50 @@ def dataset_path(
     config = get_config()
     dataset = dataset or config['workflow'].get('dataset')
     access_level = access_level or config['workflow'].get('access_level')
-    path_scheme = path_scheme or config['workflow'].get('path_scheme', 'gs')
-
-    if dataset and access_level:
-        namespace = Namespace.from_access_level(access_level)
-        if category is None:
-            category = namespace.value
-        elif category != 'archive':
-            category = f'{namespace.value}-{category}'
-        prefix = PathScheme.parse(path_scheme).path_prefix(dataset, category)
-    else:
-        prefix = config['workflow']['dataset_path']
-
-    return PathScheme.parse(path_scheme).full_path(prefix, suffix)
-
-
-def web_url(
-    suffix: str = '',
-    dataset: Optional[str] = None,
-    access_level: Optional[str] = None,
-) -> str:
-    """Returns URL corresponding to a dataset path of category 'web',
-    assuming other arguments are the same.
-    """
-    config = get_config()
-    dataset = dataset or config['workflow'].get('dataset')
-    access_level = access_level or config['workflow'].get('access_level')
-    namespace = Namespace.from_access_level(access_level)
-    web_url_template = config['workflow'].get('web_url_template')
-    try:
-        url = web_url_template.format(dataset=dataset, namespace=namespace.value)
-    except KeyError as e:
+    if not (dataset and access_level):
         raise ValueError(
-            f'`workflow/web_url_template` should be parametrised by "dataset" and '
-            f'"namespace" in curly braces, for example: '
-            f'https://{{namespace}}-web.populationgenomics.org.au/{{dataset}}. '
-            f'Got: {web_url_template}'
-        ) from e
-    return os.path.join(url, suffix)
+            'workflow/dataset and workflow/access_level must be defined in config. '
+            'Make sure you are running your application through the analysis-runner, '
+            'or set required values in your configuration file provided by '
+            'CPG_CONFIG_PATH.'
+        )
+    scheme = config['path_schemes'][
+        path_scheme or config['workflow'].get('path_scheme', 'google_storage')
+    ].get(category, 'default')
+    namespace = 'test' if access_level == 'test' else 'main'
+    prefix = scheme.format(**{'dataset': dataset, 'main/test': namespace})
+    return os.path.join(prefix, suffix)
+
+
+def web_url(suffix: str = '') -> str:
+    """
+    Web URL to match the dataset_path of category 'web'.
+    """
+    return dataset_path(suffix=suffix, category='web_url')
 
 
 def output_path(suffix: str, category: Optional[str] = None) -> str:
     """Returns a full path for the given category and path suffix.
 
-    In contrast to the dataset_path function, output_path takes the `workflow/output_prefix`
-    config variable into account.
+    In contrast to the `dataset_path` function, output_path takes the
+    `workflow/output_prefix` config variable into account.
 
     Examples
     --------
-    If using the analysis-runner, the `workflow/output_prefix` would be set to the argument
-    provided using the --output argument, e.g.
-    `--dataset fewgenomes --access-level test --output 1kg_pca/v42`:
-    will use '1kg_pca/v42' as the base path to build upon in this method
+    If using the analysis-runner, the `workflow/output_prefix` would be set to the
+    value provided using the --output argument, e.g.:
+    ```
+    analysis-runner --dataset fewgenomes --access-level test --output 1kg_pca/v42` ...
+    ```
+    will use '1kg_pca/v42' as the base path to build upon in this method:
 
     >>> from cpg_utils.hail_batch import output_path
     >>> output_path('loadings.ht')
     'gs://cpg-fewgenomes-test/1kg_pca/v42/loadings.ht'
     >>> output_path('report.html', 'web')
     'gs://cpg-fewgenomes-test-web/1kg_pca/v42/report.html'
+
+    Assuming with the default `cpg_google_storage` path_scheme in config-template.toml.
 
     Notes
     -----
@@ -324,10 +189,9 @@ def output_path(suffix: str, category: Optional[str] = None) -> str:
     suffix : str
         A path suffix to append to the bucket + output directory.
     category : str, optional
-        A category like "upload", "tmp", "web". If omitted, defaults to the "main" and
-        "test" buckets based on the access level. See
-        https://github.com/populationgenomics/team-docs/tree/main/storage_policies
-        for a full list of categories and their use cases.
+        A category like "upload", "tmp", "web". Corresponds to the keys in your
+        path_scheme configuration (see config-template.toml for examples); defaults
+        to the "default" key if ommited.
 
     Returns
     -------

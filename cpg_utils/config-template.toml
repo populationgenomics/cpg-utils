@@ -7,6 +7,17 @@
 # (unless specified in hail.hail_billing_project). Set by analysis-runner
 #dataset = 'seqr'
 
+# Prefix to find docker images in the `images` section.
+image_registry_prefix = 'australia-southeast1-docker.pkg.dev/cpg-common/images'
+
+# Prefix to find reference files in the `references` section.
+reference_prefix = 'gs://cpg-reference'
+
+# GCP project to activate and for requester-pays buckets. For CPG, will be determined
+# automatically if not provided, and analysis-runner service account is activated.
+#dataset_gcp_project =
+
+# WORKFLOWS
 # Datasets to load inputs. If not provided, datasets will be determined
 # automatically based on the input provider implementation:
 #input_datasets = []
@@ -65,59 +76,23 @@ check_intermediates = true
 # already exist. If it exists, do not submit stage jobs
 check_expected_outputs = true
 
-# Local directory for temporary files. Usually takes a few kB.
-# If not provided, a temp folder will be created
-#local_tmp_dir =
-
-# Slack channel to send status and QC reports:
-#[slack]
-#channel = 'seqr-loader-test'
-#token_secret_id = 'slack-seqr-loader-token'
-#token_project_id = 'seqr-308602'
-
-# Prefix to find docker images referenced in `image_config_yaml_path`
-image_registry_prefix = 'australia-southeast1-docker.pkg.dev/cpg-common/images'
-
-# Prefix to find reference files referenced in `refdata_yaml_path`
-reference_prefix = 'gs://cpg-reference'
-
-# Template to build HTTP URLs matching the dataset_path of category
-# "web". Should be parametrised by namespace and dataset in Jinja format:
-web_url_template = 'https://{namespace}-web.populationgenomics.org.au/{dataset}'
-
-# GCP project to activate and for requester-pays buckets. For CPG, will be determined
-# automatically if not provided, and analysis-runner service account is activated.
-#dataset_gcp_project =
-
 # Limit to data of this sequencing type
 #sequencing_type = 'genome'
 
-# Realign CRAM when available, instead of using FASTQ.
-# The parameter value should correspond to CRAM version
-# (e.g. v0 in gs://cpg-fewgenomes-main/cram/v0/CPG01234.cram
-#realign_from_cram_version = 'v0'
+# Templates to construct output storage paths. Used by `cpg_utils.hail_batch` function
+# `output_path`. The scheme below implements CPG storage policy
+# https://github.com/populationgenomics/team-docs/tree/main/storage_policies
+path_scheme = 'cpg_google_storage'
 
-# Use GnarlyGenotyper instead of GenotypeGVCFs
-use_gnarly = false
-
-# Use allele-specific annotations for VQSR
-use_as_vqsr = true
-
-# Calling intervals (defauls to whole genome intervals)
-#intervals_path =
-
-# Create Seqr ElasticSearch indices for these datasets. If not specified, will
-# create indices for all input datasets.
-#create_es_index_for_datasets = []
-
-[elasticsearch]
-# Configure access to ElasticSearch server
-port = 9243
-host = 'elasticsearch.es.australia-southeast1.gcp.elastic-cloud.com'
-username = 'seqr'
-# Load ElasticSearch password from a secret, unless SEQR_ES_PASSWORD is set
-password_secret_id = 'seqr-es-password'
-password_project_id = 'seqr-308602'
+[path_schemes.cpg_google_storage]
+default = "gs://cpg-{dataset}-{main/test}"
+tmp = "gs://cpg-{dataset}-{main/test}-tmp"
+analysis = "gs://cpg-{dataset}-{main/test}-analysis"
+upload = "gs://cpg-{dataset}-{main/test}-upload"
+web = "gs://cpg-{dataset}-{main/test}-web"
+archive = "gs://cpg-{dataset}-archive"
+hail = "gs://cpg-{dataset}-hail"
+web_url = 'https://{main/test}-web.populationgenomics.org.au/{dataset}'
 
 [hail]
 #billing_project =
