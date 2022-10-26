@@ -146,11 +146,11 @@ def dataset_path(
     return os.path.join(prefix, suffix)
 
 
-def web_url(suffix: str = '') -> str:
+def web_url(suffix: str = '', dataset: str | None = None) -> str:
     """
     Web URL to match the dataset_path of category 'web'.
     """
-    return dataset_path(suffix=suffix, category='web_url')
+    return dataset_path(suffix=suffix, dataset=dataset, category='web_url')
 
 
 def output_path(suffix: str, category: Optional[str] = None) -> str:
