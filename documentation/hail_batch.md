@@ -50,12 +50,10 @@ def main():
         cancel_after_n_failures=1,
     )
 
-    DOCKER_IMAGE = image_path('docker_tag:1.1.1')
-
     job = batch.new_job(name='job_1')
 
     # select the image to run the command inside
-    job.image(DOCKER_IMAGE)
+    job.image(image_path('docker_tag:1.1.1'))
 
     # authenticate the gcloud service user account
     authenticate_cloud_credentials_in_job(job=job)
@@ -63,12 +61,12 @@ def main():
     # copy all Driver image environment variables into the new environment
     copy_common_env(job=job)
 
-    # run a commmand inside the continer, creating an output file
+    # run a command inside the container, creating an output file
     job.command(f'gsutil cp gs://a/file/path {job.outfile}')
 
     # create a permanent path to write to. This requires `CPG_DATASET`, `CPG_ACCESS_LEVEL`,
     # and `CPG_OUTPUT_PREFIX` to be set, which is done by analysis_runner.
-    output_file = output_path('location_to_write_to', suffix='web')
+    output_file = output_path('location_to_write_to', category='web')
     # .. creates path `gs://DATASET-ACCESS_LEVEL-web/location_to_write_to`
 
     batch.write_output(job.outfile, output_file)
