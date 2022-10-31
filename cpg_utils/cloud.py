@@ -108,12 +108,14 @@ def get_google_identity_token(
     target_audience: str | None, request: google.auth.transport.Request = None
 ) -> str:
     """Returns a Google identity token for the given audience."""
+    if request is None:
+        request = requests.Request()
     # Unfortunately this requires different handling for at least
     # three different cases and the standard libraries don't provide
     # a single helper function that captures all of them:
     # https://github.com/googleapis/google-auth-library-python/issues/590
     creds = _get_default_id_token_credentials(target_audience, request)
-    creds.refresh(request=requests.Request())
+    creds.refresh(request)
     return creds.token
 
 
@@ -164,7 +166,7 @@ def _load_credentials_from_file(
 
     if credential_type == _AUTHORIZED_USER_TYPE:
         current_credentials = oauth2_credentials.Credentials.from_authorized_user_info(
-            info, scopes=['openid', 'email']
+            info, scopes=['openid', 'https://www.googleapis.com/auth/userinfo.email']
         )
         current_credentials = IDTokenCredentialsAdapter(credentials=current_credentials)
 

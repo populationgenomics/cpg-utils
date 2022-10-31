@@ -6,7 +6,7 @@ containing the code inside the blank container. This example shows how
 the methods present in [git.py](../cpg_utils/git.py) can be used to:
 
 - identify the name of the current repository
-- identify the organisation/user name of the current repository
+- identify the organisation/username of the current repository
 - identify the current commit
 - clone the repository at that point
 

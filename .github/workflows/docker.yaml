@@ -6,7 +6,7 @@ on:
       - main
 
 env:
-  VERSION: 4.9.3
+  VERSION: 4.10.1
 
 jobs:
   docker:

@@ -156,14 +156,12 @@ def get_organisation_name_from_remote(remote_name: str) -> str:
 
     try:
         if remote_name.startswith('http'):
-            match = re.match(
-                r'http[s]?:\/\/[A-z0-9\.]+?\/(?P<org>.+?)\/.+$', remote_name
-            )
+            match = re.match(r'http[s]?://[A-z0-9.]+?/(?P<org>.+?)/.+$', remote_name)
             if match:
                 organisation = match.group('org')
 
         elif remote_name.startswith('git@'):
-            match = re.match(r'git@[A-z0-9\.]+?:(?P<org>.+?)\/.+$', remote_name)
+            match = re.match(r'git@[A-z0-9.]+?:(?P<org>.+?)/.+$', remote_name)
             if match:
                 organisation = match.group('org')
     except AttributeError as ae:
@@ -177,7 +175,7 @@ def get_organisation_name_from_remote(remote_name: str) -> str:
 
 def get_repo_name_from_remote(remote_name: str) -> str:
     """
-    Get the name of a GitHub repo from a supported organization
+    Get the name of a GitHub repo from a supported organisation
     based on its remote URL e.g.:
     >>> get_repo_name_from_remote(\
         'git@github.com:populationgenomics/cpg-utils.git'\
@@ -196,14 +194,12 @@ def get_repo_name_from_remote(remote_name: str) -> str:
     repo = None
     try:
         if remote_name.startswith('http'):
-            match = re.match(
-                r'http[s]?:\/\/[A-z0-9\.]+?\/.+?\/(?P<repo>.+)$', remote_name
-            )
+            match = re.match(r'http[s]?://[A-z0-9.]+?/.+?/(?P<repo>.+)$', remote_name)
             if match:
                 repo = match.group('repo')
 
         elif remote_name.startswith('git@'):
-            match = re.match(r'git@[A-z0-9\.]+?:.+?\/(?P<repo>.+)$', remote_name)
+            match = re.match(r'git@[A-z0-9.]+?:.+?/(?P<repo>.+)$', remote_name)
             if match:
                 repo = match.group('repo')
     except AttributeError as ae:

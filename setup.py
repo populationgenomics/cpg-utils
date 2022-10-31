@@ -5,7 +5,7 @@ from setuptools import find_packages, setup
 setup(
     name='cpg-utils',
     # This tag is automatically updated by bumpversion
-    version='4.9.3',
+    version='4.10.1',
     description='Library of convenience functions specific to the CPG',
     long_description=open('README.md').read(),
     long_description_content_type='text/markdown',
@@ -24,26 +24,6 @@ setup(
             'pytest',
             'pytest-mock',
         ],
-        'workflows': [
-            'hail',
-            'networkx',
-            'sample-metadata>=5.0.1',
-            'analysis-runner',
-            'gnomad',
-            'pandas',
-            'peddy',
-            'fsspec',
-            'slack_sdk',
-            'elasticsearch == 8.*',
-            'coloredlogs',
-            'bokeh',
-            'numpy',
-            'click',
-            'slack_sdk',
-        ],
-    },
-    package_data={
-        'cpg_utils': ['config-template.toml'],
     },
     keywords='bioinformatics',
     classifiers=[
