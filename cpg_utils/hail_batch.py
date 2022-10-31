@@ -528,6 +528,9 @@ def command(
     if isinstance(cmd, list):
         cmd = '\n'.join(cmd)
 
+    if define_retry_function:
+        setup_gcp = True
+
     cmd = f"""\
     set -o pipefail
     set -ex
