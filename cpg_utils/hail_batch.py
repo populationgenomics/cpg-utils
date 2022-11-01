@@ -84,12 +84,13 @@ def dataset_path(
     """
     Returns a full path for the current dataset, given a category and path suffix.
 
-    This is useful for specifying input files, as in contrast to the output_path
-    function, dataset_path does _not_ take the `workflow/output_prefix` config variable
+    This is useful for specifying input files, as in contrast to the `output_path`
+    function, `dataset_path` does _not_ take the `workflow/output_prefix` config variable
     into account.
 
     Path schemes can be customised using the `path_schemes` section in the config.
-    See the `config-template.toml` file for examples and default values.
+    See examples in: https://github.com/populationgenomics/team-docs/blob/main/cpg_config_example.toml
+    CPG path scheme is set automatically by the analysis-runner.
 
     Examples
     --------
@@ -113,15 +114,14 @@ def dataset_path(
         A path suffix to append to the bucket.
     category : str, optional
         A category like "upload", "tmp", "web". Corresponds to the keys in your
-        path_scheme configuration (see config-template.toml for examples); defaults
-        to the "default" key if ommited.
+        `path_scheme` configuration, defaults to the "default" key if ommited.
     dataset : str, optional
         Dataset name, takes precedence over the `workflow/dataset` config variable
     access_level : str, optional
         Access level, takes precedence over the `workflow/access_level` config variable
     path_scheme: str, optional
         Cloud storage path scheme, takes precedence over the `workflow/path_scheme`
-        config variable.
+        config variable
 
     Returns
     -------
@@ -156,7 +156,7 @@ def web_url(suffix: str = '', dataset: str | None = None) -> str:
 def output_path(suffix: str, category: Optional[str] = None) -> str:
     """Returns a full path for the given category and path suffix.
 
-    In contrast to the `dataset_path` function, output_path takes the
+    In contrast to the `dataset_path` function, `output_path` takes the
     `workflow/output_prefix` config variable into account.
 
     Examples
@@ -174,7 +174,7 @@ def output_path(suffix: str, category: Optional[str] = None) -> str:
     >>> output_path('report.html', 'web')
     'gs://cpg-fewgenomes-test-web/1kg_pca/v42/report.html'
 
-    Assuming with the default `cpg_google_storage` path_scheme in config-template.toml.
+    (Assuming the default `path_scheme = "cpg_google_storage"` set by analysis-runner)
 
     Notes
     -----
@@ -187,8 +187,7 @@ def output_path(suffix: str, category: Optional[str] = None) -> str:
         A path suffix to append to the bucket + output directory.
     category : str, optional
         A category like "upload", "tmp", "web". Corresponds to the keys in your
-        path_scheme configuration (see config-template.toml for examples); defaults
-        to the "default" key if ommited.
+        `path_scheme` configuration, defaults to the "default" key if ommited.
 
     Returns
     -------
