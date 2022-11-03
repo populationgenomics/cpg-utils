@@ -13,7 +13,7 @@ setup(
     license='MIT',
     packages=find_packages(),
     install_requires=[
-        'google-auth>=1.27.0,<2',
+        'google-auth>=1.27.0',
         'google-cloud-secret-manager',
         'cloudpathlib[all]',
         'toml',
