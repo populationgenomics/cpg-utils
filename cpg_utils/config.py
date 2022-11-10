@@ -25,7 +25,7 @@ def _validate_configs(config_paths: list[str]) -> None:
         raise ValueError(f'Some config files do not exist: {bad_paths}')
 
     # Reading each file to validate syntax:
-    exception_by_path = dict()
+    exception_by_path = {}
     for p in paths:
         with p.open() as f:
             try:
