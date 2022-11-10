@@ -19,8 +19,24 @@ def _validate_configs(config_paths: list[str]) -> None:
         raise ValueError(
             f'All config files must have ".toml" extensions, got: {config_paths}'
         )
-    if bad_files := [p for p in config_paths if not to_path(p).exists()]:
-        raise ValueError(f'Some config files do not exist: {bad_files}')
+
+    paths = [to_path(p) for p in config_paths]
+    if bad_paths := [p for p in paths if not p.exists()]:
+        raise ValueError(f'Some config files do not exist: {bad_paths}')
+
+    # Reading each file to validate syntax:
+    exception_by_path = dict()
+    for p in paths:
+        with p.open() as f:
+            try:
+                toml.loads(f.read())
+            except toml.decoder.TomlDecodeError as e:
+                exception_by_path[p] = e
+    if exception_by_path:
+        msg = f'Failed parsing some config files:'
+        for path, exception in exception_by_path.items():
+            msg += f'\n\t{path}: {exception}'
+        raise ValueError(msg)
 
 
 _validate_configs(_config_paths)
@@ -47,9 +63,9 @@ def set_config_paths(config_paths: list[str]) -> None:
 
 def prepend_config_paths(config_paths: list[str]) -> None:
     """
-    Prepend the list of config paths. Equivalent to `dict.set_defaults`:
+    Prepend to the list of config paths. Equivalent to `dict.set_defaults`: any
     values in current CPG_CONFIG_PATH will have the precedence over the provided
-    `config_paths` when merging configs.
+    `config_paths` when merging the configs.
     """
     if _env_var := os.environ.get('CPG_CONFIG_PATH'):
         config_paths.extend(_env_var.split(','))
@@ -59,8 +75,8 @@ def prepend_config_paths(config_paths: list[str]) -> None:
 
 def append_config_paths(config_paths: list[str]) -> None:
     """
-    Append the list of config paths. Values in new configs will have the precedence
-    over the existing CPG_CONFIG_PATH when merging configs.
+    Append to the list of config paths. Any values in new configs will have the
+    precedence over the existing CPG_CONFIG_PATH when merging the configs.
     """
     if _env_var := os.environ.get('CPG_CONFIG_PATH'):
         config_paths = _env_var.split(',') + config_paths
