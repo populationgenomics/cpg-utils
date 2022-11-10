@@ -4,9 +4,9 @@ import os
 from typing import Optional, List, Dict
 
 import toml
-from cloudpathlib import AnyPath
 from frozendict import frozendict
 
+from cpg_utils import to_path
 
 # We use these globals for lazy initialization, but pylint doesn't like that.
 # pylint: disable=global-statement, invalid-name
@@ -14,19 +14,19 @@ _config_paths = _val.split(',') if (_val := os.getenv('CPG_CONFIG_PATH')) else [
 _config: Optional[frozendict] = None  # Cached config, initialized lazily.
 
 
-def _validate_configs(config_paths: List[str]) -> None:
+def _validate_configs(config_paths: list[str]) -> None:
     if [p for p in config_paths if not p.endswith('.toml')]:
         raise ValueError(
             f'All config files must have ".toml" extensions, got: {config_paths}'
         )
-    if bad_files := [p for p in config_paths if not AnyPath(p).exists()]:
+    if bad_files := [p for p in config_paths if not to_path(p).exists()]:
         raise ValueError(f'Some config files do not exist: {bad_files}')
 
 
 _validate_configs(_config_paths)
 
 
-def set_config_paths(config_paths: List[str]) -> None:
+def set_config_paths(config_paths: list[str]) -> None:
     """Sets the config paths that are used by subsequent calls to get_config.
 
     If this isn't called, the value of the CPG_CONFIG_PATH environment variable is used
@@ -43,6 +43,29 @@ def set_config_paths(config_paths: List[str]) -> None:
         _config_paths = config_paths
         os.environ['CPG_CONFIG_PATH'] = ','.join(_config_paths)
         _config = None  # Make sure the config gets reloaded.
+
+
+def prepend_config_paths(config_paths: list[str]) -> None:
+    """
+    Prepend the list of config paths. Equivalent to `dict.set_defaults`:
+    values in current CPG_CONFIG_PATH will have the precedence over the provided
+    `config_paths` when merging configs.
+    """
+    if _env_var := os.environ.get('CPG_CONFIG_PATH'):
+        config_paths.extend(_env_var.split(','))
+
+    set_config_paths(config_paths)
+
+
+def append_config_paths(config_paths: list[str]) -> None:
+    """
+    Append the list of config paths. Values in new configs will have the precedence
+    over the existing CPG_CONFIG_PATH when merging configs.
+    """
+    if _env_var := os.environ.get('CPG_CONFIG_PATH'):
+        config_paths = _env_var.split(',') + config_paths
+
+    set_config_paths(config_paths)
 
 
 def get_config() -> frozendict:
@@ -111,7 +134,7 @@ def read_configs(config_paths: List[str]) -> frozendict:
 
     config: dict = {}
     for path in config_paths:
-        with AnyPath(path).open() as f:
+        with to_path(path).open() as f:
             config_str = f.read()
             update_dict(config, toml.loads(config_str))
     return frozendict(config)
