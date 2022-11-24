@@ -78,6 +78,7 @@ def dataset_path(
     suffix: str,
     category: str | None = None,
     dataset: str | None = None,
+    test: bool = False,
 ) -> str:
     """
     Returns a full path for the current dataset, given a category and a path suffix.
@@ -129,6 +130,8 @@ def dataset_path(
         A category like "tmp", "web", etc., defaults to "default" if ommited.
     dataset : str, optional
         Dataset name, takes precedence over the `workflow/dataset` config variable
+    test : bool
+        Return "test" namespace version of the path
 
     Returns
     -------
@@ -136,7 +139,10 @@ def dataset_path(
     """
     dataset = dataset or 'default'
     category = category or 'default'
-    prefix = get_config()['storage'][dataset][category]
+    section = get_config()['storage'][dataset]
+    if test:
+        section = section['test']
+    prefix = section[category]
     return os.path.join(prefix, suffix)
 
 
@@ -148,7 +154,8 @@ def web_url(suffix: str = '', dataset: str | None = None) -> str:
 
 
 def output_path(suffix: str, category: Optional[str] = None) -> str:
-    """Returns a full path for the given category and path suffix.
+    """
+    Returns a full path for the given category and path suffix.
 
     In contrast to the `dataset_path` function, `output_path` takes the
     `workflow/output_prefix` config variable into account.
