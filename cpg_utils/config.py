@@ -171,8 +171,6 @@ class ConfigError(Exception):
     Error retrieving keys from config.
     """
 
-    pass
-
 
 def retrieve(section: str, key: list[str] | str, default: Any | None = None) -> str:
     """
