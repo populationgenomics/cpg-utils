@@ -12,7 +12,7 @@ import hailtop.batch as hb
 from hail.utils.java import Env
 
 from cpg_utils import to_path, Path
-from cpg_utils.config import get_config
+from cpg_utils.config import get_config, ConfigError, retrieve
 
 # template commands strings
 GCLOUD_AUTH_COMMAND = """\
@@ -137,12 +137,28 @@ def dataset_path(
     -------
     str
     """
+    if dataset and dataset not in get_config()['storage']:
+        raise ConfigError(
+            f'Storage section for dataset "{dataset}" not found in config. '
+            f'Please check that you have permissions to the dataset. '
+            f'Expected section: [storage.{dataset}]'
+        )
     dataset = dataset or 'default'
-    category = category or 'default'
     section = get_config()['storage'][dataset]
-    if test:
-        section = section['test']
-    prefix = section[category]
+
+    if test and not (section := section.get('test')):
+        raise ConfigError(
+            f'Test storage section for dataset "{dataset}" not found in config. '
+            f'Expected section: [storage.{dataset}.test]'
+        )
+
+    category = category or 'default'
+    if not (prefix := section.get(category)):
+        raise ConfigError(
+            f'Category "{category}" not found in storage section '
+            f'for dataset "{dataset}": {section}'
+        )
+
     return os.path.join(prefix, suffix)
 
 
@@ -215,13 +231,14 @@ def image_path(key: str) -> str:
     Parameters
     ----------
     key : str
-        Describes the key within the `images` config section.
+        Describes the key within the `images` config section. Can list sections
+        separated with '/'.
 
     Returns
     -------
     str
     """
-    return get_config()['images'][key]
+    return retrieve('images', key.strip('/').split('/'))
 
 
 def reference_path(key: str) -> Path:
@@ -247,27 +264,21 @@ def reference_path(key: str) -> Path:
     Parameters
     ----------
     key : str
-        Describes the key within the `references` config section. Can be list sections
+        Describes the key within the `references` config section. Can list sections
         separated with '/'.
 
     Returns
     -------
     str
     """
-    d = get_config()['references']
-    sections = key.strip('/').split('/')
-    for section in sections[:-1]:
-        if section not in d:
-            raise ValueError(f'No subsection {section} in {str(d)}')
-        d = d[section]
-    return to_path(d[sections[-1]])
+    return to_path(retrieve('references', key.strip('/').split('/')))
 
 
 def genome_build() -> str:
     """
     Return the default genome build name
     """
-    return get_config().get('references', {}).get('genome_build', 'GRCh38')
+    return retrieve('references', 'genome_build', 'GRCh38')
 
 
 def fasta_res_group(b: hb.Batch, indices: list[str] | None = None):
