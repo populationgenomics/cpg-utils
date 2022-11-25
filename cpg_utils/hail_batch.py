@@ -78,7 +78,6 @@ def dataset_path(
     suffix: str,
     category: str | None = None,
     dataset: str | None = None,
-    test: bool = False,
 ) -> str:
     """
     Returns a full path for the current dataset, given a category and a path suffix.
@@ -146,12 +145,6 @@ def dataset_path(
     dataset = dataset or 'default'
     section = get_config()['storage'][dataset]
 
-    if test and not (section := section.get('test')):
-        raise ConfigError(
-            f'Test storage section for dataset "{dataset}" not found in config. '
-            f'Expected section: [storage.{dataset}.test]'
-        )
-
     category = category or 'default'
     if not (prefix := section.get(category)):
         raise ConfigError(
@@ -159,6 +152,21 @@ def dataset_path(
             f'for dataset "{dataset}": {section}'
         )
 
+    return os.path.join(prefix, suffix)
+
+
+def cpg_test_dataset_path(
+    suffix: str,
+    category: str | None = None,
+    dataset: str | None = None,
+) -> str:
+    """
+    CPG-specific method to get corresponding test paths when running
+    from the main namespace.
+    """
+    dataset = dataset or 'default'
+    category = category or 'default'
+    prefix = get_config()['storage'][dataset]['test'][category]
     return os.path.join(prefix, suffix)
 
 
