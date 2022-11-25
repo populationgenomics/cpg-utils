@@ -172,20 +172,19 @@ class ConfigError(Exception):
     """
 
 
-def retrieve(section: str, key: list[str] | str, default: Any | None = None) -> str:
+def retrieve(key: list[str] | str, default: Any | None = None) -> str:
     """
-    Retrieve key from section, assuming nested key, with error checks.
+    Retrieve key from config, assuming nested key specified as a list of strings.
     """
     if isinstance(key, str):
         key = [key]
 
-    d = get_config()[section]
+    d = get_config()
     for k in key[:-1]:
         if k not in d:
-            raise ConfigError(f'Subsection "{k}" not found in "{section}" section {d}')
-        d = d[section]
-
+            raise ConfigError(f'Key "{k}" not found in {d}')
+        d = d[k]
     k = key[-1]
     if k not in d and not default:
-        raise ConfigError(f'Key "{k}" not found in "{section}" section {d}')
+        raise ConfigError(f'Key "{k}" not found in {d}')
     return d.get(k, default)

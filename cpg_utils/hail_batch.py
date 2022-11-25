@@ -246,7 +246,7 @@ def image_path(key: str) -> str:
     -------
     str
     """
-    return retrieve('images', key.strip('/').split('/'))
+    return retrieve(['images'] + key.strip('/').split('/'))
 
 
 def reference_path(key: str) -> Path:
@@ -279,14 +279,14 @@ def reference_path(key: str) -> Path:
     -------
     str
     """
-    return to_path(retrieve('references', key.strip('/').split('/')))
+    return to_path(retrieve(['references'] + key.strip('/').split('/')))
 
 
 def genome_build() -> str:
     """
     Return the default genome build name
     """
-    return retrieve('references', 'genome_build', 'GRCh38')
+    return retrieve(['references', 'genome_build'], default='GRCh38')
 
 
 def fasta_res_group(b: hb.Batch, indices: list[str] | None = None):
