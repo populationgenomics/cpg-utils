@@ -126,7 +126,7 @@ def dataset_path(
     suffix : str
         A path suffix to append to the bucket.
     category : str, optional
-        A category like "tmp", "web", etc., defaults to "default" if ommited.
+        A category like "tmp", "web", etc., defaults to "default" if omited.
     dataset : str, optional
         Dataset name, takes precedence over the `workflow/dataset` config variable
     test : bool
