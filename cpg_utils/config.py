@@ -1,7 +1,7 @@
 """Provides access to config variables."""
 
 import os
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any
 
 import toml
 from frozendict import frozendict
@@ -164,3 +164,27 @@ def update_dict(d1: Dict, d2: Dict) -> None:
             update_dict(v1, v2)
         else:
             d1[k] = v2
+
+
+class ConfigError(Exception):
+    """
+    Error retrieving keys from config.
+    """
+
+
+def retrieve(key: list[str] | str, default: Any | None = None) -> str:
+    """
+    Retrieve key from config, assuming nested key specified as a list of strings.
+    """
+    if isinstance(key, str):
+        key = [key]
+
+    d = get_config()
+    for k in key[:-1]:
+        if k not in d:
+            raise ConfigError(f'Key "{k}" not found in {d}')
+        d = d[k]
+    k = key[-1]
+    if k not in d and not default:
+        raise ConfigError(f'Key "{k}" not found in {d}')
+    return d.get(k, default)
