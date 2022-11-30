@@ -538,3 +538,10 @@ def start_query_context(
                 default_reference='GRCh38',
             )
         )
+
+
+def cpg_namespace(access_level) -> str:
+    """
+    Get storage namespace from the access level.
+    """
+    return 'test' if access_level == 'test' else 'main'
