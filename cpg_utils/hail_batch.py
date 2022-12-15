@@ -256,17 +256,17 @@ def reference_path(key: str) -> Path:
     Examples
     --------
     >>> reference_path('vep_mount')
-    CloudPath('gs://cpg-reference/vep/105.0/mount')
+    CloudPath('gs://cpg-common-main/references/vep/105.0/mount')
     >>> reference_path('broad/genome_calling_interval_lists')
-    CloudPath('gs://cpg-reference/hg38/v0/wgs_calling_regions.hg38.interval_list')
+    CloudPath('gs://cpg-common-main/references/hg38/v0/wgs_calling_regions.hg38.interval_list')
 
     Assuming config structure as follows:
 
     ```toml
     [references]
-    vep_mount = 'gs://cpg-reference/vep/105.0/mount'
+    vep_mount = 'gs://cpg-common-main/references/vep/105.0/mount'
     [references.broad]
-    genome_calling_interval_lists = 'gs://cpg-reference/hg38/v0/wgs_calling_regions.hg38.interval_list'
+    genome_calling_interval_lists = 'gs://cpg-common-main/references/hg38/v0/wgs_calling_regions.hg38.interval_list'
     ```
 
     Parameters
