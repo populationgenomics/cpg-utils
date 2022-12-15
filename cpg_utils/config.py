@@ -136,7 +136,7 @@ def read_configs(config_paths: List[str]) -> frozendict:
     dataset_gcp_project = "tob-wgs"
     driver_image = "australia-southeast1-docker.pkg.dev/analysis-runner/images/driver:36c6d4548ef347f14fd34a5b58908057effcde82-hail-ad1fc0e2a30f67855aee84ae9adabc3f3135bd47"
     image_registry_prefix = "australia-southeast1-docker.pkg.dev/cpg-common/images"
-    reference_prefix = "gs://cpg-reference"
+    reference_prefix = "gs://cpg-common-main/references"
     output_prefix = "plasma/chr22/v6"
 
     >>> from cpg_utils.config import get_config
