@@ -22,8 +22,9 @@ import google.api_core.exceptions
 import google.auth.transport
 from google.auth.transport import requests
 import google.oauth2
-
 from cloudpathlib import AnyPath
+
+from cpg_utils.config import get_config
 
 
 def email_from_id_token(id_token_jwt: str) -> str:
@@ -292,8 +293,6 @@ def get_cached_group_members(group) -> list[str]:
     """
     Get cached members of a group, based on the members_cache_location
     """
-    from cpg_utils.config import get_config
-
     group_name = group.split('@')[0]
     config = get_config()
 
