@@ -23,6 +23,8 @@ import google.auth.transport
 from google.auth.transport import requests
 import google.oauth2
 
+from cloudpathlib import AnyPath
+
 
 def email_from_id_token(id_token_jwt: str) -> str:
     """Decodes the ID token (JWT) to get the email address of the caller.
@@ -284,3 +286,27 @@ def _get_default_id_token_credentials(
             return current_credentials
 
     raise exceptions.DefaultCredentialsError(_HELP_MESSAGE)
+
+
+def get_cached_group_members(group) -> list[str]:
+    """
+    Get cached members of a group, based on the members_cache_location
+    """
+    from cpg_utils.config import get_config
+
+    group_name = group.split('@')[0]
+    config = get_config()
+
+    pathname = os.path.join(
+        config['infrastructure']['members_cache_location'], group_name + '-members.txt'
+    )
+
+    with AnyPath(pathname).open() as f:
+        return [line.strip() for line in f.readlines()]
+
+
+def check_member_in_cached_group_members(group, member) -> bool:
+    """
+    Check if a member is in a group, based on the infrastructure config
+    """
+    return member in get_cached_group_members(group)
