@@ -304,7 +304,7 @@ def get_cached_group_members(group) -> list[str]:
         return [line.strip() for line in f.readlines()]
 
 
-def check_member_in_cached_group_members(group, member) -> bool:
+def is_member_in_cached_group(group, member) -> bool:
     """
     Check if a member is in a group, based on the infrastructure config
     """
