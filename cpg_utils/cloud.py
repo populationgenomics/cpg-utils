@@ -289,19 +289,22 @@ def _get_default_id_token_credentials(
     raise exceptions.DefaultCredentialsError(_HELP_MESSAGE)
 
 
-def get_cached_group_members(group) -> list[str]:
+def get_cached_group_members(group, members_cache_location: str = None) -> set[str]:
     """
     Get cached members of a group, based on the members_cache_location
     """
     group_name = group.split('@')[0]
-    config = get_config()
+
+    if not members_cache_location:
+        config = get_config()
+        members_cache_location = config['infrastructure']['members_cache_location']
 
     pathname = os.path.join(
-        config['infrastructure']['members_cache_location'], group_name + '-members.txt'
+        members_cache_location, group_name + '-members.txt'
     )
 
     with AnyPath(pathname).open() as f:
-        return [line.strip() for line in f.readlines()]
+        return set(line.strip() for line in f.readlines() if line.strip())
 
 
 def is_member_in_cached_group(group, member) -> bool:
