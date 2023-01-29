@@ -299,16 +299,18 @@ def get_cached_group_members(group, members_cache_location: str = None) -> set[s
         config = get_config()
         members_cache_location = config['infrastructure']['members_cache_location']
 
-    pathname = os.path.join(
-        members_cache_location, group_name + '-members.txt'
-    )
+    pathname = os.path.join(members_cache_location, group_name + '-members.txt')  # type: ignore
 
     with AnyPath(pathname).open() as f:
         return set(line.strip() for line in f.readlines() if line.strip())
 
 
-def is_member_in_cached_group(group, member) -> bool:
+def is_member_in_cached_group(
+    group, member, members_cache_location: str = None
+) -> bool:
     """
     Check if a member is in a group, based on the infrastructure config
     """
-    return member in get_cached_group_members(group)
+    return member in get_cached_group_members(
+        group, members_cache_location=members_cache_location
+    )
