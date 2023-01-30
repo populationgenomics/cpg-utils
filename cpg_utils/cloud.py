@@ -16,6 +16,8 @@ from google.auth._default import (
     _SERVICE_ACCOUNT_TYPE,
     _VALID_TYPES,
 )
+
+# pylint: disable=no-name-in-module
 from google.cloud import secretmanager
 from google.oauth2 import credentials as oauth2_credentials, service_account
 import google.api_core.exceptions
