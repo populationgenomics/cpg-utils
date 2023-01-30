@@ -1,7 +1,14 @@
-import os
+"""
+test case for cpg-utils.config
+"""
+
+
 import toml
 
 from cpg_utils.config import get_config, set_config_paths
+
+
+# pylint: disable=unused-argument
 
 
 def test_read_config(test_conf):
@@ -20,7 +27,7 @@ def test_new_conf(tmp_path):
 
     temp_conf = {'test': {'value': 1}}
     tmp_toml_path = tmp_path / 'conf.toml'
-    with open(tmp_toml_path, 'w') as handle:
+    with open(tmp_toml_path, 'w', encoding='utf-8') as handle:
         toml.dump(temp_conf, handle)
 
     set_config_paths([str(tmp_toml_path)])

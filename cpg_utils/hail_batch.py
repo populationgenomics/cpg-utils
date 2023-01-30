@@ -78,7 +78,7 @@ def dataset_path(
     suffix: str,
     category: str | None = None,
     dataset: str | None = None,
-    test: bool = False
+    test: bool = False,
 ) -> str:
     """
     Returns a full path for the current dataset, given a category and a path suffix.
@@ -226,7 +226,9 @@ def output_path(suffix: str, category: Optional[str] = None, test: bool = False)
     str
     """
     return dataset_path(
-        os.path.join(get_config()['workflow']['output_prefix'], suffix), category, test=test
+        os.path.join(get_config()['workflow']['output_prefix'], suffix),
+        category,
+        test=test,
     )
 
 
