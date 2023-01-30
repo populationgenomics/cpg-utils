@@ -18,7 +18,7 @@ jobs:
         cache-dependency-path: requirements-dev.txt
 
     - name: Install packages
-      run: pip install -r requirements-dev.txt
+      run: pip install -r requirements-lint.txt
 
     - name: pre-commit
       run: pre-commit run --all-files
