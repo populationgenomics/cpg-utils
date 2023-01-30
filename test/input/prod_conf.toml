@@ -1,0 +1,39 @@
+[workflow]
+access_level = "main"
+dataset = "mito-disease"
+dataset_gcp_project = "mito-disease"
+name = "prod conf"
+sequencing_type = "genome"
+output_prefix = "this_is_a_test"
+
+[storage.default]
+default = "gs://cpg-mito-disease-main"
+web = "gs://cpg-mito-disease-main-web"
+analysis = "gs://cpg-mito-disease-main-analysis"
+tmp = "gs://cpg-mito-disease-main-tmp"
+upload = "gs://cpg-mito-disease-main-upload"
+web_url = "https://main-web.populationgenomics.org.au/mito-disease"
+
+[storage.mito-disease]
+default = "gs://cpg-mito-disease-main"
+web = "gs://cpg-mito-disease-main-web"
+analysis = "gs://cpg-mito-disease-main-analysis"
+tmp = "gs://cpg-mito-disease-main-tmp"
+upload = "gs://cpg-mito-disease-main-upload"
+web_url = "https://main-web.populationgenomics.org.au/mito-disease"
+
+[storage.default.test]
+default = "gs://cpg-mito-disease-test"
+web = "gs://cpg-mito-disease-test-web"
+analysis = "gs://cpg-mito-disease-test-analysis"
+tmp = "gs://cpg-mito-disease-test-tmp"
+upload = "gs://cpg-mito-disease-test-upload"
+web_url = "https://test-web.populationgenomics.org.au/mito-disease"
+
+[storage.mito-disease.test]
+default = "gs://cpg-mito-disease-test"
+web = "gs://cpg-mito-disease-test-web"
+analysis = "gs://cpg-mito-disease-test-analysis"
+tmp = "gs://cpg-mito-disease-test-tmp"
+upload = "gs://cpg-mito-disease-test-upload"
+web_url = "https://test-web.populationgenomics.org.au/mito-disease"
