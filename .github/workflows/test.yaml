@@ -20,5 +20,8 @@ jobs:
     - name: Install packages
       run: pip install -r requirements-dev.txt
 
+    - name: Install self
+      run: pip install .
+
     - name: pre-commit
       run: pytest test
