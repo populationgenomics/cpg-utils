@@ -1,4 +1,5 @@
 pre-commit
 pylint
+pytest
 bump2version
 toml

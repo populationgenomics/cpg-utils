@@ -78,6 +78,7 @@ def dataset_path(
     suffix: str,
     category: str | None = None,
     dataset: str | None = None,
+    test: bool = False
 ) -> str:
     """
     Returns a full path for the current dataset, given a category and a path suffix.
@@ -115,6 +116,8 @@ def dataset_path(
     'gs://cpg-fewgenomes-test/1kg_densified/combined.mt'
     >>> dataset_path('1kg_densified/report.html', 'web')
     'gs://cpg-fewgenomes-test-web/1kg_densified/report.html'
+    >>> dataset_path('1kg_densified/report.html', 'web', test=True)
+    'gs://cpg-fewgenomes-test-web/1kg_densified/report.html'
 
     Notes
     -----
@@ -143,7 +146,12 @@ def dataset_path(
             f'Expected section: [storage.{dataset}]'
         )
     dataset = dataset or 'default'
-    section = get_config()['storage'][dataset]
+
+    # manual redirect to test paths
+    if test and not get_config()['workflow']['access_level'] == 'test':
+        section = get_config()['storage'][dataset]['test']
+    else:
+        section = get_config()['storage'][dataset]
 
     category = category or 'default'
     if not (prefix := section.get(category)):
@@ -177,7 +185,7 @@ def web_url(suffix: str = '', dataset: str | None = None) -> str:
     return dataset_path(suffix=suffix, dataset=dataset, category='web_url')
 
 
-def output_path(suffix: str, category: Optional[str] = None) -> str:
+def output_path(suffix: str, category: Optional[str] = None, test: bool = False) -> str:
     """
     Returns a full path for the given category and path suffix.
 
@@ -210,13 +218,15 @@ def output_path(suffix: str, category: Optional[str] = None) -> str:
         A path suffix to append to the bucket + output directory.
     category : str, optional
         A category like "tmp", "web", etc., defaults to "default" if ommited.
+    test : bool, optional
+        Boolean - if True, generate a test bucket path. Default to False.
 
     Returns
     -------
     str
     """
     return dataset_path(
-        os.path.join(get_config()['workflow']['output_prefix'], suffix), category
+        os.path.join(get_config()['workflow']['output_prefix'], suffix), category, test=test
     )
 
 
