@@ -84,7 +84,7 @@ def append_config_paths(config_paths: list[str]) -> None:
     set_config_paths(config_paths)
 
 
-def get_config() -> frozendict:
+def get_config(print_config=True) -> frozendict:
     """Returns the configuration dictionary.
 
     Call `set_config_paths` beforehand to override the default path.
@@ -108,9 +108,10 @@ def get_config() -> frozendict:
         _config = read_configs(_config_paths)
 
         # Print the config content, which is helpful for debugging.
-        print(
-            f'Configuration at {",".join(_config_paths)}:\n{toml.dumps(dict(_config))}'
-        )
+        if print_config:
+            print(
+                f'Configuration at {",".join(_config_paths)}:\n{toml.dumps(dict(_config))}'
+            )
 
     return _config
 
