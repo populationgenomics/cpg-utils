@@ -33,11 +33,11 @@ def get_output_of_command(command: List[str], description: str) -> str:
     except KeyboardInterrupt:
         raise
     except subprocess.CalledProcessError as e:
-        raise Exception(
+        raise RuntimeError(
             f"Couldn't call {description} by calling '{' '.join(command)}', {e}"
         ) from e
     except Exception as e:
-        raise Exception(
+        raise RuntimeError(
             f"Couldn't process {description} through calling '{' '.join(command)}', {e}"
         ) from e
 
@@ -165,10 +165,10 @@ def get_organisation_name_from_remote(remote_name: str) -> str:
             if match:
                 organisation = match.group('org')
     except AttributeError as ae:
-        raise Exception(f'Unsupported remote format: "{remote_name}"') from ae
+        raise ValueError(f'Unsupported remote format: "{remote_name}"') from ae
 
     if organisation is None:
-        raise Exception(f'Unsupported remote format: "{remote_name}"')
+        raise ValueError(f'Unsupported remote format: "{remote_name}"')
 
     return organisation
 
@@ -203,10 +203,10 @@ def get_repo_name_from_remote(remote_name: str) -> str:
             if match:
                 repo = match.group('repo')
     except AttributeError as ae:
-        raise Exception(f'Unsupported remote format: "{remote_name}"') from ae
+        raise ValueError(f'Unsupported remote format: "{remote_name}"') from ae
 
     if repo is None:
-        raise Exception(f'Unsupported remote format: "{remote_name}"')
+        raise ValueError(f'Unsupported remote format: "{remote_name}"')
 
     if repo.endswith('.git'):
         repo = repo[:-4]

@@ -291,7 +291,9 @@ def _get_default_id_token_credentials(
     raise exceptions.DefaultCredentialsError(_HELP_MESSAGE)
 
 
-def get_cached_group_members(group, members_cache_location: str = None) -> set[str]:
+def get_cached_group_members(
+    group, members_cache_location: str | None = None
+) -> set[str]:
     """
     Get cached members of a group, based on the members_cache_location
     """
@@ -308,7 +310,7 @@ def get_cached_group_members(group, members_cache_location: str = None) -> set[s
 
 
 def is_member_in_cached_group(
-    group, member, members_cache_location: str = None
+    group, member, members_cache_location: str | None = None
 ) -> bool:
     """
     Check if a member is in a group, based on the infrastructure config
