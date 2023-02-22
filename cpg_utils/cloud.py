@@ -313,6 +313,6 @@ def is_member_in_cached_group(
     """
     Check if a member is in a group, based on the infrastructure config
     """
-    return member in get_cached_group_members(
+    return member.lower() in get_cached_group_members(
         group, members_cache_location=members_cache_location
     )
