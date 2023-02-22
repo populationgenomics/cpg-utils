@@ -311,11 +311,11 @@ def fasta_res_group(b: hb.Batch, indices: list[str] | None = None):
         'broad/ref_fasta'
     )
     ref_fasta = to_path(ref_fasta)
-    d = dict(
-        base=str(ref_fasta),
-        fai=str(ref_fasta) + '.fai',
-        dict=str(ref_fasta.with_suffix('.dict')),
-    )
+    d = {
+        'base': str(ref_fasta),
+        'fai': str(ref_fasta) + '.fai',
+        'dict': str(ref_fasta.with_suffix('.dict')),
+    }
     if indices:
         for ext in indices:
             d[ext] = f'{ref_fasta}.{ext}'
