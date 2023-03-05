@@ -12,7 +12,6 @@ from google.auth import (
 from google.auth import jwt
 from google.auth._default import (
     _AUTHORIZED_USER_TYPE,
-    _HELP_MESSAGE,
     _SERVICE_ACCOUNT_TYPE,
     _VALID_TYPES,
 )
@@ -27,6 +26,11 @@ import google.oauth2
 from cloudpathlib import AnyPath
 
 from cpg_utils.config import get_config
+
+_CLOUD_SDK_MISSING_CREDENTIALS = """\
+Your default credentials were not found. To set up Application Default Credentials, \
+see https://cloud.google.com/docs/authentication/external/set-up-adc for more information.\
+"""
 
 
 def email_from_id_token(id_token_jwt: str) -> str:
@@ -288,7 +292,7 @@ def _get_default_id_token_credentials(
         if current_credentials is not None:
             return current_credentials
 
-    raise exceptions.DefaultCredentialsError(_HELP_MESSAGE)
+    raise exceptions.DefaultCredentialsError(_CLOUD_SDK_MISSING_CREDENTIALS)
 
 
 def get_cached_group_members(
