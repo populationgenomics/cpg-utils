@@ -185,10 +185,12 @@ def web_url(suffix: str = '', dataset: str | None = None) -> str:
     return dataset_path(suffix=suffix, dataset=dataset, category='web_url')
 
 
-def output_path(suffix: str,
-                category: Optional[str] = None,
-                dataset: str | None = None,
-                test: bool = False) -> str:
+def output_path(
+    suffix: str,
+    category: Optional[str] = None,
+    dataset: str | None = None,
+    test: bool = False,
+) -> str:
     """
     Returns a full path for the given category and path suffix.
 
