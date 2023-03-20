@@ -185,7 +185,10 @@ def web_url(suffix: str = '', dataset: str | None = None) -> str:
     return dataset_path(suffix=suffix, dataset=dataset, category='web_url')
 
 
-def output_path(suffix: str, category: Optional[str] = None, test: bool = False) -> str:
+def output_path(suffix: str,
+                category: Optional[str] = None,
+                dataset: str | None = None,
+                test: bool = False) -> str:
     """
     Returns a full path for the given category and path suffix.
 
@@ -218,6 +221,8 @@ def output_path(suffix: str, category: Optional[str] = None, test: bool = False)
         A path suffix to append to the bucket + output directory.
     category : str, optional
         A category like "tmp", "web", etc., defaults to "default" if ommited.
+    dataset : str, optional
+        Dataset name, takes precedence over the `workflow/dataset` config variable
     test : bool, optional
         Boolean - if True, generate a test bucket path. Default to False.
 
@@ -227,7 +232,8 @@ def output_path(suffix: str, category: Optional[str] = None, test: bool = False)
     """
     return dataset_path(
         os.path.join(get_config()['workflow']['output_prefix'], suffix),
-        category,
+        category=category,
+        dataset=dataset,
         test=test,
     )
 
