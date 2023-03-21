@@ -17,9 +17,7 @@ from cpg_utils.config import get_config
 
 
 def send_message(text: str):
-    """
-    Send text as a Slack message, reading credentials from the config.
-    """
+    """Sends `text` as a Slack message, reading credentials from the config."""
     slack_channel = get_config().get('slack', {}).get('channel')
     if not slack_channel:
         raise ValueError('`slack.channel` must be set in config')
