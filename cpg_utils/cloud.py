@@ -325,7 +325,7 @@ def is_member_in_cached_group(
     )
 
 
-def get_path_components_from_gcp_path(path):
+def get_path_components_from_gcp_path(path) -> dict[str, str]:
     """
     Return the {bucket_name}, {dataset}, {bucket_type}, {subdir}, and {file} for GS only paths
     Uses regex to match the full bucket name, dataset name, bucket type (e.g. 'test', 'main-upload', 'release'),
