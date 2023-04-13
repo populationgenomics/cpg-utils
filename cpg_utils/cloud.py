@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 import traceback
 
 from google.auth import (
@@ -322,3 +323,37 @@ def is_member_in_cached_group(
     return member.lower() in get_cached_group_members(
         group, members_cache_location=members_cache_location
     )
+
+
+def get_path_components_from_gcp_path(path):
+    """
+    Return the {bucket_name}, {dataset}, {bucket_type}, {subdir}, and {file} for GS only paths
+    Uses regex to match the full bucket name, dataset name, bucket type (e.g. 'test', 'main-upload', 'release'),
+    subdirectory, and the file name.
+    """
+
+    bucket_types = ['archive', 'hail', 'main', 'test', 'release']
+
+    rmatch_str = (
+        r'gs://(?P<bucket>cpg-(?P<dataset>[\w-]+)-(?P<bucket_type>['
+        + '|'.join(s for s in bucket_types)
+        + r']+[-\w]*))/(?P<suffix>.+/)?(?P<file>.*)$'
+    )
+
+    gspath_pattern = re.compile(rmatch_str)
+
+    path_components = (gspath_pattern.match(path)).groups()
+
+    bucket_name = path_components[0]
+    dataset = path_components[1]
+    bucket_type = path_components[2]
+    subdir = path_components[3]
+    file = path_components[4]
+
+    return {
+        'bucket_name': bucket_name,
+        'dataset': dataset,
+        'bucket_type': bucket_type,
+        'subdir': subdir,
+        'file': file,
+    }
