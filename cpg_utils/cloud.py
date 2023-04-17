@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 import traceback
 
 from google.auth import (
@@ -322,3 +323,27 @@ def is_member_in_cached_group(
     return member.lower() in get_cached_group_members(
         group, members_cache_location=members_cache_location
     )
+
+
+def get_path_components_from_gcp_path(path: str) -> dict[str, str]:
+    """
+    Return the {bucket_name}, {dataset}, {bucket_type}, {subdir}, and {file} for GS only paths
+    Uses regex to match the full bucket name, dataset name, bucket type (e.g. 'test', 'main-upload', 'release'),
+    subdirectory, and the file name.
+    """
+
+    bucket_types = ['archive', 'hail', 'main', 'test', 'release']
+
+    # compile pattern matching all CPG bucket formats
+    gspath_pattern = re.compile(
+        r'gs://(?P<bucket>cpg-(?P<dataset>[\w-]+)-(?P<bucket_type>['
+        + '|'.join(s for s in bucket_types)
+        + r']+[-\w]*))/(?P<suffix>.+/)?(?P<file>.*)$'
+    )
+
+    # if a match succeeds, return the key: value dictionary
+    if path_match := gspath_pattern.match(path):
+        return path_match.groupdict()
+
+    # raise an error if the input String was not a valid CPG bucket path
+    raise ValueError('The input String did not match a valid GCP path')
