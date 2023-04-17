@@ -325,7 +325,7 @@ def is_member_in_cached_group(
     )
 
 
-def get_path_components_from_gcp_path(path: str) -> dict[str, str] | None:
+def get_path_components_from_gcp_path(path: str) -> dict[str, str]:
     """
     Return the {bucket_name}, {dataset}, {bucket_type}, {subdir}, and {file} for GS only paths
     Uses regex to match the full bucket name, dataset name, bucket type (e.g. 'test', 'main-upload', 'release'),
@@ -334,31 +334,16 @@ def get_path_components_from_gcp_path(path: str) -> dict[str, str] | None:
 
     bucket_types = ['archive', 'hail', 'main', 'test', 'release']
 
-    rmatch_str = (
+    # compile pattern matching all CPG bucket formats
+    gspath_pattern = re.compile(
         r'gs://(?P<bucket>cpg-(?P<dataset>[\w-]+)-(?P<bucket_type>['
         + '|'.join(s for s in bucket_types)
         + r']+[-\w]*))/(?P<suffix>.+/)?(?P<file>.*)$'
     )
 
-    gspath_pattern = re.compile(rmatch_str)
+    # if a match succeeds, return the key: value dictionary
+    if path_match := gspath_pattern.match(path):
+        return path_match.groupdict()
 
-    path_match = gspath_pattern.match(path)
-
-    if path_match:
-        path_components = path_match.groups()
-
-        bucket_name = path_components[0]
-        dataset = path_components[1]
-        bucket_type = path_components[2]
-        subdir = path_components[3]
-        file = path_components[4]
-
-        return {
-            'bucket_name': bucket_name,
-            'dataset': dataset,
-            'bucket_type': bucket_type,
-            'subdir': subdir,
-            'file': file,
-        }
-
-    return None
+    # raise an error if the input String was not a valid CPG bucket path
+    raise ValueError('The input String did not match a valid GCP path')
