@@ -14,7 +14,9 @@ from google.auth import jwt
 from google.auth._default import (
     _AUTHORIZED_USER_TYPE,
     _SERVICE_ACCOUNT_TYPE,
+    _EXTERNAL_ACCOUNT_TYPE,
     _VALID_TYPES,
+    _get_external_account_credentials,
 )
 
 # pylint: disable=no-name-in-module
@@ -191,6 +193,10 @@ def _load_credentials_from_file(
             raise exceptions.DefaultCredentialsError(
                 f'Failed to load service account credentials from {filename}'
             ) from exc
+
+    if credential_type == _EXTERNAL_ACCOUNT_TYPE:
+        credentials, _ = _get_external_account_credentials(info, filename=filename)
+        return credentials
 
     raise exceptions.DefaultCredentialsError(
         f'The file {filename} does not have a valid type. Type is {credential_type}, '
