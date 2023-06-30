@@ -182,11 +182,11 @@ class ExternalCredentialsAdapter(google_auth_credentials.Credentials):
             'gcloud',
             'auth',
             'print-identity-token',
-            f'--impersonate-service-account="{self.impersonate_id}"',
+            f'--impersonate-service-account={self.impersonate_id}',
             '--include-email',
         ]
         if self.audience:
-            command.append(f'--audiences="{self.audience}"')
+            command.append(f'--audiences={self.audience}')
 
         self.token = subprocess.check_output(command).decode('utf-8').strip()
 
