@@ -3,8 +3,13 @@
 import json
 import os
 import re
+import subprocess
 import traceback
 
+import google.api_core.exceptions
+import google.auth.transport
+import google.oauth2
+from cloudpathlib import AnyPath
 from google.auth import (
     credentials as google_auth_credentials,
     environment_vars,
@@ -15,18 +20,11 @@ from google.auth._default import (
     _AUTHORIZED_USER_TYPE,
     _SERVICE_ACCOUNT_TYPE,
     _EXTERNAL_ACCOUNT_TYPE,
-    _VALID_TYPES,
-    _get_external_account_credentials,
 )
-
+from google.auth.transport import requests
 # pylint: disable=no-name-in-module
 from google.cloud import secretmanager
 from google.oauth2 import credentials as oauth2_credentials, service_account
-import google.api_core.exceptions
-import google.auth.transport
-from google.auth.transport import requests
-import google.oauth2
-from cloudpathlib import AnyPath
 
 from cpg_utils.config import get_config
 
@@ -34,6 +32,12 @@ _CLOUD_SDK_MISSING_CREDENTIALS = """\
 Your default credentials were not found. To set up Application Default Credentials, \
 see https://cloud.google.com/docs/authentication/external/set-up-adc for more information.\
 """
+
+IMPLEMENTED_CREDENTIALS_TYPES = (
+    _AUTHORIZED_USER_TYPE,
+    _SERVICE_ACCOUNT_TYPE,
+    _EXTERNAL_ACCOUNT_TYPE,
+)
 
 
 def email_from_id_token(id_token_jwt: str) -> str:
@@ -150,6 +154,43 @@ class IDTokenCredentialsAdapter(google_auth_credentials.Credentials):
         self.token = self.credentials.id_token
 
 
+class ExternalCredentialsAdapter(google_auth_credentials.Credentials):
+    """
+    Wrapper around ExternalCredentials because I (mfranklin) cannot work out how to
+    make the python version work, and have defaulted to using the gcloud command line.
+    """
+    def __init__(
+        self,
+        audience: str | None,
+        impersonate_id: str | None = os.getenv('GOOGLE_IMPERSONATE_IDENTITY'),
+    ):
+        super().__init__()
+        self.token = None
+        self.audience = audience
+
+        if not impersonate_id:
+            raise exceptions.DefaultCredentialsError(
+                f'GOOGLE_IMPERSONATE_IDENTITY environment variable is not set. '
+                f'Cannot impersonate service account.'
+            )
+
+        self.impersonate_id = impersonate_id
+
+    def refresh(self, *args, **kwargs):
+        """Call gcloud to get a new token."""
+        command = [
+            'gcloud',
+            'auth',
+            'print-identity-token',
+            f'--impersonate-service-account="{self.impersonate_id}"',
+            '--include-email',
+        ]
+        if self.audience:
+            command.append(f'--audiences="{self.audience}"')
+
+        self.token = subprocess.check_output(command).decode('utf-8').strip()
+
+
 def _load_credentials_from_file(
     filename: str, target_audience: str | None
 ) -> google_auth_credentials.Credentials | None:
@@ -195,12 +236,16 @@ def _load_credentials_from_file(
             ) from exc
 
     if credential_type == _EXTERNAL_ACCOUNT_TYPE:
-        credentials, _ = _get_external_account_credentials(info, filename=filename)
-        return credentials
+        # this one's a bit unfortunate, I can't find the API way to do it
+        # credentials, _ = _get_external_account_credentials(info, filename=filename)
+        # credentials._audience = target_audience
+        # return credentials
+        return ExternalCredentialsAdapter(audience=target_audience)
 
     raise exceptions.DefaultCredentialsError(
-        f'The file {filename} does not have a valid type. Type is {credential_type}, '
-        f'expected one of {_VALID_TYPES}.'
+        f'The file {filename} does not have a valid type of google-cloud credentials. '
+        f'Type is {credential_type}, but cpg-utils only implements '
+        f'{IMPLEMENTED_CREDENTIALS_TYPES}.'
     )
 
 
