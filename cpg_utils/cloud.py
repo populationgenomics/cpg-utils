@@ -22,6 +22,7 @@ from google.auth._default import (
     _EXTERNAL_ACCOUNT_TYPE,
 )
 from google.auth.transport import requests
+
 # pylint: disable=no-name-in-module
 from google.cloud import secretmanager
 from google.oauth2 import credentials as oauth2_credentials, service_account
@@ -159,15 +160,16 @@ class ExternalCredentialsAdapter(google_auth_credentials.Credentials):
     Wrapper around ExternalCredentials because I (mfranklin) cannot work out how to
     make the python version work, and have defaulted to using the gcloud command line.
     """
+
     def __init__(
         self,
         audience: str | None,
-        impersonate_id: str | None = os.getenv('GOOGLE_IMPERSONATE_IDENTITY'),
+        impersonate_id: str | None = None,
     ):
         super().__init__()
         self.token = None
         self.audience = audience
-
+        impersonate_id = impersonate_id or os.environ.get('GOOGLE_IMPERSONATE_IDENTITY')
         if not impersonate_id:
             raise exceptions.DefaultCredentialsError(
                 f'GOOGLE_IMPERSONATE_IDENTITY environment variable is not set. '
@@ -176,7 +178,7 @@ class ExternalCredentialsAdapter(google_auth_credentials.Credentials):
 
         self.impersonate_id = impersonate_id
 
-    def refresh(self, *args, **kwargs):
+    def refresh(self, *args, **kwargs):  # pylint: disable=unused-argument
         """Call gcloud to get a new token."""
         command = [
             'gcloud',
