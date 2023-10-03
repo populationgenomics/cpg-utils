@@ -5,7 +5,7 @@ from setuptools import find_packages, setup
 setup(
     name='cpg-utils',
     # This tag is automatically updated by bumpversion
-    version='4.15.1',
+    version='4.15.2',
     description='Library of convenience functions specific to the CPG',
     long_description=open('README.md').read(),
     long_description_content_type='text/markdown',
@@ -13,6 +13,8 @@ setup(
     license='MIT',
     packages=find_packages(),
     install_requires=[
+        'boto3==1.28.56',
+        'botocore==1.31.56',
         'google-auth>=1.27.0',
         'google-cloud-secret-manager',
         'cloudpathlib[all]',
