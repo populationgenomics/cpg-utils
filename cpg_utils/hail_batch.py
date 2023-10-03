@@ -5,14 +5,20 @@ import inspect
 import os
 import textwrap
 import typing
-from typing import Optional, List, Union
+from typing import List, Optional, Union
 
 import hail as hl
 import hailtop.batch as hb
 from hail.utils.java import Env
 
-from cpg_utils import to_path, Path
-from cpg_utils.config import get_config, ConfigError, retrieve
+from cpg_utils import Path, to_path
+from cpg_utils.config import (
+    AR_GUID_NAME,
+    ConfigError,
+    get_config,
+    retrieve,
+    try_get_ar_guid,
+)
 
 # template commands strings
 GCLOUD_AUTH_COMMAND = """\
@@ -63,6 +69,10 @@ def copy_common_env(job: hb.batch.job.Job) -> None:
         if val:
             job.env(key, val)
 
+    ar_guid = try_get_ar_guid()
+    if ar_guid:
+        job.attributes[AR_GUID_NAME] = ar_guid
+
 
 def remote_tmpdir(hail_bucket: Optional[str] = None) -> str:
     """Returns the remote_tmpdir to use for Hail initialization.
@@ -70,7 +80,7 @@ def remote_tmpdir(hail_bucket: Optional[str] = None) -> str:
     If `hail_bucket` is not specified explicitly, requires the `hail/bucket` config variable to be set.
     """
     bucket = hail_bucket or get_config().get('hail', {}).get('bucket')
-    assert bucket, f'hail_bucket was not set by argument or configuration'
+    assert bucket, 'hail_bucket was not set by argument or configuration'
     return f'gs://{bucket}/batch-tmp'
 
 
@@ -397,7 +407,7 @@ function retry_gs_cp {
 """
 
 # command that monitors the instance storage space
-MONITOR_SPACE_CMD = f'df -h; du -sh /io; du -sh /io/batch'
+MONITOR_SPACE_CMD = 'df -h; du -sh /io; du -sh /io/batch'
 
 ADD_SCRIPT_CMD = """\
 cat <<EOT >> {script_name}
