@@ -51,6 +51,7 @@ def try_get_ar_guid():
     """
     try:
         return get_config()['workflow'][AR_GUID_NAME]
+    # pylint: disable=bare-except
     except:  # noqa
         return None
 
