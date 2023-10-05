@@ -5,11 +5,11 @@ from setuptools import find_packages, setup
 setup(
     name='cpg-utils',
     # This tag is automatically updated by bumpversion
-    version='4.15.2',
+    version='4.16.0',
     description='Library of convenience functions specific to the CPG',
     long_description=open('README.md').read(),
     long_description_content_type='text/markdown',
-    url=f'https://github.com/populationgenomics/cpg-utils',
+    url='https://github.com/populationgenomics/cpg-utils',
     license='MIT',
     packages=find_packages(),
     install_requires=[

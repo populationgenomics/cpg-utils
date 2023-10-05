@@ -1,12 +1,14 @@
 """Provides access to config variables."""
 
 import os
-from typing import Optional, List, Dict, Any
+from typing import Any, Dict, List, Optional
 
 import toml
 from frozendict import frozendict
 
 from cpg_utils import to_path
+
+AR_GUID_NAME = 'ar_guid'
 
 # We use these globals for lazy initialization, but pylint doesn't like that.
 # pylint: disable=global-statement, invalid-name
@@ -33,13 +35,25 @@ def _validate_configs(config_paths: list[str]) -> None:
             except toml.decoder.TomlDecodeError as e:
                 exception_by_path[p] = e
     if exception_by_path:
-        msg = f'Failed parsing some config files:'
+        msg = 'Failed parsing some config files:'
         for path, exception in exception_by_path.items():
             msg += f'\n\t{path}: {exception}'
         raise ValueError(msg)
 
 
 _validate_configs(_config_paths)
+
+
+def try_get_ar_guid():
+    """Attempts to get the AR GUID from the environment.
+
+    This is a fallback for when the AR GUID is not available in the config.
+    """
+    try:
+        return get_config()['workflow'][AR_GUID_NAME]
+    # pylint: disable=bare-except
+    except:  # noqa
+        return None
 
 
 def set_config_paths(config_paths: list[str]) -> None:
