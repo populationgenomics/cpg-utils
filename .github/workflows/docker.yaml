@@ -1,6 +1,5 @@
 name: Docker
 on:
-  pull_request:
   push:
     branches:
       - main
@@ -40,12 +39,7 @@ jobs:
       run: |
         docker build -f Dockerfile --tag $IMAGE_NAME:${{ github.sha }} .
 
-    - name: push sha
-      run: |
-        docker push $IMAGE_NAME:${{ github.sha }}
-
     - name: push version and latest
-      if: ${{ github.event_name != 'pull_request' }}
       run: |
         docker tag $IMAGE_NAME:${{ github.sha }} $IMAGE_NAME:$VERSION
         docker tag $IMAGE_NAME:${{ github.sha }} $IMAGE_NAME:latest
