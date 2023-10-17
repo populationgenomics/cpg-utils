@@ -8,7 +8,7 @@ from frozendict import frozendict
 
 from cpg_utils import to_path
 
-AR_GUID_NAME = 'ar_guid'
+AR_GUID_NAME = 'ar-guid'
 
 # We use these globals for lazy initialization, but pylint doesn't like that.
 # pylint: disable=global-statement, invalid-name
