@@ -6,11 +6,7 @@ import logging
 import os
 import tempfile
 import textwrap
-import uuid
-
-from typing import List, Literal, Optional, Union
-
-import toml
+from typing import Dict, List, Literal, Optional, Union
 
 import hail as hl
 import hailtop.batch as hb
@@ -22,10 +18,8 @@ from cpg_utils.config import (
     ConfigError,
     get_config,
     retrieve,
-    set_config_paths,
     try_get_ar_guid,
 )
-
 
 # template commands strings
 GCLOUD_AUTH_COMMAND = """\
@@ -39,7 +33,11 @@ _batch: Optional['Batch'] = None
 
 
 def get_batch(
-    name: str | None = None, default_python_image: str | None = None
+    name: str | None = None,
+    *,
+    default_python_image: str | None = None,
+    attributes: Optional[Dict[str, str]] = None,
+    **kwargs,
 ) -> 'Batch':
     """
     Wrapper around Hail's `Batch` class, which allows to register created jobs
@@ -79,6 +77,8 @@ def get_batch(
             default_memory=get_config()['hail'].get('default_memory'),
             default_python_image=default_python_image
             or get_config()['workflow']['driver_image'],
+            attributes=attributes,
+            **kwargs,
         )
     return _batch
 
@@ -93,31 +93,24 @@ class Batch(hb.Batch):
         self,
         name,
         backend,
-        *args,
+        *,
         pool_label=None,
+        attributes: Optional[Dict[str, str]] = None,
         **kwargs,
     ):
-        super().__init__(name, backend, *args, **kwargs)
+        _attributes = attributes or {}
+        if AR_GUID_NAME not in _attributes:
+            _attributes[AR_GUID_NAME] = try_get_ar_guid()
+
+        super().__init__(name, backend, attributes=_attributes, **kwargs)
         # Job stats registry:
         self.job_by_label = {}
         self.job_by_stage = {}
         self.job_by_tool = {}
         self.total_job_num = 0
         self.pool_label = pool_label
-        if not get_config()['hail'].get('dry_run') and not isinstance(
-            self._backend, hb.LocalBackend
-        ):
-            self._copy_configs_to_remote()
 
-    def _copy_configs_to_remote(self):
-        """If configs are local files, copy them to remote"""
-        remote_dir = to_path(self._backend.remote_tmpdir) / 'config'
-        config_path = remote_dir / (str(uuid.uuid4()) + '.toml')
-        with config_path.open('w') as f:
-            toml.dump(dict(get_config()), f)
-        set_config_paths([str(config_path)])
-
-    def _process_attributes(
+    def _process_job_attributes(
         self,
         name: str | None = None,
         attributes: dict | None = None,
@@ -195,7 +188,7 @@ class Batch(hb.Batch):
             return
 
         for job in self._jobs:
-            job.name, job.attributes = self._process_attributes(
+            job.name, job.attributes = self._process_job_attributes(
                 job.name, job.attributes
             )
             # We only have dedicated pools for preemptible machines.
@@ -207,7 +200,8 @@ class Batch(hb.Batch):
 
         logging.info(f'Will submit {self.total_job_num} jobs')
 
-        def _print_stat(_d: dict, default_label: str | None = None):
+        def _print_stat(prefix: str, _d: dict, default_label: str | None = None):
+            m = (prefix or ' ') + '\n'
             for label, stat in _d.items():
                 label = label or default_label
                 msg = f'{stat["job_n"]} job'
@@ -217,13 +211,15 @@ class Batch(hb.Batch):
                     msg += f' for {sg_count} sequencing group'
                     if sg_count > 1:
                         msg += 's'
-                logging.info(f'  {label}: {msg}')
+                m += f'  {label}: {msg}'
+            logging.info(m)
 
-        logging.info('Split by stage:')
-        _print_stat(self.job_by_stage, default_label='<not in stage>')
-
-        logging.info(f'Split by tool:')
-        _print_stat(self.job_by_tool, default_label='<tool is not defined>')
+        _print_stat(
+            'Split by stage:', self.job_by_stage, default_label='<not in stage>'
+        )
+        _print_stat(
+            'Split by tool:', self.job_by_tool, default_label='<tool is not defined>'
+        )
 
         kwargs.setdefault('dry_run', get_config()['hail'].get('dry_run'))
         kwargs.setdefault(
