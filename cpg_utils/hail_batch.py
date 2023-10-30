@@ -94,7 +94,7 @@ class Batch(hb.Batch):
         name,
         backend,
         *,
-        pool_label=None,
+        pool_label: Optional[str] = None,
         attributes: Optional[Dict[str, str]] = None,
         **kwargs,
     ):
@@ -104,9 +104,9 @@ class Batch(hb.Batch):
 
         super().__init__(name, backend, attributes=_attributes, **kwargs)
         # Job stats registry:
-        self.job_by_label = {}
-        self.job_by_stage = {}
-        self.job_by_tool = {}
+        self.job_by_label: Dict = {}
+        self.job_by_stage: Dict = {}
+        self.job_by_tool: Dict = {}
         self.total_job_num = 0
         self.pool_label = pool_label
 
