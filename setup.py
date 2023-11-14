@@ -15,7 +15,7 @@ setup(
     install_requires=[
         'boto3==1.28.56',
         'botocore==1.31.56',
-        'google-auth>=1.27.0',
+        'google-auth>=2.22.0',
         'google-cloud-secret-manager',
         'cloudpathlib[all]',
         'toml',
