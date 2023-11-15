@@ -6,10 +6,12 @@ import re
 import subprocess
 import traceback
 
+from cloudpathlib import AnyPath
+
+# pylint: disable=no-name-in-module
 import google.api_core.exceptions
 import google.auth.transport
 import google.oauth2
-from cloudpathlib import AnyPath
 from google.auth import (
     credentials as google_auth_credentials,
     environment_vars,
@@ -22,8 +24,6 @@ from google.auth._default import (
     _EXTERNAL_ACCOUNT_TYPE,
 )
 from google.auth.transport import requests
-
-# pylint: disable=no-name-in-module
 from google.cloud import secretmanager
 from google.oauth2 import credentials as oauth2_credentials, service_account
 
