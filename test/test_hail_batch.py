@@ -51,8 +51,6 @@ def test_reset_batch(test_conf):
     job2 = batch_2.new_bash_job(name='test_job2')
     job1.command('echo "I am a test"')
     job2.command('echo "I am a second test"')
-    print([job.__dict__ for job in batch._jobs])
-    print([job.__dict__ for job in batch_2._jobs])
     assert len(batch._jobs) == 1
     assert batch._jobs[0].__dict__ == job1.__dict__
     assert len(batch_2._jobs) == 1
