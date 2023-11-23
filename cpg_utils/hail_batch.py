@@ -32,6 +32,12 @@ gcloud -q auth activate-service-account \
 _batch: Optional['Batch'] = None
 
 
+def reset_batch():
+    """Reset the global batch reference, useful for tests"""
+    global _batch  # pylint: disable=global-statement
+    _batch = None
+
+
 def get_batch(
     name: str | None = None,
     *,
