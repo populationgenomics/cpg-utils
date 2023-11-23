@@ -16,7 +16,7 @@ def test_read_config(test_conf):
     test_conf : test TOML configuration
     """
     conf = get_config()
-    assert conf.keys() == {'workflow', 'storage'}
+    assert conf.keys() == {'hail', 'workflow', 'storage'}
     assert conf['workflow']['dataset'] == 'mito-disease'
 
 
