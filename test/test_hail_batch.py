@@ -60,7 +60,6 @@ def test_reset_batch(test_conf):
     batch_2.run(wait=False)
 
 
-
 def test_output_path(test_conf):
     """
     test_conf : test TOML configuration
