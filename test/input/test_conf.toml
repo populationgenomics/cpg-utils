@@ -5,6 +5,10 @@ dataset_gcp_project = "mito-disease"
 name = "test conf"
 sequencing_type = "genome"
 output_prefix = "this_is_a_test"
+driver_image = 'ubuntu:20.0'
+
+[hail]
+backend = "local"
 
 [storage.default]
 default = "gs://cpg-mito-disease-test"

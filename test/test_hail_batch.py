@@ -4,10 +4,59 @@ test cases for cpg-utils.hail_batch
 
 import pytest
 
-from cpg_utils.hail_batch import output_path, dataset_path, ConfigError
+from cpg_utils.hail_batch import (
+    dataset_path,
+    get_batch,
+    output_path,
+    reset_batch,
+    ConfigError,
+)
 
 
 # pylint: disable=unused-argument
+
+
+def test_batch_creation(test_conf):
+    """
+    create a local hail batch, check that it works as expected
+    Parameters
+    ----------
+    test_conf : config fixture, includes local backend
+    """
+    # pylint: disable=W0212
+    reset_batch()
+    batch = get_batch()
+    assert batch._backend.__class__.__name__ == 'LocalBackend'
+    job1 = batch.new_bash_job(name='test_job1')
+    job1.command('echo "I am a test"')
+    assert len(batch._jobs) == 1
+    batch.run(wait=False)
+
+
+def test_reset_batch(test_conf):
+    """
+    test that the reset_batch function works as expected
+    Parameters
+    ----------
+    test_conf :
+    """
+    # pylint: disable=W0212
+    reset_batch()
+    batch = get_batch('first')
+    reset_batch()
+    batch_2 = get_batch('second')
+    assert batch._backend.__class__.__name__ == 'LocalBackend'
+    assert batch_2._backend.__class__.__name__ == 'LocalBackend'
+    job1 = batch.new_bash_job(name='test_job1')
+    job2 = batch_2.new_bash_job(name='test_job2')
+    job1.command('echo "I am a test"')
+    job2.command('echo "I am a second test"')
+    print([job.__dict__ for job in batch._jobs])
+    print([job.__dict__ for job in batch_2._jobs])
+    assert len(batch._jobs) == 1
+    assert len(batch_2._jobs) == 1
+    batch.run(wait=False)
+    batch_2.run(wait=False)
 
 
 def test_output_path(test_conf):
