@@ -45,6 +45,7 @@ def test_reset_batch(test_conf):
     batch = get_batch('first')
     reset_batch()
     batch_2 = get_batch('second')
+    assert id(batch) != id(batch_2)
     assert batch._backend.__class__.__name__ == 'LocalBackend'
     assert batch_2._backend.__class__.__name__ == 'LocalBackend'
     job1 = batch.new_bash_job(name='test_job1')
@@ -57,6 +58,7 @@ def test_reset_batch(test_conf):
     assert batch_2._jobs[0].__dict__ == job2.__dict__
     batch.run(wait=False)
     batch_2.run(wait=False)
+
 
 
 def test_output_path(test_conf):
