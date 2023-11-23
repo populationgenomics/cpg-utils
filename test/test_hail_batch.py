@@ -54,7 +54,9 @@ def test_reset_batch(test_conf):
     print([job.__dict__ for job in batch._jobs])
     print([job.__dict__ for job in batch_2._jobs])
     assert len(batch._jobs) == 1
+    assert batch._jobs[0].__dict__ == job1.__dict__
     assert len(batch_2._jobs) == 1
+    assert batch_2._jobs[0].__dict__ == job2.__dict__
     batch.run(wait=False)
     batch_2.run(wait=False)
 
