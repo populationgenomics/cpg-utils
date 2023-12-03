@@ -30,6 +30,8 @@ def test_batch_creation(test_conf):
     job1 = batch.new_bash_job(name='test_job1')
     job1.command('echo "I am a test"')
     assert len(batch._jobs) == 1
+    print(batch._jobs[0].__dict__)
+    assert False
     batch.run(wait=False)
 
 
