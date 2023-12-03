@@ -41,8 +41,8 @@ def reset_batch():
 def get_batch(
     name: str | None = None,
     *,
+    default_image: str | None = None,
     default_python_image: str | None = None,
-    default_bash_image: str | None = None,
     attributes: Optional[Dict[str, str]] = None,
     **kwargs,
 ) -> 'Batch':
@@ -53,8 +53,8 @@ def get_batch(
     Parameters
     ----------
     name : str, optional, name for the batch
+    default_image : str, optional, default bash job (default) image to use
     default_python_image : str, optional, default python image to use
-    default_bash_image : str, optional, default bash job (default) image to use
 
     Returns
     -------
@@ -83,7 +83,7 @@ def get_batch(
             cancel_after_n_failures=get_config()['hail'].get('cancel_after_n_failures'),
             default_timeout=get_config()['hail'].get('default_timeout'),
             default_memory=get_config()['hail'].get('default_memory'),
-            default_image=default_bash_image
+            default_image=default_image
             or get_config()['workflow']['driver_image'],
             default_python_image=default_python_image
             or get_config()['workflow']['driver_image'],
