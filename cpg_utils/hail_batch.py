@@ -83,7 +83,8 @@ def get_batch(
             cancel_after_n_failures=get_config()['hail'].get('cancel_after_n_failures'),
             default_timeout=get_config()['hail'].get('default_timeout'),
             default_memory=get_config()['hail'].get('default_memory'),
-            default_image=default_bash_image or get_config()['workflow']['driver_image'],
+            default_image=default_bash_image
+            or get_config()['workflow']['driver_image'],
             default_python_image=default_python_image
             or get_config()['workflow']['driver_image'],
             attributes=attributes,
