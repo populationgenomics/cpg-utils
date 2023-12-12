@@ -9,9 +9,9 @@ import textwrap
 import uuid
 from typing import Dict, List, Literal, Optional, Union
 
-import toml
 import hail as hl
 import hailtop.batch as hb
+import toml
 from hail.utils.java import Env
 
 from cpg_utils import Path, to_path
