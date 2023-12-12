@@ -6,8 +6,10 @@ import logging
 import os
 import tempfile
 import textwrap
+import uuid
 from typing import Dict, List, Literal, Optional, Union
 
+import toml
 import hail as hl
 import hailtop.batch as hb
 from hail.utils.java import Env
@@ -18,6 +20,7 @@ from cpg_utils.config import (
     ConfigError,
     get_config,
     retrieve,
+    set_config_paths,
     try_get_ar_guid,
 )
 
@@ -115,6 +118,18 @@ class Batch(hb.Batch):
         self.job_by_tool: Dict = {}
         self.total_job_num = 0
         self.pool_label = pool_label
+        if not get_config()['hail'].get('dry_run') and not isinstance(
+            self._backend, hb.LocalBackend
+        ):
+            self._copy_configs_to_remote()
+
+    def _copy_configs_to_remote(self):
+        """If configs are local files, copy them to remote"""
+        remote_dir = to_path(self._backend.remote_tmpdir) / 'config'
+        config_path = remote_dir / (str(uuid.uuid4()) + '.toml')
+        with config_path.open('w') as f:
+            toml.dump(dict(get_config()), f)
+        set_config_paths([str(config_path)])
 
     def _process_job_attributes(
         self,
