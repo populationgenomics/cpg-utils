@@ -124,7 +124,15 @@ class Batch(hb.Batch):
             self._copy_configs_to_remote()
 
     def _copy_configs_to_remote(self):
-        """If configs are local files, copy them to remote"""
+        """
+        Combine all config files into a single entry
+        Write that entry to a cloud path
+        Set that cloud path as the config path
+
+        This is crucial in production-pipelines as we combine remote
+        and local files in the driver image, but we can only pass
+        cloudpaths to the worker job containers
+        """
         remote_dir = to_path(self._backend.remote_tmpdir) / 'config'
         config_path = remote_dir / (str(uuid.uuid4()) + '.toml')
         with config_path.open('w') as f:
