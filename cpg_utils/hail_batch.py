@@ -763,7 +763,6 @@ def query_command(
     """
 
     # translate any input arguments into an embeddable String
-
     if init_batch_args:
         batch_overrides = ', '.join(
             f'{k}={repr(v)}' for k, v in init_batch_args.items()
