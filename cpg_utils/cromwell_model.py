@@ -121,7 +121,7 @@ class WorkflowMetadataModel:
 
         return WorkflowMetadataModel(calls=calls, **new_d)
 
-    def display(self, expand_completed=False, monochrome=False):
+    def display(self, expand_completed: bool = False, monochrome: bool = False):
         duration_seconds = get_seconds_duration_between_cromwell_dates(
             self.start, self.end
         )
@@ -138,7 +138,7 @@ class WorkflowMetadataModel:
 
         calls_display: list[str] = []
         for name, calls in sorted(
-            self.calls.items(), key=lambda a: a[1][0].start or '0'
+            (self.calls or {}).items(), key=lambda a: a[1][0].start or '0'
         ):
             calls_display.append(
                 indent(
@@ -246,7 +246,7 @@ class CallMetadata:
         )
 
         extras = []
-        is_done = self.executionStatus.is_finished()
+        is_done = self.executionStatus.is_finished() if self.executionStatus else False
         has_succeded = self.executionStatus == ExecutionStatus.succeeded
         if (not has_succeded or expand_completed) and self.calls:
             for name, calls in sorted(
@@ -289,10 +289,10 @@ class CallMetadata:
         if self.attempt is not None and self.attempt > 1:
             name += f' (attempt {self.attempt})'
 
-        symbol = self.executionStatus.symbol()
+        symbol = self.executionStatus.symbol() if self.executionStatus else '?'
         color, rcol = '', ''
         if not monochrome:
-            color = self.executionStatus.color()
+            color = self.executionStatus.color() if self.executionStatus else ''
             rcol = AnsiiColors.RESET
 
         extras_str = "".join("\n" + indent(e, '  ') for e in extras)
@@ -322,10 +322,10 @@ def prepare_inner_calls_string(
         )
 
     collapsed_status = collapse_status_of_calls(calls)
-    status = collapsed_status.symbol()
+    status = collapsed_status.symbol() if collapsed_status else '?'
     color, rcol = '', ''
     if not monochrome:
-        color = collapsed_status.color()
+        color = collapsed_status.color() if collapsed_status else ''
         rcol = AnsiiColors.RESET
     inner_calls = ''
 
@@ -394,7 +394,7 @@ def get_seconds_duration_between_cromwell_dates(start, end):
     return int(((e or datetime.datetime.utcnow()) - s).total_seconds())
 
 
-def get_readable_duration(seconds: int):
+def get_readable_duration(seconds: int | None):
     """
     >>> get_readable_duration(86401)
     '1d:0h:0m:1s'

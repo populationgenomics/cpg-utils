@@ -261,6 +261,10 @@ def get_access_level() -> str:
     return config_retrieve(['workflow', 'access_level'])
 
 
+def get_gcp_project() -> str:
+    return config_retrieve(['workflow', 'dataset_gcp_project'])
+
+
 def get_cpg_namespace(access_level: str | None = None) -> str:
     """
     Get storage namespace from the access level.
@@ -533,6 +537,6 @@ def get_gcloud_set_project(gcp_project: str | None = None) -> str:
     """
     Get the gcloud command to set the project.
     """
-    gcp_project = gcp_project or config_retrieve(['workflow', 'dataset_gcp_project'])
+    gcp_project = gcp_project or get_gcp_project()
     command = ['gcloud', 'config', 'set', 'project', gcp_project]
     return ' '.join([quote(c) for c in command])

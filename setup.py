@@ -5,6 +5,9 @@ from setuptools import find_packages, setup
 with open('README.md') as f:
     long_description = f.read()
 
+with open('requirements.txt') as f:
+    requirements = f.read().splitlines()
+
 setup(
     name='cpg-utils',
     # This tag is automatically updated by bumpversion
@@ -15,21 +18,7 @@ setup(
     url='https://github.com/populationgenomics/cpg-utils',
     license='MIT',
     packages=find_packages(),
-    install_requires=[
-        'boto3==1.28.56',
-        'botocore==1.31.56',
-        'google-auth>=1.27.0',
-        'google-cloud-secret-manager',
-        'cloudpathlib[all]',
-        'toml',
-        'frozendict',
-    ],
-    extras_require={
-        'test': [
-            'pytest',
-            'pytest-mock',
-        ],
-    },
+    install_requires=requirements,
     keywords='bioinformatics',
     classifiers=[
         'Environment :: Console',

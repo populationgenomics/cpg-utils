@@ -5,6 +5,7 @@ jobs from within Hail batch.
 """
 
 import json
+import logging
 import os
 import subprocess
 from shlex import quote
@@ -14,7 +15,7 @@ from hailtop.batch import Batch, Resource
 from hailtop.batch.job import BashJob, Job
 
 from cpg_utils.cloud import get_project_id_from_service_account_email
-from cpg_utils.config import AR_GUID_NAME, get_config, try_get_ar_guid
+from cpg_utils.config import AR_GUID_NAME, get_config, get_gcp_project, try_get_ar_guid
 from cpg_utils.constants import (
     CROMWELL_AUDIENCE,
     CROMWELL_URL,
@@ -26,6 +27,8 @@ from cpg_utils.git import (
     get_repo_name_from_remote,
 )
 from cpg_utils.hail_batch import prepare_git_job, query_command
+
+logger = logging.getLogger(__name__)
 
 
 class CromwellOutputType:
@@ -159,7 +162,7 @@ def run_cromwell_workflow(  # noqa: C901
         from cpg_utils.cloud import read_secret
 
         secret_name = f'{dataset}-cromwell-{access_level}-key'
-        value = read_secret(ANALYSIS_RUNNER_PROJECT_ID, secret_name)
+        value = read_secret(get_gcp_project(), secret_name)
         if not value:
             raise ValueError(f"Couldn't find secret: {secret_name}")
         return value
@@ -195,7 +198,7 @@ def run_cromwell_workflow(  # noqa: C901
     _project = project
     if _project is None:
         if os.getenv('CPG_CONFIG_PATH'):
-            _project = get_config()['workflow']['dataset_gcp_project']
+            _project = get_gcp_project()
         else:
             _project = get_project_id_from_service_account_email(service_account_email)
 
@@ -371,7 +374,7 @@ def watch_workflow(  # noqa: C901
     import requests
     from cloudpathlib.anypath import to_anypath
 
-    from analysis_runner.constants import (
+    from cpg_utils.constants import (
         CROMWELL_AUDIENCE,
         CROMWELL_URL,
         GCLOUD_ACTIVATE_AUTH_BASE,

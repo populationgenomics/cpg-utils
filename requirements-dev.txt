@@ -1,6 +1,3 @@
+-r requirements.txt
 bump2version
-hail
 pre-commit
-pylint
-pytest
-toml
