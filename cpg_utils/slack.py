@@ -10,10 +10,20 @@ configuration values are set.
 
 import logging
 
-import slack_sdk
+try:
+    import slack_sdk
+except ImportError:
+    slack_sdk = None
 
 from cpg_utils.cloud import read_secret
 from cpg_utils.config import get_config
+
+
+def _get_slack_sdk():  # noqa: ANN202
+    if slack_sdk:
+        return slack_sdk
+
+    raise ImportError("slack_sdk is not installed")
 
 
 def _get_channel() -> str:
@@ -31,7 +41,7 @@ def _get_token() -> str:
     if not token_secret_id or not token_project_id:
         raise ValueError(
             '`slack.token_secret_id` and `slack.token_project_id` '
-            'must be set in config to retrieve Slack token'
+            'must be set in config to retrieve Slack token',
         )
     slack_token = read_secret(
         project_id=token_project_id,
@@ -45,24 +55,24 @@ def _get_token() -> str:
 
 def send_message(text: str) -> None:
     """Sends `text` as a Slack message, reading credentials from the config."""
-    slack_client = slack_sdk.WebClient(token=_get_token())
+    slack_client = _get_slack_sdk().WebClient(token=_get_token())
     try:
         slack_client.chat_postMessage(
             channel=_get_channel(),
             text=text,
         )
-    except slack_sdk.errors.SlackApiError as err:
+    except _get_slack_sdk().errors.SlackApiError as err:
         logging.error(f'Error posting to Slack: {err}')
 
 
 def upload_file(content: bytes, comment: str) -> None:
     """Uploads `content` to Slack with the given text `comment`, reading credentials from the config."""
-    slack_client = slack_sdk.WebClient(token=_get_token())
+    slack_client = _get_slack_sdk().WebClient(token=_get_token())
     try:
         slack_client.files_upload(
             channels=_get_channel(),
             content=content,
             initial_comment=comment,
         )
-    except slack_sdk.errors.SlackApiError as err:
+    except _get_slack_sdk().errors.SlackApiError as err:
         logging.error(f'Error posting to Slack: {err}')

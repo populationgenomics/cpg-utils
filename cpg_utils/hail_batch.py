@@ -6,20 +6,24 @@ import logging
 import os
 import tempfile
 import textwrap
-from typing import Dict, List, Literal, Optional, Union
+from shlex import quote
+from typing import Any, Literal
 
 import hail as hl
 import hailtop.batch as hb
 from hail.utils.java import Env
+from hailtop.config import get_deploy_config
 
 from cpg_utils import Path, to_path
 from cpg_utils.config import (
     AR_GUID_NAME,
-    ConfigError,
+    dataset_path,
+    genome_build,
     get_config,
-    retrieve,
+    reference_path,
     try_get_ar_guid,
 )
+from cpg_utils.constants import DEFAULT_GITHUB_ORGANISATION
 
 # template commands strings
 GCLOUD_AUTH_COMMAND = """\
@@ -29,7 +33,7 @@ gcloud -q auth activate-service-account \
 """
 
 
-_batch: Optional['Batch'] = None
+_batch: 'Batch | None' = None
 
 
 def reset_batch():
@@ -42,8 +46,8 @@ def get_batch(
     name: str | None = None,
     *,
     default_python_image: str | None = None,
-    attributes: Optional[Dict[str, str]] = None,
-    **kwargs,
+    attributes: dict[str, str] | None = None,
+    **kwargs: Any,
 ) -> 'Batch':
     """
     Wrapper around Hail's `Batch` class, which allows to register created jobs
@@ -97,22 +101,23 @@ class Batch(hb.Batch):
 
     def __init__(
         self,
-        name,
-        backend,
+        name: str,
+        backend: hb.backend.LocalBackend | hb.backend.ServiceBackend,
         *,
-        pool_label: Optional[str] = None,
-        attributes: Optional[Dict[str, str]] = None,
-        **kwargs,
+        pool_label: str | None = None,
+        attributes: dict[str, str] | None = None,
+        **kwargs: Any,
     ):
         _attributes = attributes or {}
-        if AR_GUID_NAME not in _attributes:
-            _attributes[AR_GUID_NAME] = try_get_ar_guid()
+        if AR_GUID_NAME not in _attributes:  # noqa: SIM102
+            if ar_guid := try_get_ar_guid():
+                _attributes[AR_GUID_NAME] = ar_guid
 
         super().__init__(name, backend, attributes=_attributes, **kwargs)
         # Job stats registry:
-        self.job_by_label: Dict = {}
-        self.job_by_stage: Dict = {}
-        self.job_by_tool: Dict = {}
+        self.job_by_label: dict = {}
+        self.job_by_stage: dict = {}
+        self.job_by_tool: dict = {}
         self.total_job_num = 0
         self.pool_label = pool_label
 
@@ -175,11 +180,11 @@ class Batch(hb.Batch):
         self.job_by_tool[tool]['job_n'] += 1
         self.job_by_tool[tool]['sequencing_groups'] |= sequencing_groups
 
-        attributes['sequencing_groups'] = list(sorted(list(sequencing_groups)))
+        attributes['sequencing_groups'] = sorted(sequencing_groups)
         fixed_attrs = {k: str(v) for k, v in attributes.items()}
         return name, fixed_attrs
 
-    def run(self, **kwargs):  # pylint: disable=R1710,W0221
+    def run(self, **kwargs: Any):
         """
         Execute a batch. Overridden to print pre-submission statistics.
         Pylint disables:
@@ -191,11 +196,12 @@ class Batch(hb.Batch):
         """
         if not self._jobs:
             logging.error('No jobs to submit')
-            return
+            return None
 
         for job in self._jobs:
             job.name, job.attributes = self._process_job_attributes(
-                job.name, job.attributes
+                job.name,
+                job.attributes,
             )
             # We only have dedicated pools for preemptible machines.
             # _preemptible defaults to None, so check explicitly for False.
@@ -206,10 +212,14 @@ class Batch(hb.Batch):
 
         logging.info(f'Will submit {self.total_job_num} jobs')
 
-        def _print_stat(prefix: str, _d: dict, default_label: str | None = None):
+        def _print_stat(
+            prefix: str,
+            _d: dict,
+            default_label: str | None = None,
+        ) -> None:
             m = (prefix or ' ') + '\n'
             for label, stat in _d.items():
-                label = label or default_label
+                lbl = label or default_label
                 msg = f'{stat["job_n"]} job'
                 if stat['job_n'] > 1:
                     msg += 's'
@@ -217,24 +227,28 @@ class Batch(hb.Batch):
                     msg += f' for {sg_count} sequencing group'
                     if sg_count > 1:
                         msg += 's'
-                m += f'  {label}: {msg}'
+                m += f'  {lbl}: {msg}'
             logging.info(m)
 
         _print_stat(
-            'Split by stage:', self.job_by_stage, default_label='<not in stage>'
+            'Split by stage:',
+            self.job_by_stage,
+            default_label='<not in stage>',
         )
         _print_stat(
-            'Split by tool:', self.job_by_tool, default_label='<tool is not defined>'
+            'Split by tool:',
+            self.job_by_tool,
+            default_label='<tool is not defined>',
         )
 
         kwargs.setdefault('dry_run', get_config()['hail'].get('dry_run'))
         kwargs.setdefault(
-            'delete_scratch_on_exit', get_config()['hail'].get('delete_scratch_on_exit')
+            'delete_scratch_on_exit',
+            get_config()['hail'].get('delete_scratch_on_exit'),
         )
-        if isinstance(self._backend, hb.LocalBackend):
-            # Local backend does not support "wait"
-            if 'wait' in kwargs:
-                del kwargs['wait']
+        # Local backend does not support "wait"
+        if isinstance(self._backend, hb.LocalBackend) and 'wait' in kwargs:
+            del kwargs['wait']
         return super().run(**kwargs)
 
 
@@ -259,7 +273,7 @@ def make_job_name(
     return name
 
 
-def init_batch(**kwargs):
+def init_batch(**kwargs: Any):
     """
     Initializes the Hail Query Service from within Hail Batch.
     Requires the `hail/billing_project` and `hail/bucket` config variables to be set.
@@ -280,7 +294,7 @@ def init_batch(**kwargs):
             billing_project=get_config()['hail']['billing_project'],
             remote_tmpdir=remote_tmpdir(f'cpg-{dataset}-hail'),
             **kwargs,
-        )
+        ),
     )
 
 
@@ -300,12 +314,15 @@ def copy_common_env(job: hb.batch.job.Job) -> None:
         if val:
             job.env(key, val)
 
+    if not job.attributes:
+        job.attributes = {}
+
     ar_guid = try_get_ar_guid()
     if ar_guid:
         job.attributes[AR_GUID_NAME] = ar_guid
 
 
-def remote_tmpdir(hail_bucket: Optional[str] = None) -> str:
+def remote_tmpdir(hail_bucket: str | None = None) -> str:
     """Returns the remote_tmpdir to use for Hail initialization.
 
     If `hail_bucket` is not specified explicitly, requires the `hail/bucket` config variable to be set.
@@ -315,241 +332,6 @@ def remote_tmpdir(hail_bucket: Optional[str] = None) -> str:
     return f'gs://{bucket}/batch-tmp'
 
 
-def dataset_path(
-    suffix: str,
-    category: str | None = None,
-    dataset: str | None = None,
-    test: bool = False,
-) -> str:
-    """
-    Returns a full path for the current dataset, given a category and a path suffix.
-
-    This is useful for specifying input files, as in contrast to the `output_path`
-    function, `dataset_path` does _not_ take the `workflow/output_prefix` config
-    variable into account.
-
-    Assumes the config structure like below, which is auto-generated by
-    the analysis-runner:
-
-    ```toml
-    [storage.default]
-    default = "gs://thousand-genomes-main"
-    web = "gs://cpg-thousand-genomes-main-web"
-    analysis = "gs://cpg-thousand-genomes-main-analysis"
-    tmp = "gs://cpg-thousand-genomes-main-tmp"
-    web_url = "https://main-web.populationgenomics.org.au/thousand-genomes"
-
-    [storage.thousand-genomes]
-    default = "gs://cpg-thousand-genomes-main"
-    web = "gs://cpg-thousand-genomes-main-web"
-    analysis = "gs://cpg-thousand-genomes-main-analysis"
-    tmp = "gs://cpg-thousand-genomes-main-tmp"
-    web_url = "https://main-web.populationgenomics.org.au/thousand-genomes"
-    ```
-
-    Examples
-    --------
-    Assuming that the analysis-runner has been invoked with
-    `--dataset fewgenomes --access-level test`:
-
-    >>> from cpg_utils.hail_batch import dataset_path
-    >>> dataset_path('1kg_densified/combined.mt')
-    'gs://cpg-fewgenomes-test/1kg_densified/combined.mt'
-    >>> dataset_path('1kg_densified/report.html', 'web')
-    'gs://cpg-fewgenomes-test-web/1kg_densified/report.html'
-    >>> dataset_path('1kg_densified/report.html', 'web', test=True)
-    'gs://cpg-fewgenomes-test-web/1kg_densified/report.html'
-
-    Notes
-    -----
-    Requires either the
-    * `workflow/dataset` and `workflow/access_level` config variables to be set.
-
-    Parameters
-    ----------
-    suffix : str
-        A path suffix to append to the bucket.
-    category : str, optional
-        A category like "tmp", "web", etc., defaults to "default" if omited.
-    dataset : str, optional
-        Dataset name, takes precedence over the `workflow/dataset` config variable
-    test : bool
-        Return "test" namespace version of the path
-
-    Returns
-    -------
-    str
-    """
-    if dataset and dataset not in get_config()['storage']:
-        raise ConfigError(
-            f'Storage section for dataset "{dataset}" not found in config. '
-            f'Please check that you have permissions to the dataset. '
-            f'Expected section: [storage.{dataset}]'
-        )
-    dataset = dataset or 'default'
-
-    # manual redirect to test paths
-    if test and not get_config()['workflow']['access_level'] == 'test':
-        section = get_config()['storage'][dataset]['test']
-    else:
-        section = get_config()['storage'][dataset]
-
-    category = category or 'default'
-    if not (prefix := section.get(category)):
-        raise ConfigError(
-            f'Category "{category}" not found in storage section '
-            f'for dataset "{dataset}": {section}'
-        )
-
-    return os.path.join(prefix, suffix)
-
-
-def cpg_test_dataset_path(
-    suffix: str,
-    category: str | None = None,
-    dataset: str | None = None,
-) -> str:
-    """
-    CPG-specific method to get corresponding test paths when running
-    from the main namespace.
-    """
-    dataset = dataset or 'default'
-    category = category or 'default'
-    prefix = get_config()['storage'][dataset]['test'][category]
-    return os.path.join(prefix, suffix)
-
-
-def web_url(suffix: str = '', dataset: str | None = None) -> str:
-    """
-    Web URL to match the dataset_path of category 'web'.
-    """
-    return dataset_path(suffix=suffix, dataset=dataset, category='web_url')
-
-
-def output_path(
-    suffix: str,
-    category: Optional[str] = None,
-    dataset: str | None = None,
-    test: bool = False,
-) -> str:
-    """
-    Returns a full path for the given category and path suffix.
-
-    In contrast to the `dataset_path` function, `output_path` takes the
-    `workflow/output_prefix` config variable into account.
-
-    Examples
-    --------
-    If using the analysis-runner, the `workflow/output_prefix` would be set to the
-    value provided using the --output argument, e.g.:
-    ```
-    analysis-runner --dataset fewgenomes --access-level test --output 1kg_pca/v42` ...
-    ```
-    will use '1kg_pca/v42' as the base path to build upon in this method:
-
-    >>> from cpg_utils.hail_batch import output_path
-    >>> output_path('loadings.ht')
-    'gs://cpg-fewgenomes-test/1kg_pca/v42/loadings.ht'
-    >>> output_path('report.html', 'web')
-    'gs://cpg-fewgenomes-test-web/1kg_pca/v42/report.html'
-
-    Notes
-    -----
-    Requires the `workflow/output_prefix` config variable to be set, in addition to the
-    requirements for `dataset_path`.
-
-    Parameters
-    ----------
-    suffix : str
-        A path suffix to append to the bucket + output directory.
-    category : str, optional
-        A category like "tmp", "web", etc., defaults to "default" if ommited.
-    dataset : str, optional
-        Dataset name, takes precedence over the `workflow/dataset` config variable
-    test : bool, optional
-        Boolean - if True, generate a test bucket path. Default to False.
-
-    Returns
-    -------
-    str
-    """
-    return dataset_path(
-        os.path.join(get_config()['workflow']['output_prefix'], suffix),
-        category=category,
-        dataset=dataset,
-        test=test,
-    )
-
-
-def image_path(key: str) -> str:
-    """
-    Returns a path to a container image using key in config's "images" section.
-
-    Examples
-    --------
-    >>> image_path('bcftools')
-    'australia-southeast1-docker.pkg.dev/cpg-common/images/bcftools:1.10.2'
-
-    Assuming config structure as follows:
-
-    ```toml
-    [images]
-    bcftools = 'australia-southeast1-docker.pkg.dev/cpg-common/images/bcftools:1.10.2'
-    ```
-
-    Parameters
-    ----------
-    key : str
-        Describes the key within the `images` config section. Can list sections
-        separated with '/'.
-
-    Returns
-    -------
-    str
-    """
-    return retrieve(['images'] + key.strip('/').split('/'))
-
-
-def reference_path(key: str) -> Path:
-    """
-    Returns a path to a reference resource using key in config's "references" section.
-
-    Examples
-    --------
-    >>> reference_path('vep_mount')
-    CloudPath('gs://cpg-common-main/references/vep/105.0/mount')
-    >>> reference_path('broad/genome_calling_interval_lists')
-    CloudPath('gs://cpg-common-main/references/hg38/v0/wgs_calling_regions.hg38.interval_list')
-
-    Assuming config structure as follows:
-
-    ```toml
-    [references]
-    vep_mount = 'gs://cpg-common-main/references/vep/105.0/mount'
-    [references.broad]
-    genome_calling_interval_lists = 'gs://cpg-common-main/references/hg38/v0/wgs_calling_regions.hg38.interval_list'
-    ```
-
-    Parameters
-    ----------
-    key : str
-        Describes the key within the `references` config section. Can list sections
-        separated with '/'.
-
-    Returns
-    -------
-    str
-    """
-    return to_path(retrieve(['references'] + key.strip('/').split('/')))
-
-
-def genome_build() -> str:
-    """
-    Return the default genome build name
-    """
-    return retrieve(['references', 'genome_build'], default='GRCh38')
-
-
 def fasta_res_group(b: hb.Batch, indices: list[str] | None = None):
     """
     Hail Batch resource group for fasta reference files.
@@ -557,7 +339,7 @@ def fasta_res_group(b: hb.Batch, indices: list[str] | None = None):
     @param indices: list of extensions to add to the base fasta file path.
     """
     ref_fasta = get_config()['workflow'].get('ref_fasta') or reference_path(
-        'broad/ref_fasta'
+        'broad/ref_fasta',
     )
     ref_fasta = to_path(ref_fasta)
     d = {
@@ -572,7 +354,7 @@ def fasta_res_group(b: hb.Batch, indices: list[str] | None = None):
 
 
 def authenticate_cloud_credentials_in_job(
-    job,
+    job: hb.batch.job.BashJob,
     print_all_statements: bool = True,
 ):
     """
@@ -599,6 +381,93 @@ def authenticate_cloud_credentials_in_job(
 
     # activate the google service account
     job.command(GCLOUD_AUTH_COMMAND)
+
+
+def prepare_git_job(
+    job: hb.batch.job.BashJob,
+    repo_name: str,
+    commit: str,
+    organisation: str = DEFAULT_GITHUB_ORGANISATION,
+    is_test: bool = True,
+    print_all_statements: bool = True,
+    get_deploy_token: bool = True,
+):
+    """
+    Takes a hail batch job, and:
+        * Clones the repository
+            * if access_level != "test": check the desired commit is on 'main'
+        * Check out the specific commit
+
+    Parameters
+    ----------
+    job                     - A hail BashJob
+    organisation            - The GitHub individual or organisation
+    repo_name               - The repository name to check out
+    commit                  - The commit hash to check out
+    is_test                 - CPG specific: only Main commits can run on Main data
+    print_all_statements    - logging toggle
+
+    Returns
+    -------
+    No return required
+    """
+    authenticate_cloud_credentials_in_job(
+        job,
+        print_all_statements=print_all_statements,
+    )
+
+    # Note: for private GitHub repos we'd need to use a token to clone.
+    #   - store the token on secret manager
+    #   - The git_credentials_secret_{name,project} values are set by cpg-infrastructure
+    #   - check at runtime whether we can get the token
+    #   - if so, set up the git credentials store with that value
+    if get_deploy_token:
+        job.command(
+            """
+# get secret names from config if they exist
+secret_name=$(python3 -c '
+try:
+    from cpg_utils.config import get_config
+    print(get_config(print_config=False).get("infrastructure", {}).get("git_credentials_secret_name", ""))
+except:
+    pass
+' || echo '')
+
+secret_project=$(python3 -c '
+try:
+    from cpg_utils.config import get_config
+    print(get_config(print_config=False).get("infrastructure", {}).get("git_credentials_secret_project", ""))
+except:
+    pass
+' || echo '')
+
+if [ ! -z "$secret_name" ] && [ ! -z "$secret_project" ]; then
+    # configure git credentials store if credentials are set
+    gcloud --project $secret_project secrets versions access --secret $secret_name latest > ~/.git-credentials
+    git config --global credential.helper "store"
+else
+    echo 'No git credentials secret found, unable to check out private repositories.'
+fi
+        """,
+        )
+
+    # Any job commands here are evaluated in a bash shell, so user arguments should
+    # be escaped to avoid command injection.
+    repo_path = f'https://github.com/{organisation}/{repo_name}.git'
+    job.command(f'git clone --recurse-submodules {quote(repo_path)}')
+    job.command(f'cd {quote(repo_name)}')
+    # Except for the "test" access level, we check whether commits have been
+    # reviewed by verifying that the given commit is in the main branch.
+    if not is_test:
+        job.command('git checkout main')
+        job.command(
+            f'git merge-base --is-ancestor {quote(commit)} HEAD || '
+            '{ echo "error: commit not merged into main branch"; exit 1; }',
+        )
+    job.command(f'git checkout {quote(commit)}')
+    job.command('git submodule update')
+
+    return job
 
 
 # commands that declare functions that pull files on an instance,
@@ -648,12 +517,12 @@ EOT\
 
 
 def command(
-    cmd: Union[str, List[str]],
+    cmd: str | list[str],
     monitor_space: bool = False,
     setup_gcp: bool = False,
     define_retry_function: bool = False,
     rm_leading_space: bool = True,
-    python_script_path: Optional[Path] = None,
+    python_script_path: Path | None = None,
 ) -> str:
     """
     Wraps a command for Batch.
@@ -718,12 +587,12 @@ def command(
 
 
 def query_command(
-    module,
+    module: Any,
     func_name: str,
-    *func_args,
+    *func_args: Any,
     setup_gcp: bool = False,
     setup_hail: bool = True,
-    packages: Optional[List[str]] = None,
+    packages: list[str] | None = None,
 ) -> str:
     """
     Construct a command to run a python function inside a Hail Batch job.
@@ -769,7 +638,8 @@ def start_query_context(
     the hail/query_backend TOML config value.
     """
     query_backend = query_backend or get_config().get('hail', {}).get(
-        'query_backend', 'spark'
+        'query_backend',
+        'spark',
     )
     if query_backend == 'spark':
         hl.init(default_reference=genome_build())
@@ -796,12 +666,27 @@ def start_query_context(
                 remote_tmpdir=f'gs://cpg-{dataset}-hail/batch-tmp',
                 token=os.environ.get('HAIL_TOKEN'),
                 default_reference='GRCh38',
-            )
+            ),
         )
 
 
-def cpg_namespace(access_level) -> str:
-    """
-    Get storage namespace from the access level.
-    """
-    return 'test' if access_level == 'test' else 'main'
+def run_batch_job_and_print_url(batch: Batch, wait: bool, environment: str):
+    """Call batch.run(), return the URL, and wait for job to  finish if wait=True"""
+    if not environment == 'gcp':
+        raise ValueError(
+            f'Unsupported Hail Batch deploy config environment: {environment}',
+        )
+    bc_batch = batch.run(wait=False)
+
+    if not bc_batch:
+        return None
+
+    deploy_config = get_deploy_config()
+    url = deploy_config.url('batch', f'/batches/{bc_batch.id}')
+
+    if wait:
+        status = bc_batch.wait()
+        if status['state'] != 'success':
+            raise Exception(f'{url} failed')
+
+    return url

@@ -2,12 +2,15 @@
 
 from setuptools import find_packages, setup
 
+with open('README.md') as f:
+    long_description = f.read()
+
 setup(
     name='cpg-utils',
     # This tag is automatically updated by bumpversion
     version='4.18.2',
     description='Library of convenience functions specific to the CPG',
-    long_description=open('README.md').read(),
+    long_description=long_description,
     long_description_content_type='text/markdown',
     url='https://github.com/populationgenomics/cpg-utils',
     license='MIT',

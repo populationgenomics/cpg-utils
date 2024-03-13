@@ -2,13 +2,12 @@
 Helper functions for working with Git repositories
 """
 
-
-from typing import List
-
 import os
 import re
 import subprocess
-from shlex import quote
+from typing import List
+
+from cpg_utils.constants import DEFAULT_GITHUB_ORGANISATION
 
 
 def get_output_of_command(command: List[str], description: str) -> str:
@@ -27,18 +26,18 @@ def get_output_of_command(command: List[str], description: str) -> str:
 
     """
     try:
-        return subprocess.check_output(command).decode().strip()
+        return subprocess.check_output(command).decode().strip()  # noqa: S603
     # Handle and rethrow KeyboardInterrupt error to stop global exception catch
-    # pylint: disable=try-except-raise
+
     except KeyboardInterrupt:
         raise
     except subprocess.CalledProcessError as e:
-        raise RuntimeError(
-            f"Couldn't call {description} by calling '{' '.join(command)}', {e}"
+        raise OSError(
+            f"Couldn't call {description} by calling '{' '.join(command)}', {e}",
         ) from e
-    except Exception as e:
-        raise RuntimeError(
-            f"Couldn't process {description} through calling '{' '.join(command)}', {e}"
+    except Exception as e:  # noqa: BLE001
+        raise type(e)(
+            f"Couldn't process {description} through calling '{' '.join(command)}', {e}",
         ) from e
 
 
@@ -93,8 +92,7 @@ def get_git_repo_root() -> str:
 
     """
     command = ['git', 'rev-parse', '--show-toplevel']
-    repo_root = get_output_of_command(command, 'get Git repo directory')
-    return repo_root
+    return get_output_of_command(command, 'get Git repo directory')
 
 
 def get_git_commit_ref_of_current_repository() -> str:
@@ -107,6 +105,19 @@ def get_git_commit_ref_of_current_repository() -> str:
     """
     command = ['git', 'rev-parse', 'HEAD']
     return get_output_of_command(command, 'get latest Git commit')
+
+
+def get_git_branch_name() -> str | None:
+    """Returns the current branch name."""
+    command = ['git', 'rev-parse', '--abbrev-ref', 'HEAD']
+    try:
+        value = subprocess.check_output(command).decode().strip()  # noqa: S603
+        if value:
+            return value
+    except Exception:  # noqa: BLE001
+        return None
+
+    return None
 
 
 def get_repo_name_from_current_directory() -> str:
@@ -134,11 +145,12 @@ def get_organisation_name_from_remote(remote_name: str) -> str:
     """
     Takes the GitHub repo path and obtains the source organisation
     based on its remote URL e.g.:
-    >>> get_repo_name_from_remote(\
+    >>> get_organisation_name_from_remote(\
         'git@github.com:populationgenomics/cpg-utils.git'\
     )
     'populationgenomics'
-    >>> get_repo_name_from_remote(\
+
+    >>> get_organisation_name_from_remote(\
         'https://github.com/populationgenomics/cpg-utils.git'\
     )
     'populationgenomics'
@@ -156,12 +168,15 @@ def get_organisation_name_from_remote(remote_name: str) -> str:
 
     try:
         if remote_name.startswith('http'):
-            match = re.match(r'http[s]?://[A-z0-9.]+?/(?P<org>.+?)/.+$', remote_name)
+            match = re.match(
+                r'http[s]?:\/\/[A-z0-9.]+?\/(?P<org>.+?)\/.+$',
+                remote_name,
+            )
             if match:
                 organisation = match.group('org')
 
         elif remote_name.startswith('git@'):
-            match = re.match(r'git@[A-z0-9.]+?:(?P<org>.+?)/.+$', remote_name)
+            match = re.match(r'git@[A-z0-9.]+?:(?P<org>.+?)\/.+$', remote_name)
             if match:
                 organisation = match.group('org')
     except AttributeError as ae:
@@ -230,59 +245,66 @@ def check_if_commit_is_on_remote(commit: str) -> bool:
     """
     command = ['git', 'branch', '-r', '--contains', commit]
     try:
-        ret = subprocess.check_output(command)
+        ret = subprocess.check_output(command)  # noqa: S603
         return bool(ret)
     except subprocess.CalledProcessError:
         return False
 
 
-def prepare_git_job(
-    job,
-    organisation: str,
-    repo_name: str,
-    commit: str,
-    is_test: bool = True,
-    print_all_statements: bool = True,
-):
+def guess_script_name_from_script_argument(script: List[str]) -> str | None:
     """
-    Takes a hail batch job, and:
-        * Clones the repository
-            * if access_level != "test": check the desired commit is on 'main'
-        * Check out the specific commit
+    Guess the script name from the first argument of the script.
+    If the first argument is an executable, try the second param
 
-    Parameters
-    ----------
-    job                     - A hail BashJob
-    organisation            - The GitHub individual or organisation
-    repo_name               - The repository name to check out
-    commit                  - The commit hash to check out
-    is_test                 - CPG specific: only Main commits can run on Main data
-    print_all_statements    - logging toggle
+    >>> guess_script_name_from_script_argument(['python', 'main.py'])
+    'main.py'
 
-    Returns
-    -------
-    No return required
+    >>> guess_script_name_from_script_argument(['./main.sh'])
+    'main.sh'
+
+    >>> guess_script_name_from_script_argument(['main.sh'])
+    'main.sh'
+
+    >>> guess_script_name_from_script_argument(['./test/path/main.sh', 'arg1', 'arg2'])
+    'test/path/main.sh'
+
+    >>> guess_script_name_from_script_argument(['gcloud', 'cp' 'test']) is None
+    True
+
     """
+    executables = {'python', 'python3', 'bash', 'sh', 'rscript'}
+    _script = script[0]
+    if _script.lower() in executables:
+        _script = script[1]
 
-    # Use "set -x" to print the commands for easier debugging.
-    if print_all_statements:
-        job.command('set -x')
+    if _script.startswith('./'):
+        return _script[2:]
 
-    # Note: for private GitHub repos we'd need to use a token to clone.
-    # Any job commands here are evaluated in a bash shell, so user arguments should
-    # be escaped to avoid command injection.
-    job.command(
-        f'git clone --recurse-submodules https://github.com/{quote(organisation)}/{quote(repo_name)}.git'
-    )
-    job.command(f'cd {quote(repo_name)}')
+    # a very bad check if it follows format "file.ext"
+    if '.' in _script:
+        return _script
 
-    # Except for the "test" access level, we check whether commits have been
-    # reviewed by verifying that the given commit is in the main branch.
-    if not is_test:
-        job.command('git checkout main')
-        job.command(
-            f'git merge-base --is-ancestor {quote(commit)} HEAD || '
-            '{ echo "error: commit not merged into main branch"; exit 1; }'
-        )
-    job.command(f'git checkout {quote(commit)}')
-    job.command(f'git submodule update')
+    return None
+
+
+def guess_script_github_url_from(
+    *,
+    repo: str | None,
+    commit: str | None,
+    cwd: str | None,
+    script: List[str],
+    organisation: str = DEFAULT_GITHUB_ORGANISATION,
+) -> str | None:
+    """
+    Guess the GitHub URL of the script from the given arguments.
+    """
+    guessed_script_name = guess_script_name_from_script_argument(script)
+    if not guessed_script_name:
+        return None
+
+    url = f'https://github.com/{organisation}/{repo}/tree/{commit}'
+
+    if cwd == '.' or cwd is None:
+        return f'{url}/{guessed_script_name}'
+
+    return os.path.join(url, cwd, guessed_script_name)
