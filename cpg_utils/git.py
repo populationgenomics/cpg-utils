@@ -209,12 +209,15 @@ def get_repo_name_from_remote(remote_name: str) -> str:
     repo = None
     try:
         if remote_name.startswith('http'):
-            match = re.match(r'http[s]?://[A-z0-9.]+?/.+?/(?P<repo>.+)$', remote_name)
+            match = re.match(
+                r'http[s]?:\/\/[A-Za-z0-9_.-]+?\/.+?\/(?P<repo>.+)$',
+                remote_name,
+            )
             if match:
                 repo = match.group('repo')
 
         elif remote_name.startswith('git@'):
-            match = re.match(r'git@[A-z0-9.]+?:.+?/(?P<repo>.+)$', remote_name)
+            match = re.match(r'git@[A-Za-z0-9_.-]+?:.+?/(?P<repo>.+)$', remote_name)
             if match:
                 repo = match.group('repo')
     except AttributeError as ae:
