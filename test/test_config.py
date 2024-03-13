@@ -72,12 +72,12 @@ class TestConfig(TestCase):
         """
         conf = get_config()
 
-        self.assertDictEqual(conf, test_config)
+        self.assertDictEqual(dict(conf), test_config)
 
     def test_set_path(self):
         set_config_paths([str(test_config_path)])
         conf = get_config()
-        self.assertDictEqual(conf, test_config)
+        self.assertDictEqual(dict(conf), test_config)
 
     @patch('cpg_utils.config.get_config')
     def test_dataset_path(self, mock_get_config: MagicMock):
