@@ -130,7 +130,7 @@ class Batch(hb.Batch):
         ):
             self._copy_configs_to_remote()
 
-    def _copy_configs_to_remote(self):
+    def _copy_configs_to_remote(self) -> None:
         """
         Combine all config files into a single entry
         Write that entry to a cloud path
