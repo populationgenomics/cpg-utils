@@ -169,14 +169,14 @@ def get_organisation_name_from_remote(remote_name: str) -> str:
     try:
         if remote_name.startswith('http'):
             match = re.match(
-                r'http[s]?:\/\/[A-z0-9.]+?\/(?P<org>.+?)\/.+$',
+                r'http[s]?:\/\/[A-Za-z0-9._-]+?\/(?P<org>.+?)\/.+$',
                 remote_name,
             )
             if match:
                 organisation = match.group('org')
 
         elif remote_name.startswith('git@'):
-            match = re.match(r'git@[A-z0-9.]+?:(?P<org>.+?)\/.+$', remote_name)
+            match = re.match(r'git@[A-Aa-z0-9.+-]+?:(?P<org>.+?)\/.+$', remote_name)
             if match:
                 organisation = match.group('org')
     except AttributeError as ae:
