@@ -6,8 +6,11 @@ import logging
 import os
 import tempfile
 import textwrap
+import uuid
 from shlex import quote
 from typing import Any, Literal
+
+import toml
 
 import hail as hl
 import hailtop.batch as hb
@@ -21,6 +24,7 @@ from cpg_utils.config import (
     genome_build,
     get_config,
     reference_path,
+    set_config_paths,
     try_get_ar_guid,
 )
 from cpg_utils.constants import DEFAULT_GITHUB_ORGANISATION
@@ -120,6 +124,27 @@ class Batch(hb.Batch):
         self.job_by_tool: dict = {}
         self.total_job_num = 0
         self.pool_label = pool_label
+        if not get_config()['hail'].get('dry_run') and not isinstance(
+            self._backend,
+            hb.LocalBackend,
+        ):
+            self._copy_configs_to_remote()
+
+    def _copy_configs_to_remote(self):
+        """
+        Combine all config files into a single entry
+        Write that entry to a cloud path
+        Set that cloud path as the config path
+
+        This is crucial in production-pipelines as we combine remote
+        and local files in the driver image, but we can only pass
+        cloudpaths to the worker job containers
+        """
+        remote_dir = to_path(self._backend.remote_tmpdir) / 'config'
+        config_path = remote_dir / (str(uuid.uuid4()) + '.toml')
+        with config_path.open('w') as f:
+            toml.dump(dict(get_config()), f)
+        set_config_paths([str(config_path)])
 
     def _process_job_attributes(
         self,
@@ -593,6 +618,7 @@ def query_command(
     setup_gcp: bool = False,
     setup_hail: bool = True,
     packages: list[str] | None = None,
+    init_batch_args: dict[str, str | int] | None = None,
 ) -> str:
     """
     Construct a command to run a python function inside a Hail Batch job.
@@ -601,10 +627,21 @@ def query_command(
     Run a Python Hail Query function inside a Hail Batch job.
     Constructs a command string to use with job.command().
     If hail_billing_project is provided, Hail Query will be initialised.
+
+    init_batch_args can be used to pass additional arguments to init_batch.
+    this is a dict of args, which will be placed into the batch initiation command
+    e.g. {'worker_memory': 'highmem'} -> 'init_batch(worker_memory="highmem")'
     """
-    init_hail_code = """
+
+    # translate any input arguments into an embeddable String
+    if init_batch_args:
+        batch_overrides = ', '.join(f'{k}={v!r}' for k, v in init_batch_args.items())
+    else:
+        batch_overrides = ''
+
+    init_hail_code = f"""
 from cpg_utils.hail_batch import init_batch
-init_batch()
+init_batch({batch_overrides})
 """
 
     python_code = f"""
