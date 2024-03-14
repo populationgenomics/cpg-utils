@@ -543,7 +543,7 @@ function retry_gs_cp {
 MONITOR_SPACE_CMD = 'df -h; du -sh /io; du -sh /io/batch'
 
 ADD_SCRIPT_CMD = """\
-cat <<EOT >> {script_name}
+cat <<'EOT' >> {script_name}
 {script_contents}
 EOT\
 """
@@ -665,7 +665,7 @@ set -ex
 
 {('pip3 install ' + ' '.join(packages)) if packages else ''}
 
-cat << EOT >> script.py
+cat <<'EOT' >> script.py
 {python_code}
 EOT
 python3 script.py
