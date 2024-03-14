@@ -254,6 +254,13 @@ def config_retrieve(
     return d
 
 
+def get_driver_image() -> str:
+    """
+    Get the driver image from the config.
+    """
+    return config_retrieve(['workflow', 'driver_image'])
+
+
 def get_access_level() -> str:
     """
     Get access level from the config.

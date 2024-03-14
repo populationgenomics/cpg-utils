@@ -2,7 +2,7 @@ import os
 
 from cloudpathlib import AnyPath
 
-from cpg_utils.config import get_config
+from cpg_utils.config import config_retrieve
 
 
 def get_cached_group_members(
@@ -14,10 +14,12 @@ def get_cached_group_members(
     """
     group_name = group.split('@')[0]
 
-    members_cache_location = (
-        members_cache_location
-        or get_config()['infrastructure']['members_cache_location']
+    members_cache_location = members_cache_location or config_retrieve(
+        ['infrastructure', 'members_cache_location'],
     )
+
+    if not members_cache_location:
+        raise ValueError('members_cache_location is not set')
 
     pathname = os.path.join(members_cache_location, group_name + '-members.txt')
 

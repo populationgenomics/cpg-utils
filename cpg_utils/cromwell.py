@@ -14,8 +14,15 @@ from typing import Any
 from hailtop.batch import Batch, Resource
 from hailtop.batch.job import BashJob, Job
 
-from cpg_utils.cloud import get_project_id_from_service_account_email
-from cpg_utils.config import AR_GUID_NAME, get_config, get_gcp_project, try_get_ar_guid
+from cpg_utils.cloud import read_secret
+from cpg_utils.config import (
+    AR_GUID_NAME,
+    dataset_path,
+    get_access_level,
+    get_driver_image,
+    get_gcp_project,
+    try_get_ar_guid,
+)
 from cpg_utils.constants import (
     CROMWELL_AUDIENCE,
     CROMWELL_URL,
@@ -156,10 +163,9 @@ def run_cromwell_workflow(  # noqa: C901
     that contains the workflow ID
     """
 
+    # embed this here so people can't call it
     def get_cromwell_key(dataset: str, access_level: str) -> str:
         """Get Cromwell key from secrets"""
-
-        from cpg_utils.cloud import read_secret
 
         secret_name = f'{dataset}-cromwell-{access_level}-key'
         value = read_secret(get_gcp_project(), secret_name)
@@ -197,22 +203,21 @@ def run_cromwell_workflow(  # noqa: C901
     service_account_email = service_account_dict.get('client_email')
     _project = project
     if _project is None:
-        if os.getenv('CPG_CONFIG_PATH'):
-            _project = get_gcp_project()
-        else:
-            _project = get_project_id_from_service_account_email(service_account_email)
+        _project = get_gcp_project()
 
     if not service_account_email:
         raise ValueError("The service_account didn't contain an entry for client_email")
 
     # test/main should be implicit from the config
-    storage_config = get_config()['storage'][dataset]
-    intermediate_dir = os.path.join(storage_config['tmp'], 'cromwell')
-    workflow_output_dir = os.path.join(storage_config['default'], output_prefix)
-    logging_output_dir = os.path.join(
-        storage_config['analysis'],
-        'cromwell_logs',
-        output_prefix,
+    intermediate_dir = os.path.join(
+        dataset_path('', dataset=dataset, category='tmp'),
+        'cromwell',
+    )
+    workflow_output_dir = dataset_path(output_prefix, dataset=dataset)
+    logging_output_dir = dataset_path(
+        f'cromwell_logs/{output_prefix}',
+        dataset=dataset,
+        category='analysis',
     )
 
     workflow_options = {
@@ -308,10 +313,9 @@ def run_cromwell_workflow_from_repo_and_get_outputs(
     Optionally override min/max poll interval for the watch job.
     This alters how often the Watch job pings Cromwell for Status updates
     """
-    config = get_config()
 
-    _driver_image = driver_image or config['workflow']['driver_image']
-    access_level = config['workflow']['access_level']
+    _driver_image = driver_image or get_driver_image()
+    access_level = get_access_level()
 
     submit_job = b.new_job(f'{job_prefix}_submit')
     submit_job.image(_driver_image)
@@ -536,7 +540,7 @@ def watch_workflow_and_get_output(
     :param max_sequential_exception_count: Maximum number of exceptions before giving up
     """
 
-    driver_image = driver_image or get_config()['workflow']['driver_image']
+    driver_image = driver_image or get_driver_image()
 
     watch_job = b.new_job(job_prefix + '_watch')
     watch_job.cpu(0.25)

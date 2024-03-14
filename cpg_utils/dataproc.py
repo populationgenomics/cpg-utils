@@ -12,8 +12,8 @@ from cpg_utils.config import (
     AR_GUID_NAME,
     dataset_path,
     get_access_level,
-    get_config,
     get_gcloud_set_project,
+    get_gcp_project,
     try_get_ar_guid,
 )
 from cpg_utils.constants import GCLOUD_ACTIVATE_AUTH
@@ -263,10 +263,9 @@ def _add_start_job(  # noqa: C901
 
     labels_formatted = ','.join(f'{key}={value}' for key, value in labels.items())
 
-    _config = get_config()
     access_level = get_access_level()
+    gcp_project = get_gcp_project()
 
-    gcp_project = _config['workflow']['dataset_gcp_project']
     gcloud_config_set_project = get_gcloud_set_project()
     dataproc_sa = f'dataproc-{access_level}@{gcp_project}.iam.gserviceaccount.com'
 

@@ -20,6 +20,7 @@ from hailtop.config import get_deploy_config
 from cpg_utils import Path, to_path
 from cpg_utils.config import (
     AR_GUID_NAME,
+    config_retrieve,
     dataset_path,
     genome_build,
     get_config,
@@ -70,7 +71,8 @@ def get_batch(
     global _batch  # pylint: disable=global-statement
     backend: hb.Backend
     if _batch is None:
-        if get_config()['hail'].get('backend', 'batch') == 'local':
+        _backend = config_retrieve(['hail', 'backend'], default='batch')
+        if _backend == 'local':
             logging.info('Initialising Hail Batch with local backend')
             backend = hb.LocalBackend(
                 tmp_dir=tempfile.mkdtemp('batch-tmp'),
@@ -78,19 +80,22 @@ def get_batch(
         else:
             logging.info('Initialising Hail Batch with service backend')
             backend = hb.ServiceBackend(
-                billing_project=get_config()['hail']['billing_project'],
+                billing_project=config_retrieve(['hail', 'billing_project']),
                 remote_tmpdir=dataset_path('batch-tmp', category='tmp'),
                 token=os.environ.get('HAIL_TOKEN'),
             )
         _batch = Batch(
-            name=name or get_config()['workflow'].get('name'),
+            name=name or config_retrieve(['workflow', 'name'], default=None),
             backend=backend,
-            pool_label=get_config()['hail'].get('pool_label'),
-            cancel_after_n_failures=get_config()['hail'].get('cancel_after_n_failures'),
-            default_timeout=get_config()['hail'].get('default_timeout'),
-            default_memory=get_config()['hail'].get('default_memory'),
+            pool_label=config_retrieve(['hail', 'pool_label'], default=None),
+            cancel_after_n_failures=config_retrieve(
+                ['hail', 'cancel_after_n_failures'],
+                default=None,
+            ),
+            default_timeout=config_retrieve(['hail', 'default_timeout'], default=None),
+            default_memory=config_retrieve(['hail', 'default_memory'], default=None),
             default_python_image=default_python_image
-            or get_config()['workflow']['driver_image'],
+            or config_retrieve(['workflow', 'driver_image']),
             attributes=attributes,
             **kwargs,
         )
@@ -124,10 +129,8 @@ class Batch(hb.Batch):
         self.job_by_tool: dict = {}
         self.total_job_num = 0
         self.pool_label = pool_label
-        if not get_config()['hail'].get('dry_run') and not isinstance(
-            self._backend,
-            hb.LocalBackend,
-        ):
+        dry_run = config_retrieve(['hail', 'dry_run'], default=False)
+        if not dry_run and not isinstance(self._backend, hb.LocalBackend):
             self._copy_configs_to_remote()
 
     def _copy_configs_to_remote(self) -> None:
@@ -140,6 +143,9 @@ class Batch(hb.Batch):
         and local files in the driver image, but we can only pass
         cloudpaths to the worker job containers
         """
+        if not isinstance(self._backend, hb.backend.ServiceBackend):
+            return
+
         remote_dir = to_path(self._backend.remote_tmpdir) / 'config'
         config_path = remote_dir / (str(uuid.uuid4()) + '.toml')
         with config_path.open('w') as f:
@@ -266,10 +272,10 @@ class Batch(hb.Batch):
             default_label='<tool is not defined>',
         )
 
-        kwargs.setdefault('dry_run', get_config()['hail'].get('dry_run'))
+        kwargs.setdefault('dry_run', config_retrieve(['hail', 'dry_run'], default=None))
         kwargs.setdefault(
             'delete_scratch_on_exit',
-            get_config()['hail'].get('delete_scratch_on_exit'),
+            config_retrieve(['hail', 'delete_scratch_on_exit'], default=None),
         )
         # Local backend does not support "wait"
         if isinstance(self._backend, hb.LocalBackend) and 'wait' in kwargs:
@@ -311,12 +317,12 @@ def init_batch(**kwargs: Any):
     # noinspection PyProtectedMember
     if Env._hc:  # pylint: disable=W0212
         return  # already initialised
-    dataset = get_config()['workflow']['dataset']
+    dataset = config_retrieve(['workflow', 'dataset'])
     kwargs.setdefault('token', os.environ.get('HAIL_TOKEN'))
     asyncio.get_event_loop().run_until_complete(
         hl.init_batch(
             default_reference=genome_build(),
-            billing_project=get_config()['hail']['billing_project'],
+            billing_project=config_retrieve(['hail', 'billing_project']),
             remote_tmpdir=remote_tmpdir(f'cpg-{dataset}-hail'),
             **kwargs,
         ),
@@ -352,7 +358,7 @@ def remote_tmpdir(hail_bucket: str | None = None) -> str:
 
     If `hail_bucket` is not specified explicitly, requires the `hail/bucket` config variable to be set.
     """
-    bucket = hail_bucket or get_config().get('hail', {}).get('bucket')
+    bucket = hail_bucket or config_retrieve(['hail', 'bucket'], default=None)
     assert bucket, 'hail_bucket was not set by argument or configuration'
     return f'gs://{bucket}/batch-tmp'
 
@@ -363,9 +369,11 @@ def fasta_res_group(b: hb.Batch, indices: list[str] | None = None):
     @param b: Hail Batch object.
     @param indices: list of extensions to add to the base fasta file path.
     """
-    ref_fasta = get_config()['workflow'].get('ref_fasta') or reference_path(
-        'broad/ref_fasta',
-    )
+
+    ref_fasta = config_retrieve(['workflow', 'ref_fasta'], default=None)
+    if not ref_fasta:
+        ref_fasta = reference_path('broad/ref_fasta')
+
     ref_fasta = to_path(ref_fasta)
     d = {
         'base': str(ref_fasta),
@@ -452,16 +460,16 @@ def prepare_git_job(
 # get secret names from config if they exist
 secret_name=$(python3 -c '
 try:
-    from cpg_utils.config import get_config
-    print(get_config(print_config=False).get("infrastructure", {}).get("git_credentials_secret_name", ""))
+    from cpg_utils.config import config_retrieve
+    print(config_retrieve(["infrastructure", "git_credentials_secret_name"], default=""))
 except:
     pass
 ' || echo '')
 
 secret_project=$(python3 -c '
 try:
-    from cpg_utils.config import get_config
-    print(get_config(print_config=False).get("infrastructure", {}).get("git_credentials_secret_project", ""))
+    from cpg_utils.config import config_retrieve
+    print(config_retrieve(["infrastructure", "git_credentials_secret_project"], default=""))
 except:
     pass
 ' || echo '')
@@ -674,10 +682,11 @@ def start_query_context(
     Start Hail Query context, depending on the backend class specified in
     the hail/query_backend TOML config value.
     """
-    query_backend = query_backend or get_config().get('hail', {}).get(
-        'query_backend',
-        'spark',
+    query_backend = query_backend or config_retrieve(
+        ['hail', 'query_backend'],
+        default='spark',
     )
+
     if query_backend == 'spark':
         hl.init(default_reference=genome_build())
     elif query_backend == 'spark_local':
@@ -694,8 +703,10 @@ def start_query_context(
         assert query_backend == 'batch'
         if hl.utils.java.Env._hc:  # pylint: disable=W0212
             return  # already initialised
-        dataset = dataset or get_config()['workflow']['dataset']
-        billing_project = billing_project or get_config()['hail']['billing_project']
+        dataset = dataset or config_retrieve(['workflow', 'dataset'])
+        billing_project = billing_project or config_retrieve(
+            ['hail', 'billing_project'],
+        )
 
         asyncio.get_event_loop().run_until_complete(
             hl.init_batch(

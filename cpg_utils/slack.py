@@ -16,7 +16,7 @@ except ImportError:
     slack_sdk = None
 
 from cpg_utils.cloud import read_secret
-from cpg_utils.config import get_config
+from cpg_utils.config import config_retrieve
 
 
 def _get_slack_sdk():  # noqa: ANN202
@@ -28,7 +28,7 @@ def _get_slack_sdk():  # noqa: ANN202
 
 def _get_channel() -> str:
     """Returns the Slack channel from the config."""
-    slack_channel = get_config().get('slack', {}).get('channel')
+    slack_channel = config_retrieve(['slack', 'channel'], default=None)
     if not slack_channel:
         raise ValueError('`slack.channel` must be set in config')
     return slack_channel
@@ -36,8 +36,9 @@ def _get_channel() -> str:
 
 def _get_token() -> str:
     """Returns the Slack token from the config."""
-    token_secret_id = get_config()['slack'].get('token_secret_id')
-    token_project_id = get_config()['slack'].get('token_project_id')
+    token_secret_id = config_retrieve(['slack', 'token_secret_id'], default=None)
+    token_project_id = config_retrieve(['slack', 'token_project_id'], default=None)
+
     if not token_secret_id or not token_project_id:
         raise ValueError(
             '`slack.token_secret_id` and `slack.token_project_id` '
