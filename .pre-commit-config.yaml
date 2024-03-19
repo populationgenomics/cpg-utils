@@ -37,7 +37,7 @@ repos:
 
     # Static type analysis (as much as it's possible in python using type hints)
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: "v1.0.0"
+    rev: "v1.8.0"
     hooks:
       - id: mypy
         additional_dependencies:

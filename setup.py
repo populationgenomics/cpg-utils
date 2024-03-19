@@ -18,6 +18,9 @@ setup(
     url='https://github.com/populationgenomics/cpg-utils',
     license='MIT',
     packages=find_packages(),
+    package_data={
+        'cpg_utils': ['py.typed'],
+    },
     install_requires=requirements,
     keywords='bioinformatics',
     classifiers=[

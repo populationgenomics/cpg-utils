@@ -593,12 +593,12 @@ def watch_workflow_and_get_output(
                 )
         else:
             # is array
-            out_file_map[oname] = []
+            outs: list[Resource] = []
             for idx in range(array_length):
                 j = b.new_job(f'{job_prefix}_collect_{output_name}[{idx}]')
                 if output.resource_group:
                     # is array output group
-                    out_file_map[oname].append(
+                    outs.append(
                         _copy_resource_group_into_batch(
                             j=j,
                             rdict=rdict,
@@ -607,7 +607,7 @@ def watch_workflow_and_get_output(
                         ),
                     )
                 else:
-                    out_file_map[oname].append(
+                    outs.append(
                         _copy_basic_file_into_batch(
                             j=j,
                             rdict=rdict,
@@ -617,6 +617,8 @@ def watch_workflow_and_get_output(
                             driver_image=driver_image,
                         ),
                     )
+
+            out_file_map[oname] = outs
 
     return out_file_map
 
