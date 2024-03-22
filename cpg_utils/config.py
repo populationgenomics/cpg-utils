@@ -46,7 +46,8 @@ def _validate_configs(config_paths: list[str]) -> None:
 
 
 def get_config_paths() -> list[str]:
-    """Returns the config paths that are used by subsequent calls to get_config.
+    """
+    Returns the config paths that are used by subsequent calls to get_config.
 
     If this isn't called, the value of the CPG_CONFIG_PATH environment variable is used
     instead.
@@ -67,7 +68,8 @@ def get_config_paths() -> list[str]:
 
 
 def set_config_paths(config_paths: list[str]) -> None:
-    """Sets the config paths that are used by subsequent calls to get_config.
+    """
+    Sets the config paths that are used by subsequent calls to get_config.
 
     If this isn't called, the value of the CPG_CONFIG_PATH environment variable is used
     instead.
@@ -111,7 +113,9 @@ def append_config_paths(config_paths: list[str]) -> None:
 
 
 def get_config(print_config: bool = False) -> frozendict:
-    """Returns the configuration dictionary.
+    """
+    Returns the configuration dictionary.
+    Consider using `config_retrieve(keys)` instead.
 
     Call `set_config_paths` beforehand to override the default path.
     See `read_configs` for the path value semantics.
@@ -139,32 +143,13 @@ def get_config(print_config: bool = False) -> frozendict:
 
 
 def read_configs(config_paths: list[str]) -> frozendict:
-    """Creates a merged configuration from the given config paths.
+    """
+    Creates a merged configuration from the given config paths.
+    This does NOT affect any state, re get_config.
 
     For a list of configurations (e.g. ['base.toml', 'override.toml']), the
     configurations get applied from left to right. I.e. the first config gets updated by
     values of the second config, etc.
-
-    Examples
-    --------
-    Here's a typical configuration file in TOML format:
-
-    [hail]
-    billing_project = "tob-wgs"
-    bucket = "cpg-tob-wgs-hail"
-
-    [workflow]
-    access_level = "test"
-    dataset = "tob-wgs"
-    dataset_gcp_project = "tob-wgs"
-    driver_image = "australia-southeast1-docker.pkg.dev/analysis-runner/images/driver:36c6d4548ef347f14fd34a5b58908057effcde82-hail-ad1fc0e2a30f67855aee84ae9adabc3f3135bd47"
-    image_registry_prefix = "australia-southeast1-docker.pkg.dev/cpg-common/images"
-    reference_prefix = "gs://cpg-common-main/references"
-    output_prefix = "plasma/chr22/v6"
-
-    >> from cpg_utils.config import get_config
-    >> get_config()['workflow']['dataset']
-    'tob-wgs'
 
     Returns
     -------
@@ -181,14 +166,22 @@ def read_configs(config_paths: list[str]) -> frozendict:
     return frozendict(config)
 
 
-def update_dict(d1: dict, d2: dict) -> None:
-    """Updates the d1 dict with the values from the d2 dict recursively in-place."""
+def update_dict(d1: dict, d2: dict) -> dict:
+    """
+    Updates the d1 dict with the values from the d2 dict recursively in-place.
+    Returns the pointer to d1 (the same as )
+
+    >>> update_dict({'a': 1, 'b': {'c': 1}}, {'b': {'c': 2, 'd': 2}})
+    {'a': 1, 'b': {'c': 2, 'd': 2}}
+    """
     for k, v2 in d2.items():
         v1 = d1.get(k)
-        if isinstance(v1, dict) and isinstance(v2, dict):
+        if isinstance(v1, dict) and isinstance(v2, dict) d:
             update_dict(v1, v2)
         else:
             d1[k] = v2
+
+    return d1
 
 
 # endregion GET_SET_CONFIG
