@@ -41,7 +41,14 @@ repos:
     hooks:
       - id: mypy
         additional_dependencies:
-          [types-frozendict, types-PyYAML==6.0.4, types-requests, types-tabulate, types-toml]
+          [
+            types-Deprecated,
+            types-frozendict,
+            types-PyYAML==6.0.4,
+            types-requests,
+            types-tabulate,
+            types-toml,
+          ]
 
   - repo: https://github.com/koalaman/shellcheck-precommit
     rev: v0.9.0

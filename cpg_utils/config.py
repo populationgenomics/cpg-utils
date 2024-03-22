@@ -176,7 +176,7 @@ def update_dict(d1: dict, d2: dict) -> dict:
     """
     for k, v2 in d2.items():
         v1 = d1.get(k)
-        if isinstance(v1, dict) and isinstance(v2, dict) d:
+        if isinstance(v1, dict) and isinstance(v2, dict):
             update_dict(v1, v2)
         else:
             d1[k] = v2

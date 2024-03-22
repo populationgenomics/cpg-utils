@@ -743,29 +743,31 @@ def run_batch_job_and_print_url(batch: Batch, wait: bool, environment: str):
 
 # these methods were removed from this location, put in config
 
+
 @deprecated('Use cpg_utils.config.image_path instead')
-def image_path(*args, **kwargs):  # noqa
+def image_path(*args, **kwargs):  # noqa: ANN002, ANN003
     from cpg_utils.config import image_path as _image_path
 
     return _image_path(*args, **kwargs)
 
 
 @deprecated('Use cpg_utils.config.output_path instead')
-def output_path(*args, **kwargs):  # noqa
+def output_path(*args, **kwargs):  # noqa: ANN002, ANN003
     from cpg_utils.config import output_path as _output_path
 
     return _output_path(*args, **kwargs)
 
 
 @deprecated('Use cpg_utils.config.web_url instead')
-def web_url(*args, **kwargs):  # noqa
+def web_url(*args, **kwargs):  # noqa: ANN002, ANN003
     from cpg_utils.config import web_url as _web_url
 
     return _web_url(*args, **kwargs)
 
+
 # cpg_test_dataset_path
 @deprecated('Use cpg_utils.config.dataset_path instead')
-def cpg_test_dataset_path(*args, **kwargs): # noqa
+def cpg_test_dataset_path(*args, **kwargs):  # noqa: ANN002, ANN003
     from cpg_utils.config import cpg_test_dataset_path as _cpg_test_dataset_path
 
     return _cpg_test_dataset_path(*args, **kwargs)
