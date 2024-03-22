@@ -774,8 +774,19 @@ def cpg_test_dataset_path(*args, **kwargs):  # noqa: ANN002, ANN003
 
     return _cpg_test_dataset_path(*args, **kwargs)
 
-@deprecated('Use to_path(cpg_utils.config.reference_path) instead, not the new reference_path does not return an AnyPath object')
-def reference_path(*args, **kwargs): # noqa: ANN002, ANN003
+
+@deprecated(
+    'Use to_path(cpg_utils.config.reference_path) instead, note the '
+    'config.reference_path does not return an AnyPath object',
+)
+def reference_path(*args, **kwargs):  # noqa: ANN002, ANN003
     from cpg_utils.config import reference_path as _reference_path
 
     return to_path(_reference_path(*args, **kwargs))
+
+
+@deprecated('Use cpg_utils.config.get_cpg_namespace instead')
+def cpg_namespace(*args, **kwargs):  # noqa: ANN002, ANN003
+    from cpg_utils.config import get_cpg_namespace as _cpg_namespace
+
+    return _cpg_namespace(*args, **kwargs)
