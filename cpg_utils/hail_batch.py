@@ -25,9 +25,11 @@ from cpg_utils.config import (
     dataset_path,
     genome_build,
     get_config,
-    reference_path,
     set_config_paths,
     try_get_ar_guid,
+)
+from cpg_utils.config import (
+    reference_path as ref_path,
 )
 from cpg_utils.constants import DEFAULT_GITHUB_ORGANISATION
 
@@ -373,7 +375,7 @@ def fasta_res_group(b: hb.Batch, indices: list[str] | None = None):
 
     ref_fasta = config_retrieve(['workflow', 'ref_fasta'], default=None)
     if not ref_fasta:
-        ref_fasta = reference_path('broad/ref_fasta')
+        ref_fasta = ref_path('broad/ref_fasta')
 
     ref_fasta = to_path(ref_fasta)
     d = {
@@ -771,3 +773,9 @@ def cpg_test_dataset_path(*args, **kwargs):  # noqa: ANN002, ANN003
     from cpg_utils.config import cpg_test_dataset_path as _cpg_test_dataset_path
 
     return _cpg_test_dataset_path(*args, **kwargs)
+
+@deprecated('Use to_path(cpg_utils.config.reference_path) instead, not the new reference_path does not return an AnyPath object')
+def reference_path(*args, **kwargs): # noqa: ANN002, ANN003
+    from cpg_utils.config import reference_path as _reference_path
+
+    return to_path(_reference_path(*args, **kwargs))
