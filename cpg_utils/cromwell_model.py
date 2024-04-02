@@ -125,15 +125,18 @@ class WorkflowMetadataModel:
         duration_seconds = get_seconds_duration_between_cromwell_dates(
             self.start, self.end
         )
-        duration_str = get_readable_duration(duration_seconds)
-
+        walltime_seconds = get_seconds_duration_between_cromwell_dates(
+            self.submission, self.end
+        )
         headers = [
             ('Workflow ID', self.id),
             ('Name', self.workflowName),
             ('Status', self.status),
+            ('Submitted', self.submission),
             ('Start', self.start),
             ('End', self.end),
-            ('Duration', duration_str),
+            ('Duration', get_readable_duration(duration_seconds)),
+            ('Walltime', get_readable_duration(walltime_seconds)),
         ]
 
         calls_display: list[str] = []
