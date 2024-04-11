@@ -731,7 +731,9 @@ def start_query_context(
 
 
 def run_batch_job_and_print_url(
-    batch: Batch, wait: bool, environment: str,
+    batch: Batch,
+    wait: bool,
+    environment: str,
 ) -> str | None:
     """Call batch.run(), return the URL, and wait for job to  finish if wait=True"""
     if not environment == 'gcp':
