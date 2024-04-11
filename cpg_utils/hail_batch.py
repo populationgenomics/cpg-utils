@@ -655,9 +655,15 @@ from cpg_utils.hail_batch import init_batch
 init_batch({batch_overrides})
 """
 
+    # the code will be copied verbatim
     python_code = f"""
 {'' if not setup_hail else init_hail_code}
 {inspect.getsource(module)}
+"""
+
+    # but the function call will be shell-expanded, as the arguments may
+    # contain variables requiring expansion, ${BATCH_TMPDIR} in particular
+    python_call = f"""
 {func_name}{func_args}
 """
 
@@ -668,8 +674,11 @@ set -ex
 
 {('pip3 install ' + ' '.join(packages)) if packages else ''}
 
-cat <<'EOT' >> script.py
+cat <<'EOT' > script.py
 {python_code}
+EOT
+cat <<EOT >> script.py
+{python_call}
 EOT
 python3 script.py
 """
