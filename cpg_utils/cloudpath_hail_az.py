@@ -4,7 +4,6 @@ Inspired by https://github.com/drivendataorg/cloudpathlib/issues/157
 """
 
 import re
-from typing import Optional, Union
 from urllib.parse import urlparse
 
 from cloudpathlib import AzureBlobClient, AzureBlobPath
@@ -35,9 +34,9 @@ class HailAzureBlobPath(AzureBlobPath):
 
     def __init__(
         self,
-        cloud_path: Union[str, CloudPath],
-        client: Optional[AzureBlobClient] = None,
-        token: Optional[str] = None,
+        cloud_path: str | CloudPath,
+        client: AzureBlobClient | None = None,
+        token: str | None = None,
     ):
         if isinstance(cloud_path, str):
             parsed = urlparse(cloud_path)
@@ -73,7 +72,7 @@ class HailAzureBlobPath(AzureBlobPath):
     @classmethod
     def is_valid_cloudpath(
         cls,
-        path: Union[str, CloudPath],
+        path: str | CloudPath,
         raise_on_error: bool = False,
     ) -> bool:
         """

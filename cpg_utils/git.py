@@ -5,12 +5,11 @@ Helper functions for working with Git repositories
 import os
 import re
 import subprocess
-from typing import List
 
 from cpg_utils.constants import DEFAULT_GITHUB_ORGANISATION
 
 
-def get_output_of_command(command: List[str], description: str) -> str:
+def get_output_of_command(command: list[str], description: str) -> str:
     """
     subprocess.check_output wrapper that returns string output and raises detailed
     exceptions on error.
@@ -254,7 +253,7 @@ def check_if_commit_is_on_remote(commit: str) -> bool:
         return False
 
 
-def guess_script_name_from_script_argument(script: List[str]) -> str | None:
+def guess_script_name_from_script_argument(script: list[str]) -> str | None:
     """
     Guess the script name from the first argument of the script.
     If the first argument is an executable, try the second param
@@ -295,7 +294,7 @@ def guess_script_github_url_from(
     repo: str | None,
     commit: str | None,
     cwd: str | None,
-    script: List[str],
+    script: list[str],
     organisation: str = DEFAULT_GITHUB_ORGANISATION,
 ) -> str | None:
     """

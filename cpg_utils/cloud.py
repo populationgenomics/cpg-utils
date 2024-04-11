@@ -11,6 +11,7 @@ from typing import Any
 import google.api_core.exceptions
 import google.auth.transport
 import google.oauth2
+from deprecated import deprecated
 from google.auth import (
     credentials as google_auth_credentials,
 )
@@ -387,3 +388,12 @@ def get_project_id_from_service_account_email(service_account_email: str) -> str
     """
     # quick and dirty
     return service_account_email.split('@')[-1].split('.')[0]
+
+
+@deprecated(reason='Use cpg_utils.membership.is_member_in_cached_group instead')
+def is_member_in_cached_group(*args: Any, **kwargs: Any):
+    from cpg_utils.membership import (
+        is_member_in_cached_group as _is_member_in_cached_group,
+    )
+
+    return _is_member_in_cached_group(*args, **kwargs)

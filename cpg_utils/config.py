@@ -8,14 +8,15 @@ from typing import Any
 import toml
 from frozendict import frozendict
 
-from cpg_utils import to_path
+from cpg_utils import Path, to_path
 
 AR_GUID_NAME = 'ar-guid'
 
 # We use these globals for lazy initialization, but pylint doesn't like that.
 # pylint: disable=global-statement, invalid-name
+CONFIG_TYPE = frozendict[str, Any]
 _config_paths = _val.split(',') if (_val := os.getenv('CPG_CONFIG_PATH')) else []
-_config: frozendict | None = None  # Cached config, initialized lazily.
+_config: CONFIG_TYPE | None = None  # Cached config, initialized lazily.
 
 # region GET_SET_CONFIG
 
@@ -31,7 +32,7 @@ def _validate_configs(config_paths: list[str]) -> None:
         raise ValueError(f'Some config files do not exist: {bad_paths}')
 
     # Reading each file to validate syntax:
-    exception_by_path = {}
+    exception_by_path: dict[Path, toml.decoder.TomlDecodeError] = {}
     for p in paths:
         with p.open() as f:
             try:
@@ -61,9 +62,11 @@ def get_config_paths() -> list[str]:
         env_val = os.getenv('CPG_CONFIG_PATH')
         _config_paths = env_val.split(',') if env_val else []
 
-        assert (
-            _config_paths
-        ), 'Either set the CPG_CONFIG_PATH environment variable or call set_config_paths'
+        if not _config_paths:
+            raise ConfigError(
+                'Either set the CPG_CONFIG_PATH environment variable or call set_config_paths',
+            )
+
     return _config_paths
 
 
@@ -112,7 +115,7 @@ def append_config_paths(config_paths: list[str]) -> None:
     set_config_paths(_new_config_paths)
 
 
-def get_config(print_config: bool = False) -> frozendict:
+def get_config(print_config: bool = False) -> CONFIG_TYPE:
     """
     Returns the configuration dictionary.
     Consider using `config_retrieve(keys)` instead.
@@ -139,10 +142,13 @@ def get_config(print_config: bool = False) -> frozendict:
                 f'Configuration at {",".join(_config_paths)}:\n{toml.dumps(dict(_config))}',
             )
 
+    if not _config:
+        raise ConfigError('No config found')
+
     return _config
 
 
-def read_configs(config_paths: list[str]) -> frozendict:
+def read_configs(config_paths: list[str]) -> CONFIG_TYPE:
     """
     Creates a merged configuration from the given config paths.
     This does NOT affect any state, re get_config.
@@ -200,7 +206,7 @@ class UnsuppliedDefault:
 def config_retrieve(
     key: list[str] | str,
     default: Any | None = UnsuppliedDefault,
-    config: frozendict | dict | None = None,
+    config: CONFIG_TYPE | dict[str, Any] | None = None,
 ) -> Any:
     """
     Retrieve key from config, assuming nested key specified as a list of strings.
