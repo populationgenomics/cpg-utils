@@ -4,12 +4,11 @@ Inspired by https://github.com/drivendataorg/cloudpathlib/issues/157
 """
 
 import re
-from typing import Union, Optional
 from urllib.parse import urlparse
 
 from cloudpathlib import AzureBlobClient, AzureBlobPath
 from cloudpathlib.client import register_client_class
-from cloudpathlib.cloudpath import register_path_class, CloudPath
+from cloudpathlib.cloudpath import CloudPath, register_path_class
 from cloudpathlib.exceptions import InvalidPrefixError
 
 
@@ -35,9 +34,9 @@ class HailAzureBlobPath(AzureBlobPath):
 
     def __init__(
         self,
-        cloud_path: Union[str, CloudPath],
-        client: Optional[AzureBlobClient] = None,
-        token: Optional[str] = None,
+        cloud_path: str | CloudPath,
+        client: AzureBlobClient | None = None,
+        token: str | None = None,
     ):
         if isinstance(cloud_path, str):
             parsed = urlparse(cloud_path)
@@ -72,7 +71,9 @@ class HailAzureBlobPath(AzureBlobPath):
 
     @classmethod
     def is_valid_cloudpath(
-        cls, path: Union[str, CloudPath], raise_on_error=False
+        cls,
+        path: str | CloudPath,
+        raise_on_error: bool = False,
     ) -> bool:
         """
         Also allowing HTTP.
@@ -81,13 +82,13 @@ class HailAzureBlobPath(AzureBlobPath):
             re.match(
                 fr'({HailAzureBlobPath.cloud_prefix}|https://[a-z0-9]+\.(blob|dfs)\.core\.windows\.net)',
                 str(path).lower(),
-            )
+            ),
         )
 
         if raise_on_error and not valid:
             raise InvalidPrefixError(
                 f'{path} is not a valid path since it does not start with {cls.cloud_prefix} '
-                f'or valid Azure https blob or dfs location.'
+                f'or valid Azure https blob or dfs location.',
             )
 
         return valid

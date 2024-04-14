@@ -1,6 +1,5 @@
+-r requirements.txt
 bump2version
+coverage
 hail
 pre-commit
-pylint
-pytest
-toml

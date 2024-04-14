@@ -5,29 +5,30 @@ import os
 import re
 import subprocess
 import traceback
-
-from cloudpathlib import AnyPath
+from typing import Any
 
 # pylint: disable=no-name-in-module
 import google.api_core.exceptions
 import google.auth.transport
 import google.oauth2
+from deprecated import deprecated
 from google.auth import (
     credentials as google_auth_credentials,
+)
+from google.auth import (
     environment_vars,
     exceptions,
+    jwt,
 )
-from google.auth import jwt
 from google.auth._default import (
     _AUTHORIZED_USER_TYPE,
-    _SERVICE_ACCOUNT_TYPE,
     _EXTERNAL_ACCOUNT_TYPE,
+    _SERVICE_ACCOUNT_TYPE,
 )
 from google.auth.transport import requests
 from google.cloud import secretmanager
-from google.oauth2 import credentials as oauth2_credentials, service_account
-
-from cpg_utils.config import get_config
+from google.oauth2 import credentials as oauth2_credentials
+from google.oauth2 import service_account
 
 _CLOUD_SDK_MISSING_CREDENTIALS = """\
 Your default credentials were not found. To set up Application Default Credentials, \
@@ -44,7 +45,8 @@ IMPLEMENTED_CREDENTIALS_TYPES = (
 def email_from_id_token(id_token_jwt: str) -> str:
     """Decodes the ID token (JWT) to get the email address of the caller.
 
-    See http://bit.ly/2YAIkzy for details.
+    See for details
+        https://developers.google.com/identity/sign-in/web/backend-auth?authuser=0#verify-the-integrity-of-the-id-token
 
     This function assumes that the token has been verified beforehand."""
 
@@ -107,7 +109,7 @@ def write_secret(project_id: str, secret_name: str, secret_value: str) -> None:
         request={
             'parent': secret_path,
             'payload': {'data': secret_value.encode('UTF-8')},
-        }
+        },
     )
 
     # Disable all previous versions.
@@ -122,7 +124,8 @@ def write_secret(project_id: str, secret_name: str, secret_value: str) -> None:
 
 
 def get_google_identity_token(
-    target_audience: str | None, request: google.auth.transport.Request = None
+    target_audience: str | None,
+    request: google.auth.transport.Request | None = None,
 ) -> str:
     """Returns a Google identity token for the given audience."""
     if request is None:
@@ -133,7 +136,10 @@ def get_google_identity_token(
     # https://github.com/googleapis/google-auth-library-python/issues/590
     creds = _get_default_id_token_credentials(target_audience, request)
     creds.refresh(request)
-    return creds.token
+    token = creds.token
+    if not token:
+        raise ValueError('Could not generate google identity token')
+    return token
 
 
 class IDTokenCredentialsAdapter(google_auth_credentials.Credentials):
@@ -149,7 +155,7 @@ class IDTokenCredentialsAdapter(google_auth_credentials.Credentials):
         """Returns the expired property."""
         return self.credentials.expired
 
-    def refresh(self, request):
+    def refresh(self, request: google.auth.transport.Request):
         """Refreshes the token."""
         self.credentials.refresh(request)
         self.token = self.credentials.id_token
@@ -167,18 +173,18 @@ class ExternalCredentialsAdapter(google_auth_credentials.Credentials):
         impersonate_id: str | None = None,
     ):
         super().__init__()
-        self.token = None
+        self.token: str | None = None
         self.audience = audience
         impersonate_id = impersonate_id or os.environ.get('GOOGLE_IMPERSONATE_IDENTITY')
         if not impersonate_id:
             raise exceptions.DefaultCredentialsError(
-                f'GOOGLE_IMPERSONATE_IDENTITY environment variable is not set. '
-                f'Cannot impersonate service account.'
+                'GOOGLE_IMPERSONATE_IDENTITY environment variable is not set. '
+                'Cannot impersonate service account.',
             )
 
         self.impersonate_id = impersonate_id
 
-    def refresh(self, *args, **kwargs):  # pylint: disable=unused-argument
+    def refresh(self, *args: Any, **kwargs: Any):  # noqa: ARG002
         """Call gcloud to get a new token."""
         command = [
             'gcloud',
@@ -189,12 +195,14 @@ class ExternalCredentialsAdapter(google_auth_credentials.Credentials):
         ]
         if self.audience:
             command.append(f'--audiences={self.audience}')
-
-        self.token = subprocess.check_output(command).decode('utf-8').strip()
+        self.token = (
+            subprocess.check_output(command).decode('utf-8').strip()  # noqa: S603
+        )
 
 
 def _load_credentials_from_file(
-    filename: str, target_audience: str | None
+    filename: str,
+    target_audience: str | None,
 ) -> google_auth_credentials.Credentials | None:
     """
     Loads credentials from a file.
@@ -212,7 +220,7 @@ def _load_credentials_from_file(
             info = json.load(file_obj)
         except json.JSONDecodeError as exc:
             raise exceptions.DefaultCredentialsError(
-                f'File {filename} is not a valid json file.'
+                f'File {filename} is not a valid json file.',
             ) from exc
 
     # The type key should indicate that the file is either a service account
@@ -221,33 +229,29 @@ def _load_credentials_from_file(
 
     if credential_type == _AUTHORIZED_USER_TYPE:
         current_credentials = oauth2_credentials.Credentials.from_authorized_user_info(
-            info, scopes=['openid', 'https://www.googleapis.com/auth/userinfo.email']
+            info,
+            scopes=['openid', 'https://www.googleapis.com/auth/userinfo.email'],
         )
-        current_credentials = IDTokenCredentialsAdapter(credentials=current_credentials)
-
-        return current_credentials
+        return IDTokenCredentialsAdapter(credentials=current_credentials)
 
     if credential_type == _SERVICE_ACCOUNT_TYPE:
         try:
             return service_account.IDTokenCredentials.from_service_account_info(
-                info, target_audience=target_audience
+                info,
+                target_audience=target_audience,
             )
         except ValueError as exc:
             raise exceptions.DefaultCredentialsError(
-                f'Failed to load service account credentials from {filename}'
+                f'Failed to load service account credentials from {filename}',
             ) from exc
 
     if credential_type == _EXTERNAL_ACCOUNT_TYPE:
-        # this one's a bit unfortunate, I can't find the API way to do it
-        # credentials, _ = _get_external_account_credentials(info, filename=filename)
-        # credentials._audience = target_audience
-        # return credentials
         return ExternalCredentialsAdapter(audience=target_audience)
 
     raise exceptions.DefaultCredentialsError(
         f'The file {filename} does not have a valid type of google-cloud credentials. '
         f'Type is {credential_type}, but cpg-utils only implements '
-        f'{IMPLEMENTED_CREDENTIALS_TYPES}.'
+        f'{IMPLEMENTED_CREDENTIALS_TYPES}.',
     )
 
 
@@ -260,11 +264,10 @@ def _get_explicit_environ_credentials(
     if explicit_file is None:
         return None
 
-    current_credentials = _load_credentials_from_file(
-        os.environ[environment_vars.CREDENTIALS], target_audience=target_audience
+    return _load_credentials_from_file(
+        os.environ[environment_vars.CREDENTIALS],
+        target_audience=target_audience,
     )
-
-    return current_credentials
 
 
 def _get_gcloud_sdk_credentials(
@@ -279,15 +282,15 @@ def _get_gcloud_sdk_credentials(
     if not os.path.isfile(credentials_filename):
         return None
 
-    current_credentials = _load_credentials_from_file(
-        credentials_filename, target_audience
+    return _load_credentials_from_file(
+        credentials_filename,
+        target_audience,
     )
-
-    return current_credentials
 
 
 def _get_gce_credentials(
-    target_audience: str | None, request: google.auth.transport.Request | None = None
+    target_audience: str | None,
+    request: google.auth.transport.Request | None = None,
 ) -> google_auth_credentials.Credentials | None:
     """Gets credentials and project ID from the GCE Metadata Service."""
     # Ping requires a transport, but we want application default credentials
@@ -312,14 +315,17 @@ def _get_gce_credentials(
 
     if _metadata.ping(request=request):
         return compute_engine.IDTokenCredentials(
-            request, target_audience, use_metadata_identity_endpoint=True
+            request,
+            target_audience,
+            use_metadata_identity_endpoint=True,
         )
 
     return None
 
 
 def _get_default_id_token_credentials(
-    target_audience: str | None, request: google.auth.transport.Request = None
+    target_audience: str | None,
+    request: google.auth.transport.Request | None = None,
 ) -> google_auth_credentials.Credentials:
     """Gets the default ID Token credentials for the current environment.
     `Application Default Credentials`_ provides an easy way to obtain credentials to call Google APIs for
@@ -349,35 +355,6 @@ def _get_default_id_token_credentials(
     raise exceptions.DefaultCredentialsError(_CLOUD_SDK_MISSING_CREDENTIALS)
 
 
-def get_cached_group_members(
-    group, members_cache_location: str | None = None
-) -> set[str]:
-    """
-    Get cached members of a group, based on the members_cache_location
-    """
-    group_name = group.split('@')[0]
-
-    if not members_cache_location:
-        config = get_config()
-        members_cache_location = config['infrastructure']['members_cache_location']
-
-    pathname = os.path.join(members_cache_location, group_name + '-members.txt')  # type: ignore
-
-    with AnyPath(pathname).open() as f:
-        return set(line.strip() for line in f.readlines() if line.strip())
-
-
-def is_member_in_cached_group(
-    group, member, members_cache_location: str | None = None
-) -> bool:
-    """
-    Check if a member is in a group, based on the infrastructure config
-    """
-    return member.lower() in get_cached_group_members(
-        group, members_cache_location=members_cache_location
-    )
-
-
 def get_path_components_from_gcp_path(path: str) -> dict[str, str]:
     """
     Return the {bucket_name}, {dataset}, {bucket_type}, {subdir}, and {file} for GS only paths
@@ -391,7 +368,7 @@ def get_path_components_from_gcp_path(path: str) -> dict[str, str]:
     gspath_pattern = re.compile(
         r'gs://(?P<bucket>cpg-(?P<dataset>[\w-]+)-(?P<bucket_type>['
         + '|'.join(s for s in bucket_types)
-        + r']+[-\w]*))/(?P<suffix>.+/)?(?P<file>.*)$'
+        + r']+[-\w]*))/(?P<suffix>.+/)?(?P<file>.*)$',
     )
 
     # if a match succeeds, return the key: value dictionary
@@ -400,3 +377,23 @@ def get_path_components_from_gcp_path(path: str) -> dict[str, str]:
 
     # raise an error if the input String was not a valid CPG bucket path
     raise ValueError('The input String did not match a valid GCP path')
+
+
+def get_project_id_from_service_account_email(service_account_email: str) -> str:
+    """
+    Get GCP project id from service_account_email
+
+    >>> get_project_id_from_service_account_email('cromwell-test@tob-wgs.iam.gserviceaccount.com')
+    'tob-wgs'
+    """
+    # quick and dirty
+    return service_account_email.split('@')[-1].split('.')[0]
+
+
+@deprecated(reason='Use cpg_utils.membership.is_member_in_cached_group instead')
+def is_member_in_cached_group(*args: Any, **kwargs: Any):
+    from cpg_utils.membership import (
+        is_member_in_cached_group as _is_member_in_cached_group,
+    )
+
+    return _is_member_in_cached_group(*args, **kwargs)
