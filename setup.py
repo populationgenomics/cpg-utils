@@ -5,9 +5,6 @@ from setuptools import find_packages, setup
 with open('README.md') as f:
     long_description = f.read()
 
-with open('requirements.txt') as f:
-    requirements = f.read().splitlines()
-
 setup(
     name='cpg-utils',
     # This tag is automatically updated by bumpversion
