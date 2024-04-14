@@ -3,6 +3,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from cpg_utils.cromwell import run_cromwell_workflow
+from cpg_utils.cromwell_model import WorkflowMetadataModel
 
 
 class TestCromwellWrapper(unittest.TestCase):
@@ -86,3 +87,44 @@ class TestCromwellWrapper(unittest.TestCase):
             wf_options['final_workflow_outputs_dir'],
             'test://default-bucket/output-prefix',
         )
+
+    def test_cromwell_status_format(self):
+        """
+        Check parsing some basic cromwell metadata, and formatting it for display
+        """
+        model = WorkflowMetadataModel.parse(
+            {
+                'id': '<mocked-id>',
+                'submission': '2021-07-09T09:46:00.000Z',
+                'start': '2021-07-09T09:47:00.000Z',
+                'end': '2021-07-09T09:48:00.000Z',
+                'calls': {
+                    'wf.print': [
+                        {
+                            'name': 'print',
+                            'executionStatus': 'succeeded',
+                            'start': '2021-07-09T09:47:00.000Z',
+                            'end': '2021-07-09T09:48:00.000Z',
+                        },
+                    ],
+                },
+            },
+        )
+        resp = model.display(expand_completed=True, monochrome=True)
+
+        status_str = """
+-----------  ------------------------
+Workflow ID  <mocked-id>
+Name
+Status       preparing
+Submitted    2021-07-09T09:46:00.000Z
+Start        2021-07-09T09:47:00.000Z
+End          2021-07-09T09:48:00.000Z
+Duration     1m:0s
+Walltime     2m:0s
+-----------  ------------------------
+Jobs:
+  [#] print (1m:0s)
+"""
+
+        self.assertEqual(status_str.strip(), resp.strip())
