@@ -8,7 +8,7 @@ with open('README.md') as f:
 setup(
     name='cpg-utils',
     # This tag is automatically updated by bumpversion
-    version='5.0.1',
+    version='5.0.2',
     description='Library of convenience functions specific to the CPG',
     long_description=long_description,
     long_description_content_type='text/markdown',
