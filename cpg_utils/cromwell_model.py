@@ -7,7 +7,7 @@ import datetime
 
 from tabulate import tabulate
 
-from cpg_utils.constants import AnsiiColors
+from cpg_utils.constants import AnsiColors
 
 
 class ExecutionStatus(Enum):
@@ -41,17 +41,17 @@ class ExecutionStatus(Enum):
     @property
     def _colors(self):
         return {
-            ExecutionStatus.done: AnsiiColors.BRIGHTGREEN,
-            ExecutionStatus.succeeded: AnsiiColors.BRIGHTGREEN,
-            ExecutionStatus.failed: AnsiiColors.BRIGHTRED,
-            ExecutionStatus.retryablefailure: AnsiiColors.BRIGHTBLUE,
+            ExecutionStatus.done: AnsiColors.BRIGHTGREEN,
+            ExecutionStatus.succeeded: AnsiColors.BRIGHTGREEN,
+            ExecutionStatus.failed: AnsiColors.BRIGHTRED,
+            ExecutionStatus.retryablefailure: AnsiColors.BRIGHTBLUE,
         }
 
     def symbol(self):
         return self._symbols.get(self, '?')
 
     def color(self):
-        return self._colors.get(self, AnsiiColors.RESET)
+        return self._colors.get(self, AnsiColors.RESET)
 
     def is_finished(self):
         _finished_states = {
@@ -296,7 +296,7 @@ class CallMetadata:
         color, rcol = '', ''
         if not monochrome:
             color = self.executionStatus.color() if self.executionStatus else ''
-            rcol = AnsiiColors.RESET
+            rcol = AnsiColors.RESET
 
         extras_str = "".join("\n" + indent(e, '  ') for e in extras)
         return f'{color}[{symbol}] {name} ({duration_str}){extras_str}{rcol}'
@@ -329,7 +329,7 @@ def prepare_inner_calls_string(
     color, rcol = '', ''
     if not monochrome:
         color = collapsed_status.color() if collapsed_status else ''
-        rcol = AnsiiColors.RESET
+        rcol = AnsiColors.RESET
     inner_calls = ''
 
     if len(calls) > 1 and not expand_completed:

@@ -21,7 +21,7 @@ CROMWELL_AUDIENCE = os.getenv('CROMWELL_AUDIENCE', DEFAULT_CROMWELL_AUDIENCE)
 CROMWELL_URL = os.getenv('CROMWELL_URL', DEFAULT_CROMWELL_URL)
 
 
-class AnsiiColors:
+class AnsiColors:
     """
     Lookup table: https://en.wikipedia.org/wiki/ANSI_escape_code#3/4_bit
     """
