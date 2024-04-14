@@ -23,7 +23,7 @@ jobs:
 
       - name: Test install + import
         run: |
-          pip install .
+          pip install dist/*
           python -c "import cpg_utils.cloud"
 
       - name: Publish the wheel to PyPI
