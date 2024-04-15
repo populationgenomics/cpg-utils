@@ -5,13 +5,10 @@ from setuptools import find_packages, setup
 with open('README.md') as f:
     long_description = f.read()
 
-with open('requirements.txt') as f:
-    requirements = f.read().splitlines()
-
 setup(
     name='cpg-utils',
     # This tag is automatically updated by bumpversion
-    version='5.0.0',
+    version='5.0.2',
     description='Library of convenience functions specific to the CPG',
     long_description=long_description,
     long_description_content_type='text/markdown',
@@ -21,7 +18,18 @@ setup(
     package_data={
         'cpg_utils': ['py.typed'],
     },
-    install_requires=requirements,
+    install_requires=[
+        'boto3==1.28.56',
+        'botocore==1.31.56',
+        'cloudpathlib[all]',
+        'frozendict',
+        'google-auth>=1.27.0',
+        'google-cloud-secret-manager',
+        'requests',
+        'tabulate',
+        'toml',
+        'deprecated',
+    ],
     keywords='bioinformatics',
     classifiers=[
         'Environment :: Console',

@@ -11,25 +11,24 @@ jobs:
       run:
         shell: bash -l {0}
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - uses: actions/setup-python@v5
-      with:
-        python-version: '3.10'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
 
-    - name: Build
-      run: python setup.py sdist
+      - name: Build
+        run: python setup.py sdist
 
-    - name: Test install
-      run: pip install dist/*
+      - name: Test install + import
+        run: |
+          pip install dist/*
+          python -c "import cpg_utils.cloud"
 
-    - name: Test import
-      run: python -c "import cpg_utils.cloud"
-
-    - name: Publish the wheel to PyPI
-      uses: pypa/gh-action-pypi-publish@release/v1
-      with:
-        user: __token__
-        password: ${{ secrets.PYPI_API_TOKEN }}
-        packages-dir: dist/
-        skip-existing: true
+      - name: Publish the wheel to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          user: __token__
+          password: ${{ secrets.PYPI_API_TOKEN }}
+          packages-dir: dist/
+          skip-existing: true
