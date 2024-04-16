@@ -10,7 +10,7 @@ import hailtop.batch as hb
 
 from cpg_utils.config import (
     AR_GUID_NAME,
-    dataset_path,
+    config_retrieve,
     get_access_level,
     get_gcloud_set_project,
     get_gcp_project,
@@ -281,7 +281,7 @@ def _add_start_job(  # noqa: C901
 
     # Note that the options and their values must be separated by an equal sign.
     # Using a space will break some options like --label
-    tmp_bucket = dataset_path('', 'tmp').split('://')[1]
+    tmp_bucket = config_retrieve(['storage', 'default', 'tmp']).removeprefix('gs://')
     start_job_command = [
         'hailctl dataproc start',
         f'--region={region}',
