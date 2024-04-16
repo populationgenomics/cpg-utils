@@ -227,9 +227,13 @@ def config_retrieve(
     >> config_retrieve(['key1', 'key2', 'key3'], config={}, default=None) is None
     True
     """
-    d = config if config is not None else get_config()
-    if d is None:
-        raise ValueError('No config provided and no default config found')
+    if default is UnsuppliedDefault:
+        d = config if config is not None else get_config()
+    else:
+        try:
+            d = config if config is not None else get_config()
+        except ConfigError:
+            return default
 
     if isinstance(key, str):
         key = [key]

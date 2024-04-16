@@ -60,10 +60,18 @@ class TestConfig(TestCase):
 
         # check that providing default=None isn't triggering some falsey check
         self.assertIsNone(
-            self.assertIsNone(
-                config_retrieve(['key1', 'key2', 'key3'], config={}, default=None),
-            ),
+            config_retrieve(['key1', 'key2', 'key3'], config={}, default=None),
         )
+
+    def test_retrieve_no_config(self):
+        """
+        Test the config_retrieve behaviour when no config is available
+        """
+        # we've got not config here
+        with self.assertRaises(ConfigError):
+            config_retrieve(['some-key'])
+
+        self.assertIsNone(config_retrieve(['some-key'], default=None))
 
     @patch.dict(os.environ, {'CPG_CONFIG_PATH': test_config_path.as_posix()})
     def test_read_from_env(self):
