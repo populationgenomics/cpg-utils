@@ -11,7 +11,6 @@ import hailtop.batch as hb
 from cpg_utils.config import (
     AR_GUID_NAME,
     config_retrieve,
-    dataset_path,
     get_access_level,
     get_gcloud_set_project,
     get_gcp_project,
