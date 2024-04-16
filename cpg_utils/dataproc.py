@@ -293,7 +293,7 @@ def _add_start_job(  # noqa: C901
         f'--labels={labels_formatted}',
         f'--wheel={get_wheel_from_hail_version(hail_version)}',
         f'--bucket={tmp_bucket}',
-        f'--temp-bucket=cpg-{tmp_bucket}',
+        f'--temp-bucket={tmp_bucket}',
     ]
     if worker_machine_type:
         start_job_command.append(f'--worker-machine-type={worker_machine_type}')
