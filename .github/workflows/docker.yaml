@@ -5,7 +5,7 @@ on:
       - main
 
 env:
-  VERSION: 5.0.5
+  VERSION: 5.0.6
 
 permissions:
   contents: read
