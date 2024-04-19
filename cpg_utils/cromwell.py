@@ -386,6 +386,9 @@ def watch_workflow(  # noqa: C901
     )
     from cpg_utils.cromwell_model import WorkflowMetadataModel
 
+    # ensure logging info statements are actually printed
+    logging.basicConfig(level=logging.INFO)
+
     class CromwellError(Exception):
         """Cromwell status error"""
 
