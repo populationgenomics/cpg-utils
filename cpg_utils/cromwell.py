@@ -5,7 +5,6 @@ jobs from within Hail batch.
 """
 
 import json
-import logging
 import os
 import subprocess
 from shlex import quote
@@ -34,8 +33,6 @@ from cpg_utils.git import (
     get_repo_name_from_remote,
 )
 from cpg_utils.hail_batch import prepare_git_job, query_command
-
-logger = logging.getLogger(__name__)
 
 
 class CromwellOutputType:
@@ -386,8 +383,11 @@ def watch_workflow(  # noqa: C901
     )
     from cpg_utils.cromwell_model import WorkflowMetadataModel
 
-    # ensure logging info statements are actually printed
+    # Create a logger, ensure info statements are actually printed
     logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger('cromwell_watcher')
+    logger.addHandler(logging.StreamHandler())
+    logger.setLevel(logging.INFO)
 
     class CromwellError(Exception):
         """Cromwell status error"""
@@ -423,7 +423,7 @@ def watch_workflow(  # noqa: C901
 
     with open(workflow_id_file, encoding='utf-8') as f:
         workflow_id = f.read().strip()
-    logging.info(f'Received workflow ID: {workflow_id}')
+    logger.info(f'Received workflow ID: {workflow_id}')
 
     failed_statuses = {'failed', 'aborted'}
     terminal_statuses = {'succeeded'} | failed_statuses
@@ -450,7 +450,7 @@ def watch_workflow(  # noqa: C901
             r = requests.get(status_url, headers=auth_header, timeout=60)
             if not r.ok:
                 _remaining_exceptions -= 1
-                logging.warning(
+                logger.warning(
                     f'Received "not okay" (status={r.status_code}) from cromwell '
                     f'(waiting={wait_time}): {r.text}',
                 )
@@ -460,7 +460,7 @@ def watch_workflow(  # noqa: C901
 
             # if workflow has concluded print logging to hail batch log
             if status.lower() in terminal_statuses and not status_reported:
-                logging.info('Cromwell workflow has concluded - fetching log')
+                logger.info('Cromwell workflow has concluded - fetching log')
                 # don't report multiple times if we fail fetching output
                 # also don't fail the whole run if we can't fetch metadata
                 status_reported = True
@@ -472,33 +472,33 @@ def watch_workflow(  # noqa: C901
                     print('Failed to collect run Metadata')
 
             if status.lower() == 'succeeded':
-                logging.info('Cromwell workflow moved to succeeded state')
+                logger.info('Cromwell workflow moved to succeeded state')
                 _remaining_exceptions = max_sequential_exception_count
                 # process outputs here
                 r_outputs = requests.get(outputs_url, headers=auth_header, timeout=60)
                 if not r_outputs.ok:
-                    logging.warning(
+                    logger.warning(
                         'Received error when fetching cromwell outputs, '
                         f'will retry in {wait_time} seconds',
                     )
                     time.sleep(wait_time)
                     continue
                 outputs = r_outputs.json()
-                logging.info(f'Received outputs from Cromwell: {outputs}')
+                logger.info(f'Received outputs from Cromwell: {outputs}')
                 with to_anypath(output_json_path).open('w') as fh:
                     json.dump(outputs.get('outputs'), fh)
                 break
             if status.lower() in failed_statuses:
-                logging.error(f'Got failed cromwell status: {status}')
+                logger.error(f'Got failed cromwell status: {status}')
                 raise CromwellError(status)
-            logging.info(f'Got cromwell status: {status} (sleeping={wait_time})')
+            logger.info(f'Got cromwell status: {status} (sleeping={wait_time})')
             time.sleep(wait_time)
         except CromwellError:
             # pass through
             raise
         except Exception as e:  # noqa: BLE001
             _remaining_exceptions -= 1
-            logging.error(
+            logger.error(
                 f'Cromwell status watch caught general exception (sleeping={wait_time}): {e}',
             )
             time.sleep(wait_time)
