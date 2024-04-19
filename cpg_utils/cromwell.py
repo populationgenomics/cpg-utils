@@ -384,7 +384,6 @@ def watch_workflow(  # noqa: C901
     from cpg_utils.cromwell_model import WorkflowMetadataModel
 
     # Create a logger, ensure info statements are actually printed
-    logging.basicConfig(level=logging.INFO)
     logger = logging.getLogger('cromwell_watcher')
     logger.addHandler(logging.StreamHandler())
     logger.setLevel(logging.INFO)
