@@ -451,16 +451,20 @@ def watch_workflow(  # noqa: C901
     status_url = f'{cromwell_workflow_root}/status'
     _remaining_exceptions = max_sequential_exception_count
     start = datetime.now()
-    cumulative_wait: int = 0
 
     while True:
         # kill the workflow if the maximum wait has elapsed
-        if time_limit_seconds and cumulative_wait > time_limit_seconds:
+        if (
+            time_limit_seconds
+            and (datetime.now() - start).total_seconds() >= time_limit_seconds
+        ):
             # time to die, Mr. Cromwell
             auth_header = {'Authorization': f'Bearer {_get_cromwell_oauth_token()}'}
             r = requests.post(abort_url, headers=auth_header, timeout=10)
             if not r.ok:
-                logger.info(f"You couldn't even die right, {workflow_id}")
+                logger.info(
+                    f"Abort failed, error code {r.status_code}, WF ID: {workflow_id}",
+                )
                 _remaining_exceptions -= 1
                 continue
 
@@ -473,9 +477,6 @@ def watch_workflow(  # noqa: C901
             max_poll_interval,
             exponential_decrease_seconds,
         )
-
-        # update the cumulative wait
-        cumulative_wait += wait_time
 
         try:
             auth_header = {'Authorization': f'Bearer {_get_cromwell_oauth_token()}'}
