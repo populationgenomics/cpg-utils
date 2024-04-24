@@ -287,6 +287,7 @@ def run_cromwell_workflow_from_repo_and_get_outputs(
     copy_outputs_to_gcp: bool = True,
     min_watch_poll_interval: int = 5,
     max_watch_poll_interval: int = 60,
+    time_limit_seconds: int | None = None,
 ) -> tuple[Job, dict[str, Resource | list[Resource]]]:
     """
     This function needs to know the structure of the outputs you
@@ -309,6 +310,9 @@ def run_cromwell_workflow_from_repo_and_get_outputs(
 
     Optionally override min/max poll interval for the watch job.
     This alters how often the Watch job pings Cromwell for Status updates
+
+    time_limit_seconds is optional, and will cause the workflow to be aborted if
+    the time limit is exceeded
     """
 
     _driver_image = driver_image or get_driver_image()
@@ -346,6 +350,7 @@ def run_cromwell_workflow_from_repo_and_get_outputs(
         driver_image=_driver_image,
         max_poll_interval=max_watch_poll_interval,
         min_poll_interval=min_watch_poll_interval,
+        time_limit_seconds=time_limit_seconds,
     )
 
     return submit_job, outputs_dict
@@ -358,13 +363,24 @@ def watch_workflow(  # noqa: C901
     max_poll_interval: int,
     exponential_decrease_seconds: int,
     output_json_path: str,
+    time_limit_seconds: int | None = None,
 ):
     """
     INNER Python function to watch workflow status, and write
     output paths to output_json_path on success.
+
+    Re-importing dependencies here so the function is self-contained
+    and can be run in a Hail bash job.
+
+    Args:
+        workflow_id_file (str): file containing the Cromwell WF ID only
+        max_sequential_exception_count (int): Fail after X consecutive errors
+        min_poll_interval (int): minimum polling wait
+        max_poll_interval (int): maximum polling wait
+        exponential_decrease_seconds (int): expo curve for interval generation
+        output_json_path (str): where to write output results file
+        time_limit_seconds (int): kill if not completed before X seconds pass
     """
-    # Re-importing dependencies here so the function is self-contained
-    # and can be run in a Hail bash job.
 
     import json
     import logging
@@ -429,21 +445,38 @@ def watch_workflow(  # noqa: C901
     status_reported = False
     subprocess.check_output(GCLOUD_ACTIVATE_AUTH_BASE)  # noqa: S603
     cromwell_workflow_root = f'{CROMWELL_URL}/api/workflows/v1/{workflow_id}'
+    abort_url = f'{cromwell_workflow_root}/abort'
     metadata_url = f'{cromwell_workflow_root}/metadata'
     outputs_url = f'{cromwell_workflow_root}/outputs'
     status_url = f'{cromwell_workflow_root}/status'
     _remaining_exceptions = max_sequential_exception_count
     start = datetime.now()
+    cumulative_wait: int = 0
 
     while True:
+        # kill the workflow if the maximum wait has elapsed
+        if time_limit_seconds and cumulative_wait > time_limit_seconds:
+            # time to die, Mr. Cromwell
+            auth_header = {'Authorization': f'Bearer {_get_cromwell_oauth_token()}'}
+            r = requests.post(abort_url, headers=auth_header, timeout=10)
+            if not r.ok:
+                logger.info(f"You couldn't even die right, {workflow_id}")
+                _remaining_exceptions -= 1
+                continue
+
         if _remaining_exceptions <= 0:
             raise CromwellError('Unreachable')
+
         wait_time = _get_wait_interval(
             start,
             min_poll_interval,
             max_poll_interval,
             exponential_decrease_seconds,
         )
+
+        # update the cumulative wait
+        cumulative_wait += wait_time
+
         try:
             auth_header = {'Authorization': f'Bearer {_get_cromwell_oauth_token()}'}
             r = requests.get(status_url, headers=auth_header, timeout=60)
@@ -513,6 +546,7 @@ def watch_workflow_and_get_output(
     max_poll_interval: int = 60,  # 1 minute
     exponential_decrease_seconds: int = 1200,  # 20 minutes
     max_sequential_exception_count: int = 25,
+    time_limit_seconds: int | None = None,
 ):
     """
     This is a little bit tricky, but the process is:
@@ -541,6 +575,7 @@ def watch_workflow_and_get_output(
     :param max_poll_interval: Maximum time to wait between polls
     :param exponential_decrease_seconds: Exponential decrease in wait time
     :param max_sequential_exception_count: Maximum number of exceptions before giving up
+    :param time_limit_seconds: a maximum runtime before abort is triggered
     """
 
     driver_image = driver_image or get_driver_image()
@@ -562,6 +597,7 @@ def watch_workflow_and_get_output(
             max_poll_interval,
             exponential_decrease_seconds,
             str(watch_job.output_json_path),
+            time_limit_seconds,
             setup_gcp=True,
             setup_hail=False,
         ),
