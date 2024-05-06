@@ -155,6 +155,17 @@ class Batch(hb.Batch):
             toml.dump(dict(get_config()), f)
         set_config_paths([str(config_path)])
 
+    def read_input(self, path: str | Path) -> hb.resource.InputResourceFile:
+        """As per Hail's read_input() but allows either str or Path."""
+        assert isinstance(path, str | Path)
+        return super().read_input(str(path))
+
+    def read_input_group(self, **kwargs: str | Path) -> hb.resource.ResourceGroup:
+        """As per Hail's read_input_groups() but allows either str or Path."""
+        for path in kwargs.values():
+            assert isinstance(path, str | Path)
+        return super().read_input_group(**{k: str(v) for k, v in kwargs.items()})
+
     def _process_job_attributes(
         self,
         name: str | None = None,
