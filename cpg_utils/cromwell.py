@@ -573,6 +573,7 @@ def watch_workflow_and_get_output(
     :param job_prefix: Prefix for the job name
     :param workflow_id_file: File containing the workflow ID
     :param outputs_to_collect: dict of output name -> CromwellOutputType
+    :param min_poll_interval: Min time to wait between polls
     :param max_poll_interval: Maximum time to wait between polls
     :param exponential_decrease_seconds: Exponential decrease in wait time
     :param max_sequential_exception_count: Maximum number of exceptions before giving up
