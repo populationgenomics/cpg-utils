@@ -341,7 +341,7 @@ def _add_submit_job(
     cluster_id: str,
     script: str,
     region: str,
-    hail_version: str,
+    hail_version: str = DEFAULT_HAIL_VERSION,
     pyfiles: list[str] | None = None,
     job_name: str | None = None,
     cluster_name: str | None = None,
