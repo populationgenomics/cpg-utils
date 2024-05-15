@@ -41,7 +41,7 @@ class CromwellBackend(Enum):
     pipelines_api = 'papi'
 
 
-DEFAULT_BACKEND = CromwellBackend.batch
+DEFAULT_BACKEND = CromwellBackend.pipelines_api
 
 
 class CromwellOutputType:
