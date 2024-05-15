@@ -41,6 +41,9 @@ class CromwellBackend(Enum):
     pipelines_api = 'papi'
 
 
+DEFAULT_BACKEND = CromwellBackend.batch
+
+
 class CromwellOutputType:
     """Declares output type for cromwell -> hail batch glue"""
 
@@ -160,7 +163,7 @@ def run_cromwell_workflow(  # noqa: C901
     project: str | None = None,
     copy_outputs_to_gcp: bool = True,
     ar_guid_override: str | None = None,
-    backend: CromwellBackend = CromwellBackend.batch,
+    backend: CromwellBackend = DEFAULT_BACKEND,
 ):
     """
     Run a cromwell workflow, and return a Batch.ResourceFile
@@ -306,6 +309,7 @@ def run_cromwell_workflow_from_repo_and_get_outputs(
     min_watch_poll_interval: int = 5,
     max_watch_poll_interval: int = 60,
     time_limit_seconds: int | None = None,
+    backend: CromwellBackend = DEFAULT_BACKEND,
 ) -> tuple[Job, dict[str, Resource | list[Resource]]]:
     """
     This function needs to know the structure of the outputs you
@@ -358,6 +362,7 @@ def run_cromwell_workflow_from_repo_and_get_outputs(
         labels=labels,
         project=project,
         copy_outputs_to_gcp=copy_outputs_to_gcp,
+        backend=backend,
     )
 
     outputs_dict = watch_workflow_and_get_output(
