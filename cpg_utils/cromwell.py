@@ -221,7 +221,8 @@ def run_cromwell_workflow(  # noqa: C901
         'user_service_account_json': service_account_json,
         'google_compute_service_account': service_account_email,
         'google_project': _project,
-        'jes_gcs_root': intermediate_dir,
+        # cromwell: /supportedBackends/google/batch/src/main/scala/cromwell/backend/google/batch/models/GcpBatchWorkflowPaths.scala#L20
+        'gcp_batch_gcs_root': intermediate_dir,
         'google_labels': google_labels,
         'final_call_logs_dir': logging_output_dir,
         'final_workflow_log_dir': logging_output_dir,

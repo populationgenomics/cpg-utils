@@ -72,7 +72,7 @@ class TestCromwellWrapper(unittest.TestCase):
         wf_options = json.loads(wf_options_str)
 
         self.assertEqual(
-            wf_options['jes_gcs_root'],
+            wf_options['gcp_batch_gcs_root'],
             'test://tmp-bucket/cromwell',
         )
         self.assertEqual(
