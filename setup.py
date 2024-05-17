@@ -19,7 +19,7 @@ setup(
         'cpg_utils': ['py.typed'],
     },
     install_requires=[
-        'boto3==1.28.56',
+        'boto3>=1.28.56',
         'botocore>=1.31.56',
         'cloudpathlib[all]',
         'frozendict',
