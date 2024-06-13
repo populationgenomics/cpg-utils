@@ -37,6 +37,7 @@ from cpg_utils.hail_batch import prepare_git_job, query_command
 
 
 class CromwellBackend(Enum):
+    # the string value here, is the key of the backend in our cromwell.conf
     batch = 'batch'
     pipelines_api = 'papi'
 
