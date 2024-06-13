@@ -8,7 +8,7 @@ with open('README.md') as f:
 setup(
     name='cpg-utils',
     # This tag is automatically updated by bumpversion
-    version='5.0.9',
+    version='5.0.10',
     description='Library of convenience functions specific to the CPG',
     long_description=long_description,
     long_description_content_type='text/markdown',
@@ -19,8 +19,8 @@ setup(
         'cpg_utils': ['py.typed'],
     },
     install_requires=[
-        'boto3==1.28.56',
-        'botocore==1.31.56',
+        'boto3>=1.28.56',
+        'botocore>=1.31.56',
         'cloudpathlib[all]',
         'frozendict',
         'google-auth>=1.27.0',
