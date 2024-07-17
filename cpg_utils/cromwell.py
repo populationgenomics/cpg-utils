@@ -7,6 +7,7 @@ jobs from within Hail batch.
 import json
 import os
 import subprocess
+from enum import Enum
 from shlex import quote
 from typing import Any
 
@@ -33,6 +34,15 @@ from cpg_utils.git import (
     get_repo_name_from_remote,
 )
 from cpg_utils.hail_batch import prepare_git_job, query_command
+
+
+class CromwellBackend(Enum):
+    # the string value here, is the key of the backend in our cromwell.conf
+    batch = 'batch'
+    pipelines_api = 'papi'
+
+
+DEFAULT_BACKEND = CromwellBackend.pipelines_api
 
 
 class CromwellOutputType:
@@ -154,6 +164,7 @@ def run_cromwell_workflow(  # noqa: C901
     project: str | None = None,
     copy_outputs_to_gcp: bool = True,
     ar_guid_override: str | None = None,
+    backend: CromwellBackend = DEFAULT_BACKEND,
 ):
     """
     Run a cromwell workflow, and return a Batch.ResourceFile
@@ -218,14 +229,25 @@ def run_cromwell_workflow(  # noqa: C901
     )
 
     workflow_options = {
+        # michael configured these manually in config to match the enum values
+        'backend': backend.value,
+        # pass the user-service-account-json to cromwell to submit jobs as this user
         'user_service_account_json': service_account_json,
         'google_compute_service_account': service_account_email,
         'google_project': _project,
-        'jes_gcs_root': intermediate_dir,
+        # other config options that are useful
         'google_labels': google_labels,
         'final_call_logs_dir': logging_output_dir,
         'final_workflow_log_dir': logging_output_dir,
     }
+
+    if backend == CromwellBackend.pipelines_api:
+        workflow_options['jes_gcs_root'] = intermediate_dir
+
+    if backend == CromwellBackend.batch:
+        # cromwell: /supportedBackends/google/batch/src/main/scala/cromwell/backend/google/batch/models/GcpBatchWorkflowPaths.scala#L20
+        # this was undocumented at the time of writing
+        workflow_options['gcp_batch_gcs_root'] = intermediate_dir
 
     # if required, export the workflow outputs to GCS
     if copy_outputs_to_gcp:
@@ -252,13 +274,13 @@ def run_cromwell_workflow(  # noqa: C901
     echo '{json.dumps(workflow_options)}' > workflow-options.json
     access_token=$(gcloud auth print-identity-token --audiences={CROMWELL_AUDIENCE})
     wid=$(curl -X POST "{cromwell_post_url}" \\
-    -H "Authorization: Bearer $access_token" \\
-    -H "accept: application/json" \\
-    -H "Content-Type: multipart/form-data" \\
-    -F "workflowSource=@{workflow}" \\
-    {' '.join(inputs_cli)} \\
-    -F "workflowOptions=@workflow-options.json;type=application/json" \\
-    {f'-F "workflowDependencies=@{deps_path}"' if deps_path else ''})
+        -H "Authorization: Bearer $access_token" \\
+        -H "accept: application/json" \\
+        -H "Content-Type: multipart/form-data" \\
+        -F "workflowSource=@{workflow}" \\
+        {' '.join(inputs_cli)} \\
+        -F "workflowOptions=@workflow-options.json;type=application/json" \\
+        {f'-F "workflowDependencies=@{deps_path}"' if deps_path else ''})
 
     echo "Submitted workflow with ID $wid"
     echo $wid | jq -r .id >> {output_workflow_id}
@@ -288,6 +310,7 @@ def run_cromwell_workflow_from_repo_and_get_outputs(
     min_watch_poll_interval: int = 5,
     max_watch_poll_interval: int = 60,
     time_limit_seconds: int | None = None,
+    backend: CromwellBackend = DEFAULT_BACKEND,
 ) -> tuple[Job, dict[str, Resource | list[Resource]]]:
     """
     This function needs to know the structure of the outputs you
@@ -340,6 +363,7 @@ def run_cromwell_workflow_from_repo_and_get_outputs(
         labels=labels,
         project=project,
         copy_outputs_to_gcp=copy_outputs_to_gcp,
+        backend=backend,
     )
 
     outputs_dict = watch_workflow_and_get_output(
