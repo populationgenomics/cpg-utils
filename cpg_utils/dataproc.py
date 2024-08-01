@@ -25,7 +25,7 @@ from cpg_utils.git import (
 )
 from cpg_utils.hail_batch import prepare_git_job
 
-DEFAULT_HAIL_VERSION = '0.2.126'
+DEFAULT_HAIL_VERSION = '0.2.132'
 
 PYFILES_DIR = '$TMPDIR/pyfiles'
 PYFILES_ZIP = 'pyfiles.zip'
