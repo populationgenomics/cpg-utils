@@ -27,6 +27,10 @@ from cpg_utils.hail_batch import prepare_git_job
 
 DEFAULT_HAIL_VERSION = '0.2.132'
 
+PUBLIC_IP_EXACT_MAJOR_VERSION = 0
+PUBLIC_IP_EXACT_MINOR_VERSION = 2
+PUBLIC_IP_MIN_PATCH_VERSION = 131
+
 PYFILES_DIR = '$TMPDIR/pyfiles'
 PYFILES_ZIP = 'pyfiles.zip'
 
@@ -44,6 +48,34 @@ DEFAULT_PACKAGES = [
     'cloudpathlib[all]',
     'gnomad',
 ]
+
+
+def dataproc_requires_public_ip_address_flag(hail_version: str) -> bool:
+    """
+    Hail >= 0.2.131 requires a public IP address flag due to a behaviour change in the
+    dataproc 2.2 image version.
+    https://cloud.google.com/dataproc/docs/concepts/configuring-clusters/network#create-a-dataproc-cluster-with-internal-IP-addresses-only
+
+    """
+    major, minor, patch = map(int, hail_version.split('.'))
+    if major != PUBLIC_IP_EXACT_MAJOR_VERSION:
+        raise ValueError(
+            'Undetermined behaviour of public-ip-address for dataproc in Hail: '
+            f'{major}.{minor}.X versions (current={hail_version}), please raise a '
+            'support ticket.',
+        )
+    if minor != PUBLIC_IP_EXACT_MINOR_VERSION:
+        # mfranklin: not confident what the behaviour should be for non 0.2.X versions
+        #   so annoyingly this will crash
+        raise ValueError(
+            'Undetermined behaviour of public-ip-address for dataproc in Hail: '
+            f'{major}.{minor}.X versions (current={hail_version}), please raise a '
+            'support ticket.',
+        )
+    if patch < PUBLIC_IP_MIN_PATCH_VERSION:
+        return False
+
+    return True
 
 
 def get_wheel_from_hail_version(hail_version: str) -> str:
@@ -97,6 +129,10 @@ class DataprocCluster:
         self._start_job: hb.batch.job.Job | None = None
         self._stop_job: hb.batch.job.Job | None = None
         self._hail_version = kwargs.pop('hail_version', DEFAULT_HAIL_VERSION)
+        if kwargs.get('public_ip_address') is None:
+            kwargs['public_ip_address'] = dataproc_requires_public_ip_address_flag(
+                self._hail_version,
+            )
         self._startup_params = kwargs
         self._stop_cluster = kwargs.pop('stop_cluster', True)
 
@@ -184,6 +220,7 @@ def setup_dataproc(
     stop_cluster: bool | None = True,
     install_default_packages: bool = True,
     hail_version: str = DEFAULT_HAIL_VERSION,
+    public_ip_address: bool | None = None,
 ) -> DataprocCluster:
     """
     Adds jobs to the Batch that start and stop a Dataproc cluster, and returns
@@ -236,6 +273,7 @@ def _add_start_job(  # noqa: C901
     labels: dict[str, str] | None = None,
     attributes: dict | None = None,
     install_default_packages: bool = True,
+    public_ip_address: bool = False,
 ) -> tuple[hb.batch.job.Job, str]:
     """
     Returns a Batch job which starts a Dataproc cluster, and the name of the cluster.
@@ -329,6 +367,8 @@ def _add_start_job(  # noqa: C901
         start_job_command.append(f'--scopes={",".join(scopes)}')
     if autoscaling_policy:
         start_job_command.append(f'--autoscaling-policy={autoscaling_policy}')
+    if public_ip_address:
+        start_job_command.append('--public-ip-address')
 
     start_job_command.append(cluster_id)
 
