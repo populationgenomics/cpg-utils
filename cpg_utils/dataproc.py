@@ -27,6 +27,10 @@ from cpg_utils.hail_batch import prepare_git_job
 
 DEFAULT_HAIL_VERSION = '0.2.132'
 
+PUBLIC_IP_EXACT_MAJOR_VERSION = 0
+PUBLIC_IP_EXACT_MINOR_VERSION = 2
+PUBLIC_IP_MIN_PATCH_VERSION = 131
+
 PYFILES_DIR = '$TMPDIR/pyfiles'
 PYFILES_ZIP = 'pyfiles.zip'
 
@@ -53,19 +57,14 @@ def dataproc_requires_public_ip_address_flag(hail_version: str) -> bool:
     https://cloud.google.com/dataproc/docs/concepts/configuring-clusters/network#create-a-dataproc-cluster-with-internal-IP-addresses-only
 
     """
-    # gte 0.2.131
-    EXACT_MAJOR_VERSION = 0
-    EXACT_MINOR_VERSION = 2
-    MIN_PATCH_VERSION = 131
-
     major, minor, patch = map(int, hail_version.split('.'))
-    if major != EXACT_MAJOR_VERSION:
+    if major != PUBLIC_IP_EXACT_MAJOR_VERSION:
         raise ValueError(
             'Undetermined behaviour of public-ip-address for dataproc in Hail: '
             f'{major}.{minor}.X versions (current={hail_version}), please raise a '
             'support ticket.',
         )
-    if minor != EXACT_MINOR_VERSION:
+    if minor != PUBLIC_IP_EXACT_MINOR_VERSION:
         # mfranklin: not confident what the behaviour should be for non 0.2.X versions
         #   so annoyingly this will crash
         raise ValueError(
@@ -73,7 +72,7 @@ def dataproc_requires_public_ip_address_flag(hail_version: str) -> bool:
             f'{major}.{minor}.X versions (current={hail_version}), please raise a '
             'support ticket.',
         )
-    if patch < MIN_PATCH_VERSION:
+    if patch < PUBLIC_IP_MIN_PATCH_VERSION:
         return False
 
     return True
@@ -132,7 +131,7 @@ class DataprocCluster:
         self._hail_version = kwargs.pop('hail_version', DEFAULT_HAIL_VERSION)
         if kwargs.get('public_ip_address') is None:
             kwargs['public_ip_address'] = dataproc_requires_public_ip_address_flag(
-                self._hail_version
+                self._hail_version,
             )
         self._startup_params = kwargs
         self._stop_cluster = kwargs.pop('stop_cluster', True)
