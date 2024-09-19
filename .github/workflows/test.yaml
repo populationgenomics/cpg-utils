@@ -24,7 +24,7 @@ jobs:
     - name: "Run unit tests"
       id: runtests
       run: |
-        coverage run -m pytest/ --junitxml=test-execution.xml
+        coverage run -m pytest --junitxml=test-execution.xml
         rc=$?
         coverage xml
 
