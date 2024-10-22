@@ -483,6 +483,9 @@ def watch_workflow(  # noqa: C901
             and (datetime.now() - start).total_seconds() >= time_limit_seconds
         ):
             # time to die, Mr. Cromwell
+            logger.info(
+                f'This job has exceeded the max permitted runtime ({time_limit_seconds}s), and will be aborted',
+            )
             auth_header = {'Authorization': f'Bearer {_get_cromwell_oauth_token()}'}
             r = requests.post(abort_url, headers=auth_header, timeout=10)
             if not r.ok:
@@ -491,6 +494,9 @@ def watch_workflow(  # noqa: C901
                 )
                 _remaining_exceptions -= 1
                 continue
+            # quit if we successfully aborted
+            logger.info(f'Successfully aborted workflow {workflow_id}')
+            return
 
         if _remaining_exceptions <= 0:
             raise CromwellError('Unreachable')
