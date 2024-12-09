@@ -15,6 +15,7 @@ from deprecated import deprecated
 
 import hail as hl
 import hailtop.batch as hb
+from hail.backend.service_backend import ServiceBackend as InternalServiceBackend
 from hail.utils.java import Env
 from hailtop.config import get_deploy_config
 
@@ -307,6 +308,15 @@ def make_job_name(
     return name
 
 
+_default_override_revision = None
+
+
+class DefaultOverrideServiceBackend(InternalServiceBackend):
+    @property
+    def jar_spec(self) -> dict:
+        return {'type': 'git_revision', 'value': _default_override_revision}
+
+
 def init_batch(**kwargs: Any):
     """
     Initializes the Hail Query Service from within Hail Batch.
@@ -330,6 +340,13 @@ def init_batch(**kwargs: Any):
             **kwargs,
         ),
     )
+
+    if revision := config_retrieve(['workflow', 'default_jar_spec_revision'], False):
+        global _default_override_revision
+        _default_override_revision = revision
+        backend = Env.backend()
+        if isinstance(backend, InternalServiceBackend):
+            backend.__class__ = DefaultOverrideServiceBackend
 
 
 def copy_common_env(job: hb.batch.job.Job) -> None:
