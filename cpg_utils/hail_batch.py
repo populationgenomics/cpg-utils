@@ -17,6 +17,7 @@ import hail as hl
 import hailtop.batch as hb
 from hail.backend.service_backend import ServiceBackend as InternalServiceBackend
 from hail.utils.java import Env
+from hailtop.batch import resource as _resource
 from hailtop.config import get_deploy_config
 
 from cpg_utils import Path, to_path
@@ -218,6 +219,12 @@ class Batch(hb.Batch):
         attributes['sequencing_groups'] = sorted(sequencing_groups)
         fixed_attrs = {k: str(v) for k, v in attributes.items()}
         return name, fixed_attrs
+
+    def write_output(self, resource: _resource.Resource, dest: str):
+        """
+        Write the output of a resource to a destination.
+        """
+        return super().write_output(resource, str(dest))
 
     def run(self, **kwargs: Any):
         """
