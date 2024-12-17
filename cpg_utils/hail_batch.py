@@ -223,6 +223,7 @@ class Batch(hb.Batch):
     def write_output(self, resource: _resource.Resource, dest: str):
         """
         Write the output of a resource to a destination.
+        Includes an explicit String cast to prevent failures when calling with Cloud/PosixPath objects
         """
         return super().write_output(resource, str(dest))
 
