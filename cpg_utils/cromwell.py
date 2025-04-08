@@ -708,7 +708,7 @@ def _copy_basic_file_into_batch(
     2. the output name `output`,
     3. check that the value we select is a string,
     4. either:
-        (a) gsutil cp it into `output_filename`
+        (a) gcloud storage cp it into `output_filename`
         (b) write the value into `output_filename`
     """
     output_filename = j.out
@@ -724,14 +724,14 @@ def _copy_basic_file_into_batch(
         # wrap this in quotes, because output often contains a '.', which has to be escaped in jq
         jq_el = f'"{output_name}"[{idx}]'
 
-    # activate to gsutil cp
+    # activate to gcloud storage cp
     j.image(driver_image)
     j.env('GOOGLE_APPLICATION_CREDENTIALS', '/gsa-key/key.json')
     j.command(GCLOUD_ACTIVATE_AUTH)
 
     # this has to be in bash unfortunately :(
     # we want to check that the output we get is a string
-    # if it starts with gs://, then we'll `gsutil cp` it into output_filename
+    # if it starts with gs://, then we'll `gcloud storage cp` it into output_filename
     # otherwise write the value into output_filename.
 
     # in future, add s3://* or AWS handling here
@@ -751,7 +751,7 @@ fi
 OUTPUT_VALUE=$(cat {rdict} | jq -r '.{jq_el}')
 if [[ "$OUTPUT_VALUE" == gs://* ]]; then
     echo "Copying file from $OUTPUT_VALUE";
-    gsutil cp $OUTPUT_VALUE {output_filename};
+    gcloud storage cp $OUTPUT_VALUE {output_filename};
 else
     # cleaner to directly pipe into file
     cat {rdict} | jq -r '.{jq_el}' > {output_filename}
@@ -798,13 +798,13 @@ def _copy_resource_group_into_batch(
         # wrap this in quotes, because output often contains a '.', which has to be escaped in jq
         jq_els = [f'"{output_source}"[{idx}]' for output_source in rg.values()]
 
-    # activate to gsutil cp
+    # activate to use a gcloud cp
     j.env('GOOGLE_APPLICATION_CREDENTIALS', '/gsa-key/key.json')
     j.command(GCLOUD_ACTIVATE_AUTH)
 
     # this has to be in bash unfortunately :(
     # we want to check that the output we get is a string
-    # if it starts with gs://, then we'll `gsutil cp` it into output_filename
+    # if it starts with gs://, then we'll `gcloud storage cp` it into output_filename
     # otherwise write the value into output_filename.
 
     # in future, add s3://* or AWS handling here
@@ -825,7 +825,7 @@ def _copy_resource_group_into_batch(
         OUTPUT_VALUE=$(cat {rdict} | jq -r '.{jq_el}')
         if [[ "$OUTPUT_VALUE" == gs://* ]]; then
             echo "Copying file from $OUTPUT_VALUE";
-            gsutil cp $OUTPUT_VALUE {output_filename}.{output_name};
+            gcloud storage cp $OUTPUT_VALUE {output_filename}.{output_name};
         else
             # cleaner to directly pipe into file
             cat {rdict} | jq -r '.{jq_el}' > {output_filename}.{output_name};

@@ -555,7 +555,7 @@ function retry_gs_cp {
     dst=/io/batch/${basename $src}
   fi
 
-  retry gsutil -o GSUtil:check_hashes=never cp $src $dst
+  retry gcloud storage cp $src $dst
 }
 """
 
