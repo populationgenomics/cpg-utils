@@ -7,16 +7,17 @@ on:
 jobs:
   package:
     runs-on: ubuntu-latest
-    environment: production
-    defaults:
-      run:
-        shell: bash -l {0}
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
           python-version: "3.10"
+
+      - name: Install prerequisites
+        run: |
+          # Ensure setuptools produces a PEP625-compliant sdist filename
+          pip install --upgrade setuptools
 
       - name: Build
         run: python setup.py sdist
@@ -26,10 +27,27 @@ jobs:
           pip install dist/*
           python -c "import cpg_utils.cloud"
 
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sdist
+          path: dist/*
+          retention-days: 2
+
+  upload_pypi:
+    needs: package
+    runs-on: ubuntu-latest
+    environment: pypi
+
+    permissions:
+      id-token: write
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: sdist
+          path: dist
+
       - name: Publish the wheel to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          user: __token__
-          password: ${{ secrets.PYPI_API_TOKEN }}
-          packages-dir: dist/
           skip-existing: true
