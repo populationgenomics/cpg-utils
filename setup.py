@@ -24,6 +24,7 @@ setup(
         'cloudpathlib[all]',
         'frozendict',
         'google-auth>=1.27.0',
+        'google-cloud-artifact-registry',
         'google-cloud-secret-manager',
         'requests',
         'tabulate',

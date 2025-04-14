@@ -5,7 +5,9 @@ import os
 import re
 import subprocess
 import traceback
-from typing import Any
+import urllib.parse
+from collections import defaultdict
+from typing import Any, NamedTuple
 
 # pylint: disable=no-name-in-module
 import google.api_core.exceptions
@@ -26,7 +28,7 @@ from google.auth._default import (
     _SERVICE_ACCOUNT_TYPE,
 )
 from google.auth.transport import requests
-from google.cloud import secretmanager
+from google.cloud import artifactregistry, secretmanager
 from google.oauth2 import credentials as oauth2_credentials
 from google.oauth2 import service_account
 
@@ -121,6 +123,56 @@ def write_secret(project_id: str, secret_name: str, secret_value: str) -> None:
             and version.name != response.name
         ):
             secret_manager.disable_secret_version(request={'name': version.name})
+
+
+class DockerImage(NamedTuple):
+    name: str
+    uri: str
+    tag_uri: str
+    size: str
+    build_time: str
+
+
+_repo_image_tags: dict[str, defaultdict[str, dict[str, DockerImage]]] = {}
+
+
+def _ensure_image_tags_loaded(project: str, location: str, repository: str) -> None:
+    """Populate _repo_image_tags as a map-of-map-of-maps of 'repository' -> 'imagename' -> 'tag' -> image."""
+    if repository in _repo_image_tags:
+        return
+
+    image_tags: defaultdict[str, dict[str, DockerImage]] = defaultdict(dict)
+
+    request = artifactregistry.ListDockerImagesRequest(
+        parent=f'projects/{project}/locations/{location}/repositories/{repository}',
+        page_size=500,  # Increase efficiency by making fewer requests
+    )
+    for image in artifactregistry.ArtifactRegistryClient().list_docker_images(request):
+        name_and_checksum = image.name.rpartition('/dockerImages/')[2]
+        name = urllib.parse.unquote(name_and_checksum).rpartition('@')[0]
+        base_uri = image.uri.rpartition('@')[0]
+        for tag in image.tags:
+            image_tags[name][tag] = DockerImage(
+                image.name,
+                image.uri,
+                f'{base_uri}@{tag}',
+                image.image_size_bytes,
+                image.build_time,
+            )
+
+    image_tags.default_factory = None
+    _repo_image_tags[repository] = image_tags
+
+
+def find_image(repository: str | None, name: str, version: str) -> DockerImage:
+    """Returns image details or raises ValueError if the image or tag does not exist."""
+    repository = f'images-{repository}' if repository is not None else 'images'
+    _ensure_image_tags_loaded('cpg-common', 'australia-southeast1', repository)
+    try:
+        return _repo_image_tags[repository][name][version]
+    except KeyError as e:
+        message = f'Image {name}:{version} not found in {repository} repository ({e} not found)'
+        raise ValueError(message) from None
 
 
 def get_google_identity_token(
