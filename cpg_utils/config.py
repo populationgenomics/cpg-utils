@@ -474,32 +474,43 @@ def output_path(
     )
 
 
-def image_path(key: str) -> str:
+def image_path(key: str, version: str | list[str] | None = None) -> str:
     """
-    Returns a path to a container image using key in config's "images" section.
+    Returns a path to a container image for the given key (i.e., image name)
+    and version.
 
     Examples
     --------
-    >> image_path('bcftools')
-    'australia-southeast1-docker.pkg.dev/cpg-common/images/bcftools:1.10.2'
-
-    Assuming config structure as follows:
-
-    ```toml
-    [images]
-    bcftools = 'australia-southeast1-docker.pkg.dev/cpg-common/images/bcftools:1.10.2'
-    ```
+    >> image_path('bcftools', '1.16-1')
+    'australia-southeast1-docker.pkg.dev/cpg-common/images/bcftools:1.16-1'
 
     Parameters
     ----------
     key : str
+        Specifies the image name.
+        When `version` is not specified:
         Describes the key within the `images` config section. Can list sections
         separated with '/'.
+
+    version : str or list[str], optional
+        Specifies the desired image version, e.g., '1.18-1', either directly as
+        a version number string or indirectly via a config key list which will
+        be used to retrieve a version number string via `config_retrieve`.
+
+    Using `image_path(key)` without giving `version` is deprecated. In future,
+    specifying it will be required.
 
     Returns
     -------
     str
     """
+    if isinstance(version, list):
+        version = config_retrieve(version)
+
+    if version is not None:
+        images_location = config_retrieve(['infrastructure', 'images_location_format'])
+        return images_location.format(key=key, version=version)
+
     return config_retrieve(['images', *key.strip('/').split('/')])
 
 
