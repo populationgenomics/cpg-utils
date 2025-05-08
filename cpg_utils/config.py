@@ -9,6 +9,7 @@ import toml
 from frozendict import frozendict
 
 from cpg_utils import Path, to_path
+from cpg_utils.cloud import find_image
 
 AR_GUID_NAME = 'ar-guid'
 
@@ -474,33 +475,52 @@ def output_path(
     )
 
 
-def image_path(key: str) -> str:
+def image_path(
+    key: str,
+    version: str | list[str] | None = None,
+    repository: str | None = None,
+) -> str:
     """
-    Returns a path to a container image using key in config's "images" section.
+    Returns a path to a container image for the given key (i.e., image name)
+    and version.
 
     Examples
     --------
-    >> image_path('bcftools')
-    'australia-southeast1-docker.pkg.dev/cpg-common/images/bcftools:1.10.2'
-
-    Assuming config structure as follows:
-
-    ```toml
-    [images]
-    bcftools = 'australia-southeast1-docker.pkg.dev/cpg-common/images/bcftools:1.10.2'
-    ```
+    >> image_path('bcftools', '1.16-1')
+    'australia-southeast1-docker.pkg.dev/cpg-common/images/bcftools:1.16-1'
 
     Parameters
     ----------
     key : str
+        Specifies the image name.
+        When `version` is not specified:
         Describes the key within the `images` config section. Can list sections
         separated with '/'.
+
+    version : str or list[str], optional
+        Specifies the desired image version, e.g., '1.18-1', either directly as
+        a version number string or indirectly via a config key list which will
+        be used to retrieve a version number string via `config_retrieve`.
+
+    repository : str, optional
+        The suffix (e.g., 'dev' for images-dev) of an artifact registry repository
+        to be used instead of the default production images repository.
+
+    Using `image_path(key)` without giving `version` is deprecated. In future,
+    specifying it will be required.
 
     Returns
     -------
     str
     """
-    return config_retrieve(['images', *key.strip('/').split('/')])
+    if version is None:
+        return config_retrieve(['images', *key.strip('/').split('/')])
+
+    if isinstance(version, list):
+        version = config_retrieve(version)
+
+    assert isinstance(version, str)
+    return find_image(repository, key, version).tag_uri
 
 
 def reference_path(key: str) -> str:
