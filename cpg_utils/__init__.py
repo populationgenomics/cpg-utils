@@ -2,6 +2,19 @@
 CPG utils
 """
 
+__all__ = [
+    'cloud',
+    'config',
+    'constants',
+    'cromwell',
+    'cromwell_model',
+    'cloudpath_hail_az',
+    'hail_batch',
+    'git',
+    'membership',
+    'slack',
+]
+
 import pathlib
 
 from cloudpathlib import CloudPath
@@ -20,3 +33,4 @@ Path = CloudPath | pathlib.Path
 # Something like to_path() would look better, so we are aliasing a handy method
 # to_anypath to to_path, which returns exactly the Union type we are looking for:
 to_path = to_anypath
+
