@@ -33,4 +33,3 @@ Path = CloudPath | pathlib.Path
 # Something like to_path() would look better, so we are aliasing a handy method
 # to_anypath to to_path, which returns exactly the Union type we are looking for:
 to_path = to_anypath
-
