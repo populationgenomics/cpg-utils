@@ -1,6 +1,8 @@
 """Convenience functions related to Hail."""
 
 import asyncio
+import base64
+import gzip
 import inspect
 import logging
 import os
@@ -156,6 +158,23 @@ class Batch(hb.Batch):
             toml.dump(dict(get_config()), f)
         set_config_paths([str(config_path)])
 
+    def _pack_attribute(self, key: str, value: str) -> dict[str, str]:
+        """
+        Attributes are stored in a TEXT database field, which is limited to 64K.
+        If necessary, compress the value and annotate the key accordingly.
+        Eventually this may no longer suffice and we will need to split the value
+        across several attributes or similar.
+        """
+        if len(value) <= 10000:  # noqa: PLR2004
+            return {key: value}  # Store short values verbatim
+
+        raw = value.encode()
+        compressed_b64 = base64.standard_b64encode(gzip.compress(raw, compresslevel=9))
+        if len(compressed_b64) > 65535:  # noqa: PLR2004
+            raise ValueError(f'Job attribute {key!r} value is too large')
+
+        return {f'{key}_gzip': compressed_b64.decode('ascii')}
+
     def _process_job_attributes(
         self,
         name: str | None = None,
@@ -175,7 +194,7 @@ class Batch(hb.Batch):
         dataset = attributes.get('dataset')
         sequencing_group = attributes.get('sequencing_group')
         participant_id = attributes.get('participant_id')
-        sequencing_groups: set[str] = set(attributes.get('sequencing_groups') or [])
+        sequencing_groups: set[str] = set(attributes.pop('sequencing_groups', []) or [])
         if sequencing_group:
             sequencing_groups.add(sequencing_group)
         part = attributes.get('part')
@@ -215,7 +234,9 @@ class Batch(hb.Batch):
         self.job_by_tool[tool]['job_n'] += 1
         self.job_by_tool[tool]['sequencing_groups'] |= sequencing_groups
 
-        attributes['sequencing_groups'] = sorted(sequencing_groups)
+        seqgroups_str = str(sorted(sequencing_groups))
+        attributes.update(self._pack_attribute('sequencing_groups', seqgroups_str))
+
         fixed_attrs = {k: str(v) for k, v in attributes.items()}
         return name, fixed_attrs
 
