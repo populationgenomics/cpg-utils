@@ -42,7 +42,7 @@ class CromwellBackend(Enum):
     pipelines_api = 'papi'
 
 
-DEFAULT_BACKEND = CromwellBackend.pipelines_api
+DEFAULT_BACKEND = CromwellBackend.batch
 
 
 class CromwellOutputType:
@@ -643,7 +643,8 @@ def watch_workflow_and_get_output(
         array_length = output.array_length
         if array_length is None:
             # is single
-            j = b.new_job(f'{job_prefix}_collect_{output_name}')
+            j = b.new_bash_job(f'{job_prefix}_collect_{output_name}')
+            j.image(driver_image)
             if output.resource_group:
                 # is single resource group
                 out_file_map[oname] = _copy_resource_group_into_batch(
@@ -660,13 +661,13 @@ def watch_workflow_and_get_output(
                     output_name=output_name,
                     idx=None,
                     copy_file_into_batch=output.copy_file_into_batch,
-                    driver_image=driver_image,
                 )
         else:
             # is array
             outs: list[Resource] = []
             for idx in range(array_length):
-                j = b.new_job(f'{job_prefix}_collect_{output_name}[{idx}]')
+                j = b.new_bash_job(f'{job_prefix}_collect_{output_name}[{idx}]')
+                j.image(driver_image)
                 if output.resource_group:
                     # is array output group
                     outs.append(
@@ -685,7 +686,6 @@ def watch_workflow_and_get_output(
                             output_name=output_name,
                             idx=idx,
                             copy_file_into_batch=output.copy_file_into_batch,
-                            driver_image=driver_image,
                         ),
                     )
 
@@ -701,7 +701,6 @@ def _copy_basic_file_into_batch(
     output_name: str,
     idx: int | None,
     copy_file_into_batch: bool,
-    driver_image: str,
 ) -> Resource:
     """
     1. Take the file-pointer to the dictionary `rdict`,
@@ -725,7 +724,6 @@ def _copy_basic_file_into_batch(
         jq_el = f'"{output_name}"[{idx}]'
 
     # activate to gcloud storage cp
-    j.image(driver_image)
     j.env('GOOGLE_APPLICATION_CREDENTIALS', '/gsa-key/key.json')
     j.command(GCLOUD_ACTIVATE_AUTH)
 
