@@ -155,7 +155,7 @@ def _ensure_image_tags_loaded(project: str, location: str, repository: str) -> N
             image_tags[name][tag] = DockerImage(
                 image.name,
                 image.uri,
-                f'{base_uri}@{tag}',
+                f'{base_uri}:{tag}',
                 image.image_size_bytes,
                 image.build_time,
             )
