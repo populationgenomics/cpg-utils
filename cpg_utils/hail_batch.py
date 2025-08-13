@@ -189,12 +189,16 @@ class Batch(hb.Batch):
 
         self.total_job_num += 1
 
+        # Multiple jobs in the batch might reference the same attributes dict
+        # object. Avoid modifying the dict object (e.g. with pop() or update())
+        # to avoid changing the attributes of subsequently processed jobs.
+
         attributes = attributes or {}
         stage = attributes.get('stage')
         dataset = attributes.get('dataset')
         sequencing_group = attributes.get('sequencing_group')
         participant_id = attributes.get('participant_id')
-        sequencing_groups: set[str] = set(attributes.pop('sequencing_groups', []) or [])
+        sequencing_groups: set[str] = set(attributes.get('sequencing_groups') or [])
         if sequencing_group:
             sequencing_groups.add(sequencing_group)
         part = attributes.get('part')
@@ -234,10 +238,14 @@ class Batch(hb.Batch):
         self.job_by_tool[tool]['job_n'] += 1
         self.job_by_tool[tool]['sequencing_groups'] |= sequencing_groups
 
-        seqgroups_str = str(sorted(sequencing_groups))
-        attributes.update(self._pack_attribute('sequencing_groups', seqgroups_str))
+        # Ensure all the returned attribute values are presented as strings
+        fixed_attrs = {
+            k: str(v) for k, v in attributes.items() if k != 'sequencing_groups'
+        }
 
-        fixed_attrs = {k: str(v) for k, v in attributes.items()}
+        seqgroups_str = str(sorted(sequencing_groups))
+        fixed_attrs.update(self._pack_attribute('sequencing_groups', seqgroups_str))
+
         return name, fixed_attrs
 
     def run(self, **kwargs: Any):
