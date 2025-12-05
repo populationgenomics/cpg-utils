@@ -66,14 +66,21 @@ def send_message(text: str) -> None:
         logging.error(f'Error posting to Slack: {err}')
 
 
-def upload_file(content: bytes, comment: str) -> None:
+def upload_file(
+    content: bytes,
+    comment: str,
+    title: str | None = None,
+    filename: str | None = None,
+) -> None:
     """Uploads `content` to Slack with the given text `comment`, reading credentials from the config."""
     slack_client = _get_slack_sdk().WebClient(token=_get_token())
     try:
-        slack_client.files_upload(
-            channels=_get_channel(),
+        slack_client.files_upload_v2(
+            channel=_get_channel(),
             content=content,
             initial_comment=comment,
+            title=title,
+            filename=filename,
         )
     except _get_slack_sdk().errors.SlackApiError as err:
         logging.error(f'Error posting to Slack: {err}')
