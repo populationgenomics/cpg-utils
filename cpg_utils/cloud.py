@@ -7,13 +7,16 @@ import subprocess
 import traceback
 import urllib.parse
 from collections import defaultdict
+from datetime import datetime
 from typing import Any, NamedTuple
+from zoneinfo import ZoneInfo
 
 # pylint: disable=no-name-in-module
 import google.api_core.exceptions
 import google.auth.transport
 import google.oauth2
 from deprecated import deprecated
+from google.api_core.datetime_helpers import to_milliseconds
 from google.auth import (
     credentials as google_auth_credentials,
 )
@@ -42,6 +45,8 @@ IMPLEMENTED_CREDENTIALS_TYPES = (
     _SERVICE_ACCOUNT_TYPE,
     _EXTERNAL_ACCOUNT_TYPE,
 )
+
+TZ = ZoneInfo('Australia/Sydney')
 
 
 def email_from_id_token(id_token_jwt: str) -> str:
@@ -130,7 +135,7 @@ class DockerImage(NamedTuple):
     uri: str
     tag_uri: str
     size: str
-    build_time: str
+    build_time: datetime
 
 
 _repo_image_tags: dict[str, defaultdict[str, dict[str, DockerImage]]] = {}
@@ -151,17 +156,41 @@ def _ensure_image_tags_loaded(project: str, location: str, repository: str) -> N
         name_and_checksum = image.name.rpartition('/dockerImages/')[2]
         name = urllib.parse.unquote(name_and_checksum).rpartition('@')[0]
         base_uri = image.uri.rpartition('@')[0]
+
+        # digest the Google proto DatetimeWithNanoseconds object into a standard python datetime
+        images_build_time_ms = to_milliseconds(image.build_time)
+        build_datetime = datetime.fromtimestamp(images_build_time_ms // 1000, tz=TZ)
+
         for tag in image.tags:
             image_tags[name][tag] = DockerImage(
                 image.name,
                 image.uri,
                 f'{base_uri}:{tag}',
                 image.image_size_bytes,
-                image.build_time,
+                build_datetime,
             )
 
     image_tags.default_factory = None
     _repo_image_tags[repository] = image_tags
+
+
+def get_tags_for_image(
+    project: str,
+    location: str,
+    repository: str,
+    image: str,
+) -> dict[str, DockerImage]:
+    """
+    Ensure available images are loaded, then request all available tags from a specific image
+    """
+    _ensure_image_tags_loaded(project, location, repository)
+    if repository not in _repo_image_tags:
+        raise ValueError(
+            f'repository "{repository}" is not available in the collected tags.',
+        )
+    if image not in _repo_image_tags[repository]:
+        raise ValueError(f'image "{image}" is not available in the collected tags.')
+    return _repo_image_tags[repository][image]
 
 
 def find_image(repository: str | None, name: str, version: str) -> DockerImage:
