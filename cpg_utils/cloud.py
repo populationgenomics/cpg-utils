@@ -134,7 +134,7 @@ class DockerImage(NamedTuple):
     name: str
     uri: str
     tag_uri: str
-    size: str
+    size: int
     build_time: datetime
 
 
