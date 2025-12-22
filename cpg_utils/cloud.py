@@ -9,7 +9,6 @@ import urllib.parse
 from collections import defaultdict
 from datetime import datetime
 from typing import Any, NamedTuple
-from zoneinfo import ZoneInfo
 
 # pylint: disable=no-name-in-module
 import google.api_core.exceptions
@@ -34,6 +33,7 @@ from google.auth.transport import requests
 from google.cloud import artifactregistry, secretmanager
 from google.oauth2 import credentials as oauth2_credentials
 from google.oauth2 import service_account
+from zoneinfo import ZoneInfo
 
 _CLOUD_SDK_MISSING_CREDENTIALS = """\
 Your default credentials were not found. To set up Application Default Credentials, \
