@@ -523,7 +523,7 @@ def image_path(
     return find_image(repository, key, version).tag_uri
 
 
-def reference_path(key: str) -> str:
+def reference_path(key: str, default: Any | None = UnsuppliedDefault,) -> str:
     """
     Returns a path to a reference resource using key in config's "references" section.
 
@@ -548,12 +548,14 @@ def reference_path(key: str) -> str:
     key : str
         Describes the key within the `references` config section. Can list sections
         separated with '/'.
+    default : Any | None
+        Forwarded to config_retrieve, if the requested content is unavailable, return the default
 
     Returns
     -------
     str
     """
-    return config_retrieve(['references', *key.strip('/').split('/')])
+    return config_retrieve(['references', *key.strip('/').split('/')], default=default)
 
 
 def genome_build() -> str:
