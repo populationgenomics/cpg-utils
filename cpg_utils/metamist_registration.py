@@ -37,7 +37,6 @@ import argparse
 import json
 import sys
 
-from collections import defaultdict
 from typing import TypeAlias
 
 from metamist import graphql
@@ -49,23 +48,21 @@ RecursiveDict: TypeAlias = dict[str, 'str | RecursiveDict']
 def create_output_block(primary: str, type: str, secondary: list[str]) -> RecursiveDict:
     """Populates the output dict based on the provided arguments."""
 
-    # create the outputs dictionary
+    # create the outputs dictionary, with the primary file's full path at the root
     outputs: RecursiveDict = {
-        type: {
-            'basename': primary,
-        },
+        'basename': primary,
     }
 
     # take the list of key=value strings, snap'em, and add each to the secondary files list
     if secondary:
-        secondary_kv = defaultdict(dict)
+        secondary_kv: RecursiveDict = {}
         for keyvaluepair in secondary:
             key, value = keyvaluepair.split('=')
             secondary_kv[key] = {
                 'basename': value,
             }
 
-        outputs[type]['secondary_files'] = secondary_kv
+        outputs['secondary_files'] = secondary_kv
 
     return outputs
 
@@ -95,7 +92,7 @@ def main():
                 id
                 type
                 status
-                output
+                outputs
                 active
             }
         }
@@ -113,7 +110,6 @@ def main():
         'analysis': {
             'type': args.type,
             'status': 'COMPLETED',
-            'output': args.output,
             'outputs': outputs,
             'meta': {}
         }
