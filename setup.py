@@ -27,6 +27,7 @@ setup(
         'google-auth-oauthlib',
         'google-cloud-artifact-registry',
         'google-cloud-secret-manager',
+        'metamist',
         'requests',
         'tabulate',
         'toml',
