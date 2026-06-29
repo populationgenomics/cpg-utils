@@ -224,14 +224,13 @@ def create_new(
     if dry:
         print('DRY RUN, would have POSTed the following analysis data:')
         print(json.dumps(variables, indent=2))
-        sys.exit(0)
-
-    try:
-        result = graphql.query(UPDATE_QUERY, variables)
-        print(f'Successfully recorded analysis to Metamist: {result}')
-    except exceptions.ApiException as e:
-        print(f'Error executing GraphQL query: {e}', file=sys.stderr)
-        sys.exit(1)
+    else:
+        try:
+            result = graphql.query(UPDATE_QUERY, variables)
+            print(f'Successfully recorded analysis to Metamist: {result}')
+        except exceptions.ApiException as e:
+            print(f'Error executing GraphQL query: {e}', file=sys.stderr)
+            raise e
 
 
 if __name__ == '__main__':
