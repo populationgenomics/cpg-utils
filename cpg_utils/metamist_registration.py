@@ -50,6 +50,7 @@ import argparse  # noqa: I001
 import json
 import sys
 
+from cpg_utils.existence_checks import exists
 from metamist import exceptions, graphql
 
 
@@ -89,6 +90,17 @@ def parse_cli_kv(input_kv: list[str]) -> dict[str, str]:
             raise ValueError(f'Duplicate key provided: {key}')
         broken_kv[key] = value
     return broken_kv
+
+
+def find_missing_files(primary: str, secondary: dict[str, str]) -> set[str]:
+    """For the primary and secondary files, detect if any are missing. Return all missing Paths."""
+    missing_files: set[str] = set()
+    if not exists(primary):
+        missing_files.add(primary)
+    for filepath in secondary.values():
+        if not exists(filepath):
+            missing_files.add(filepath)
+    return missing_files
 
 
 def create_output_block(
@@ -199,10 +211,20 @@ def create_new(
     """
     # fail if the cohorts and sgs are both applied, or if neither is applied
     if cohorts and sgs:
-        raise Exception('Cannot specify both --cohorts and --sgs')
+        raise ValueError(
+            'Cannot specify both --cohorts and --sgs CLI parameters for a single Analysis.',
+        )
 
     if not (cohorts or sgs):
-        raise Exception('Must specify either --cohorts or --sgs')
+        raise ValueError(
+            'You must specify either --cohorts or --sgs for a single Analysis object.',
+        )
+
+    if missing_files := find_missing_files(primary=output, secondary=secondary or {}):
+        missing_file_string = ', '.join(sorted(missing_files))
+        raise ValueError(
+            f'Missing files detected: {missing_file_string}.\nThis can only be used for extant files.',
+        )
 
     outputs = create_output_block(
         primary=output,
