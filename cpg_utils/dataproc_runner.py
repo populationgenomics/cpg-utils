@@ -42,6 +42,9 @@ from typing import Any
 from google.api_core import exceptions as gax_exceptions
 from google.cloud import dataproc_v1, storage
 
+from cpg_utils.string_manipulation import slugify
+
+
 DEFAULT_HAIL_VERSION = '0.2.138'
 DEFAULT_HAIL_IMAGE = '2.2-debian12'
 DEFAULT_MASTER_TYPE = 'n1-highmem-4'
@@ -137,7 +140,7 @@ def unique_cluster_name(name: str) -> str:
     'my-cluster-1'
     """
     # sanitised name, truncated to 42 chars - the hyphen and uuid add 9 chars, for a 51-char dataproc max length name
-    sanitised_name = sanitise_gcp_string(name, pattern=_CLUSTER_INVALID, max_len=42)
+    sanitised_name = slugify(name, pattern=_CLUSTER_INVALID, max_len=42)
     if not sanitised_name[0].isalpha():
         raise ValueError(
             f'Invalid cluster name: {sanitised_name} - must start with a lowercase letter.',
@@ -165,8 +168,8 @@ def sanitise_labels(labels: dict[str, str]) -> dict[str, str]:
     """
     result: dict[str, str] = {}
     for raw_key, raw_value in labels.items():
-        key = sanitise_gcp_string(raw_key)
-        value = sanitise_gcp_string(str(raw_value))
+        key = slugify(raw_key, pattern=_LABEL_INVALID, max_len=63)
+        value = slugify(str(raw_value), pattern=_LABEL_INVALID)
         if not key or not key[0].isalpha():
             print(
                 f'Skipping label with invalid key {raw_key!r} '
