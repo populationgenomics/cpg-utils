@@ -1,9 +1,10 @@
-"""Direct Dataproc client wrapper for running Hail jobs on ephemeral clusters.
+"""
+Dataproc client wrapper for running Hail jobs on ephemeral clusters.
 
-This is the lower-level counterpart to :mod:`cpg_utils.dataproc`: instead of
-wrapping the cluster lifecycle inside a Hail Batch driver job, it drives the
-Dataproc REST API directly. It is intended for orchestrators (e.g. Nextflow)
-that need to submit one or more Hail PySpark scripts to a shared ephemeral
+This is a non-Hail alternative to`cpg_utils.dataproc`.
+Instead of wrapping the cluster lifecycle inside a Hail Batch driver job and using hailctl, to manate, it uses the
+Dataproc REST API directly via the google-cloud-dataproc library.
+It is intended for orchestrators (e.g. Nextflow) that need to submit one or more Hail PySpark scripts to an ephemeral
 cluster and tear it down when done.
 
 Typical usage::
@@ -35,9 +36,11 @@ import sys
 import threading
 import time
 import uuid
+from enum import unique
 from types import FrameType, TracebackType
 from typing import Any
 
+from google.api_core import exceptions as gax_exceptions
 from google.cloud import dataproc_v1, storage
 
 DEFAULT_HAIL_VERSION = '0.2.138'
@@ -64,54 +67,77 @@ _CLUSTER_INVALID = re.compile(r'[^a-z0-9-]')
 _TERMINAL_ERROR_STATES = frozenset({'ERROR', 'CANCELLED'})
 
 
-def sanitize_gcp_string(
+class DataprocJobError(RuntimeError):
+    """Raised when a Dataproc job reaches a non-``DONE`` terminal state.
+
+    The failing :class:`~google.cloud.dataproc_v1.Job` is exposed on ``.job``
+    and its terminal state name (``'ERROR'`` / ``'CANCELLED'``) on ``.state``,
+    so callers that need to inspect the failure can do so without re-fetching.
+    """
+
+    def __init__(self, job: dataproc_v1.Job, state: str) -> None:
+        details = job.status.details or 'No details available'
+        super().__init__(
+            f'Dataproc job {job.reference.job_id} failed with state '
+            f'{state}: {details}',
+        )
+        self.job = job
+        self.state = state
+
+
+def sanitise_gcp_string(
     s: str,
     *,
     pattern: re.Pattern[str] = _LABEL_INVALID,
+    max_len: int = 63
 ) -> str:
-    """Coerce ``s`` into a valid GCP label key/value.
-
-    Lowercases, substitutes disallowed characters with ``-``, and truncates to
-    63 characters. The default ``pattern`` allows underscores (for label
-    keys/values); pass :data:`_CLUSTER_INVALID` for the stricter cluster-name
-    rules via :func:`sanitize_cluster_name`.
-
-    >>> sanitize_gcp_string('My Cool Label')
-    'my-cool-label'
-    >>> sanitize_gcp_string('foo_bar-123')
-    'foo_bar-123'
-    >>> len(sanitize_gcp_string('X' * 200))
-    63
     """
-    return pattern.sub('-', s.lower())[:63]
+    Coerce ``s`` into a valid GCP label key/value.
+
+    Lowercases, substitutes disallowed characters with ``-``, and truncates to max_len characters.
+    The default pattern allows underscores (for label keys/values)
+    Use the alternative pattern `_CLUSTER_INVALID` for the stricter dataproc cluster-name rules.
+
+    >>> sanitise_gcp_string('My Cool Label')
+    'my-cool-label'
+    >>> sanitise_gcp_string('foo_bar-123')
+    'foo_bar-123'
+    >>> len(sanitise_gcp_string('X' * 200))
+    63
+    >>> len(sanitise_gcp_string('X' * 200, max_len=2))
+    2
+    """
+    return pattern.sub('-', s.lower())[:max_len]
 
 
-def sanitize_cluster_name(name: str) -> str:
-    """Sanitize ``name`` for use as a Dataproc cluster name.
+def unique_cluster_name(name: str) -> str:
+    """sanitise ``name`` for use as a Dataproc cluster name.
 
     Cluster names are stricter than labels: they cannot contain underscores.
 
-    >>> sanitize_cluster_name('My_Cluster_1')
+    >>> unique_cluster_name('My_Cluster_1')
     'my-cluster-1'
     """
-    return sanitize_gcp_string(name, pattern=_CLUSTER_INVALID)
+    # sanitised name, truncated to 42 chars - the hyphen and uuid add 9 chars, for a 51-char dataproc max length name
+    sanitised_name = sanitise_gcp_string(name, pattern=_CLUSTER_INVALID, max_len=42)
+    return f'{sanitised_name}-{uuid.uuid4().hex[:8]}'
 
 
-def sanitize_labels(labels: dict[str, str]) -> dict[str, str]:
+def sanitise_labels(labels: dict[str, str]) -> dict[str, str]:
     """Return a copy of ``labels`` with keys and values sanitised for GCP.
 
     Entries whose key does not start with a lowercase letter after sanitisation
     are dropped with a warning to stderr, matching the GCP label constraints.
 
-    >>> sanitize_labels({'AR-GUID': 'Abc123', 'Bad Key!': 'x'})
+    >>> sanitise_labels({'AR-GUID': 'Abc123', 'Bad Key!': 'x'})
     {'ar-guid': 'abc123', 'bad-key-': 'x'}
-    >>> sanitize_labels({'1nvalid': 'x'})
+    >>> sanitise_labels({'1nvalid': 'x'})
     {}
     """
     result: dict[str, str] = {}
     for raw_key, raw_value in labels.items():
-        key = sanitize_gcp_string(raw_key)
-        value = sanitize_gcp_string(str(raw_value))
+        key = sanitise_gcp_string(raw_key)
+        value = sanitise_gcp_string(str(raw_value))
         if not key or not key[0].isalpha():
             print(
                 f'Skipping label with invalid key {raw_key!r} '
@@ -141,7 +167,7 @@ def parse_label_kvs(items: list[str]) -> dict[str, str]:
             continue
         key, value = item.split('=', 1)
         parsed[key] = value
-    return sanitize_labels(parsed)
+    return sanitise_labels(parsed)
 
 
 def resolve_autoscaling_policy_uri(
@@ -154,10 +180,10 @@ def resolve_autoscaling_policy_uri(
     Accepts either a bare policy ID or an already-qualified
     ``projects/.../autoscalingPolicies/...`` URI.
 
-    >>> resolve_autoscaling_policy_uri('proj', 'us-central1', 'my-policy')
-    'projects/proj/regions/us-central1/autoscalingPolicies/my-policy'
+    >>> resolve_autoscaling_policy_uri('proj', 'australia-southeast1', 'my-policy')
+    'projects/proj/regions/australia-southeast1/autoscalingPolicies/my-policy'
     >>> resolve_autoscaling_policy_uri(
-    ...     'proj', 'us-central1',
+    ...     'proj', 'australia-southeast1',
     ...     'projects/other/regions/eu/autoscalingPolicies/foo',
     ... )
     'projects/other/regions/eu/autoscalingPolicies/foo'
@@ -173,10 +199,11 @@ def upload_to_gcs(
     prefix: str = '',
     storage_client: storage.Client | None = None,
 ) -> str:
-    """Upload ``local_path`` to ``<bucket>/<prefix>/<basename>``; return the ``gs://`` URI.
+    """
+    Upload a file `local_path` to `<bucket>/<prefix>/<basename>` - return the ``gs://`` URI.
 
-    ``bucket`` may be either ``gs://bucket-name`` or ``bucket-name``. Passing an
-    empty ``prefix`` uploads to the bucket root.
+    `bucket` may be either `gs://bucket-name` or `bucket-name`.
+    Passing an empty `prefix` uploads to the bucket root.
     """
     client = storage_client or storage.Client()
     bucket_name = bucket.removeprefix('gs://').rstrip('/')
@@ -234,7 +261,7 @@ class HailDataprocCluster:
         self._project = project
         self._region = region
         self._staging_bucket = staging_bucket.rstrip('/')
-        self._temp_bucket = temp_bucket
+        self._temp_bucket = temp_bucket.rstrip('/')
         self._master_type = master_type
         self._worker_type = worker_type
         self._num_workers = num_workers
@@ -245,16 +272,15 @@ class HailDataprocCluster:
         self._hail_image = hail_image
         self._boot_disk_size_gb = boot_disk_size_gb
         self._init_timeout_seconds = init_timeout_seconds
-        self._labels = sanitize_labels(labels or {})
+        self._labels = sanitise_labels(labels or {})
         self._policy_uri: str | None = (
             resolve_autoscaling_policy_uri(project, region, autoscaling_policy)
             if autoscaling_policy
             else None
         )
 
-        clean_prefix = sanitize_cluster_name(cluster_name_prefix)
+        self._name = unique_cluster_name(cluster_name_prefix)
         # 8 hex chars of uniqueness; keeps the total name well under the 51-char limit.
-        self._name = f'{clean_prefix}-{uuid.uuid4().hex[:8]}'
 
         endpoint = f'{region}-dataproc.googleapis.com:443'
         self._cluster_client = cluster_client or dataproc_v1.ClusterControllerClient(
@@ -469,9 +495,12 @@ class HailDataprocCluster:
     ) -> dataproc_v1.Job:
         """Poll ``job_id`` until it reaches a terminal state; return the final Job.
 
-        When ``stream_logs`` is true (the default), the job's driver stdout is
-        streamed to this process's stdout in a background thread so logs appear
-        in orchestrators like Seqera in near-real time.
+        Raises :class:`DataprocJobError` if the job reaches ``ERROR`` or
+        ``CANCELLED`` instead of ``DONE``. When ``stream_logs`` is true (the
+        default), the job's driver stdout is streamed to this process's stdout
+        in a background thread so logs appear in orchestrators like Seqera in
+        near-real time; the log-streaming thread is stopped in either exit
+        path.
         """
         stop_event = threading.Event()
         log_thread: threading.Thread | None = None
@@ -508,6 +537,8 @@ class HailDataprocCluster:
         """Submit a job and wait for it to reach a terminal state.
 
         Convenience wrapper over :meth:`submit_job` + :meth:`wait_for_job`.
+        Raises :class:`DataprocJobError` on non-success terminal states so
+        orchestrator scripts propagate a non-zero exit on failure.
         """
         job_id = self.submit_job(
             script_uri,
@@ -578,6 +609,23 @@ def install_sigterm_cleanup(cluster: HailDataprocCluster) -> None:
     signal.signal(signal.SIGTERM, handler)
 
 
+def _tail_blob_to_stdout(blob: storage.Blob, offset: int) -> int:
+    """Write any bytes beyond ``offset`` in ``blob`` to stdout; return new offset.
+
+    Uses a metadata reload + range download so we transfer only the new bytes
+    each tick. Raises :class:`google.api_core.exceptions.NotFound` if the blob
+    doesn't exist yet — the caller decides whether to keep polling.
+    """
+    blob.reload()
+    size = blob.size or 0
+    if size <= offset:
+        return offset
+    chunk = blob.download_as_bytes(start=offset, end=size)
+    sys.stdout.write(chunk.decode('utf-8', errors='replace'))
+    sys.stdout.flush()
+    return size
+
+
 def _stream_driver_logs(
     job_client: dataproc_v1.JobControllerClient,
     storage_client: storage.Client,
@@ -620,16 +668,20 @@ def _stream_driver_logs(
             bucket_name, blob_prefix = path.split('/', 1)
             bucket = storage_client.bucket(bucket_name)
             blob = bucket.blob(f'{blob_prefix}.{file_index:09d}')
-            if blob.exists():
-                content = blob.download_as_bytes()
-                if len(content) > offset:
-                    sys.stdout.write(
-                        content[offset:].decode('utf-8', errors='replace'),
-                    )
-                    sys.stdout.flush()
-                    offset = len(content)
+            try:
+                offset = _tail_blob_to_stdout(blob, offset)
+            except gax_exceptions.NotFound:
+                # Current-index blob hasn't been created yet; try again next tick.
+                pass
+            else:
                 next_blob = bucket.blob(f'{blob_prefix}.{file_index + 1:09d}')
                 if next_blob.exists():
+                    # One final range-read of the current file: Dataproc may have
+                    # appended bytes between our last download and the roll.
+                    try:
+                        offset = _tail_blob_to_stdout(blob, offset)
+                    except gax_exceptions.NotFound:
+                        pass
                     print(
                         f'[log-stream] rolling to output file {file_index + 1}',
                         flush=True,
@@ -652,7 +704,13 @@ def _poll_job(
     max_interval: float = DEFAULT_JOB_POLL_MAX_SECONDS,
     backoff: float = DEFAULT_JOB_POLL_BACKOFF,
 ) -> dataproc_v1.Job:
-    """Poll ``job_id`` until it reaches a terminal state; return the final Job."""
+    """Poll ``job_id`` until it reaches a terminal state.
+
+    Returns the final :class:`~google.cloud.dataproc_v1.Job` on success
+    (``DONE``); raises :class:`DataprocJobError` for non-success terminal
+    states (``ERROR``, ``CANCELLED``) so orchestrators propagate a non-zero
+    exit rather than silently continuing.
+    """
     poll_interval = initial_interval
     while True:
         job = job_client.get_job(
@@ -660,9 +718,7 @@ def _poll_job(
         )
         state = dataproc_v1.JobStatus.State(job.status.state).name
         if state in _TERMINAL_ERROR_STATES:
-            details = job.status.details or 'No details available'
-            print(f'Job {job_id} failed with state {state}: {details}')
-            return job
+            raise DataprocJobError(job, state)
         if state == 'DONE':
             print(f'Job {job_id} completed successfully.')
             return job
