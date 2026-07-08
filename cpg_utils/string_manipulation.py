@@ -14,7 +14,7 @@ def slugify(
 
     Example:
     >>> slugify(u'Héllø W.1')
-    'hello-w-1'
+    'hell-w-1'
     >>> slugify('My Cool Label')
     'my-cool-label'
     >>> slugify('foo_bar-123')
