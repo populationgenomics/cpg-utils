@@ -139,7 +139,9 @@ def unique_cluster_name(name: str) -> str:
     # sanitised name, truncated to 42 chars - the hyphen and uuid add 9 chars, for a 51-char dataproc max length name
     sanitised_name = sanitise_gcp_string(name, pattern=_CLUSTER_INVALID, max_len=42)
     if not sanitised_name[0].isalpha():
-        raise ValueError(f'Invalid cluster name: {sanitised_name} - must start with a lowercase letter.')
+        raise ValueError(
+            f'Invalid cluster name: {sanitised_name} - must start with a lowercase letter.',
+        )
 
     return f'{sanitised_name}-{uuid.uuid4().hex[:8]}'
 

@@ -48,7 +48,6 @@ cpg = [
     "analysis_runner",
     "cpg_infra",
     "cpg_utils",
-    "cpg_workflows",
     "gnomad",
     "hail_scripts",
     "metamist",

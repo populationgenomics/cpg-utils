@@ -1,10 +1,10 @@
 import unittest
 from unittest.mock import MagicMock
 
-from cpg_utils.dataproc_runner import DEFAULT_HAIL_VERSION, HailDataprocCluster
+from cpg_utils.dataproc_runner import HailDataprocCluster
 
 
-def _make_cluster(**kwargs) -> HailDataprocCluster:
+def _make_cluster(**kwargs) -> HailDataprocCluster:  # noqa: ANN003
     return HailDataprocCluster(
         project='test-project',
         region='australia-southeast1',
@@ -34,9 +34,15 @@ class TestDataprocRunnerPackages(unittest.TestCase):
     def test_empty_pkgs(self):
         cluster = _make_cluster(packages=[])
         config = cluster._build_cluster_config()
-        self.assertEqual(config['config']['gce_cluster_config']['metadata'].get('PKGS'), None)
+        self.assertEqual(
+            config['config']['gce_cluster_config']['metadata'].get('PKGS'),
+            None,
+        )
 
     def test_null_pkgs(self):
         cluster = _make_cluster(packages=None)
         config = cluster._build_cluster_config()
-        self.assertEqual(config['config']['gce_cluster_config']['metadata']['PKGS'], 'cpg-utils')
+        self.assertEqual(
+            config['config']['gce_cluster_config']['metadata']['PKGS'],
+            'cpg-utils',
+        )
