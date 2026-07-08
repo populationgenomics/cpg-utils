@@ -53,3 +53,7 @@ cpg = [
     "hail_scripts",
     "metamist",
 ]
+
+[tool.pytest.ini_options]
+addopts = "--doctest-modules"
+testpaths = ["test", "cpg_utils"]

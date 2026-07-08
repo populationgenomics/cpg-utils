@@ -132,11 +132,15 @@ def unique_cluster_name(name: str) -> str:
     Returns:
         A sanitised name with a unique eight-character hex suffix.
 
-    >>> unique_cluster_name('My_Cluster_1')
+    (full result cannot be doctested due to the unique component)
+    >>> unique_cluster_name('My_Cluster_1')[:12]
     'my-cluster-1'
     """
     # sanitised name, truncated to 42 chars - the hyphen and uuid add 9 chars, for a 51-char dataproc max length name
     sanitised_name = sanitise_gcp_string(name, pattern=_CLUSTER_INVALID, max_len=42)
+    if not sanitised_name[0].isalpha():
+        raise ValueError(f'Invalid cluster name: {sanitised_name} - must start with a lowercase letter.')
+
     return f'{sanitised_name}-{uuid.uuid4().hex[:8]}'
 
 
@@ -313,11 +317,7 @@ class HailDataprocCluster:
         self._max_age_seconds = max_age_seconds
         self._hail_version = hail_version
         self._hail_image = hail_image
-        self._packages = (
-            list(packages)
-            if packages is not None
-            else ['cpg_utils', f'hail=={hail_version}']
-        )
+        self._packages = list(packages) if packages is not None else ['cpg-utils']
         self._boot_disk_size_gb = boot_disk_size_gb
         self._init_timeout_seconds = init_timeout_seconds
         self._labels = sanitise_labels(labels or {})
@@ -396,8 +396,11 @@ class HailDataprocCluster:
                 'cluster': cluster_config,
             },
         )
-        self._cluster = operation.result()
+        # set started = True before launching. If the cluster times out during the creation it can enter an error state
+        # by setting started=True early, any failures will be caught and managed by the context handler
+        # ERROR state dataproc clusters need to be deleted manually, the idle TTL does not apply
         self._started = True
+        self._cluster = operation.result()
         print(f"Cluster '{self._name}' created successfully.")
         return self._cluster
 
@@ -511,11 +514,11 @@ class HailDataprocCluster:
         file_uris: list[str] | None = None,
         properties: dict[str, str] | None = None,
     ) -> str:
-        """Submit a PySpark job to the cluster and return the Dataproc job id.
+        """
+        Submit a PySpark job to the cluster and return the Dataproc job id.
 
-        Starts the cluster first if it has not been started. The cluster is
-        not shut down after the job completes. Call shutdown or use the
-        context manager when all jobs are done.
+        Starts the cluster first if it has not been started. The cluster is not shut down after the job completes.
+        Call shutdown or use the context manager when all jobs are done.
 
         Args:
             script_uri: gs:// URI of the main Python script to run.
@@ -565,12 +568,12 @@ class HailDataprocCluster:
         *,
         stream_logs: bool = True,
     ) -> dataproc_v1.Job:
-        """Poll a submitted job until it reaches a terminal state.
+        """
+        Poll a submitted job until it reaches a terminal state.
 
-        When stream_logs is true, the job driver stdout is streamed to this
-        process on a background thread so logs appear in orchestrators like
-        Seqera in near-real time. The streaming thread is stopped whether the
-        poll returns normally or raises.
+        When stream_logs is true, the job driver stdout is streamed to this process on a background thread
+        so logs appear in orchestrators like Seqera in near-real time.
+        The streaming thread is stopped whether the poll returns normally or raises.
 
         Args:
             job_id: The Dataproc job id returned by submit_job.
@@ -727,7 +730,7 @@ def _tail_blob_to_stdout(blob: storage.Blob, offset: int) -> int:
     size = blob.size or 0
     if size <= offset:
         return offset
-    chunk = blob.download_as_bytes(start=offset, end=size)
+    chunk = blob.download_as_bytes(start=offset, end=size - 1)
     sys.stdout.write(chunk.decode('utf-8', errors='replace'))
     sys.stdout.flush()
     return size

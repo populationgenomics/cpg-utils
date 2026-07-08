@@ -26,7 +26,7 @@ class HailAzureBlobPath(AzureBlobPath):
     >>> CloudPath('hail-az://myaccount/mycontainer/tmp')
     HailAzureBlobPath('hail-az://myaccount/mycontainer/tmp')
     >>> CloudPath('https://myaccount.blob.core.windows.net/mycontainer/tmp')
-    HailAzureBlobPath('hail-az://myaccount/mycontainer/tmp')
+    HttpsPath('https://myaccount.blob.core.windows.net/mycontainer/tmp')
     """
 
     cloud_prefix: str = 'hail-az://'
