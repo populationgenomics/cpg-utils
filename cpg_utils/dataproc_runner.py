@@ -29,20 +29,18 @@ Example:
 """
 
 import os
-import re
 import signal
 import sys
 import threading
 import time
 import uuid
 from contextlib import suppress
-from slugify import slugify
 from types import FrameType, TracebackType
 from typing import Any
 
 from google.api_core import exceptions as gax_exceptions
 from google.cloud import dataproc_v1, storage
-
+from slugify import slugify
 
 DEFAULT_HAIL_VERSION = '0.2.138'
 DEFAULT_HAIL_IMAGE = '2.2-debian12'
@@ -61,9 +59,9 @@ DEFAULT_JOB_POLL_BACKOFF = 1.5
 
 # GCP label keys/values: lowercase letters, digits, underscore, hyphen; <=63 chars.
 # Keys must start with a lowercase letter. values may be empty.
-_KEY_VALUE_INVALID = re.compile(r'[^a-z0-9_-]')
+_KEY_VALUE_INVALID = r'[^a-z0-9_-]'
 # Cluster names are stricter: no underscores allowed, max length 52 chars.
-_CLUSTER_INVALID = re.compile(r'[^a-z0-9-]')
+_CLUSTER_INVALID = r'[^a-z0-9-]'
 
 _TERMINAL_ERROR_STATES = frozenset({'ERROR', 'CANCELLED'})
 

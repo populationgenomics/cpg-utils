@@ -1,8 +1,13 @@
-import pytest
 import unittest
 from unittest.mock import MagicMock
 
-from cpg_utils.dataproc_runner import HailDataprocCluster, parse_label_kvs
+import pytest
+
+from cpg_utils.dataproc_runner import (
+    HailDataprocCluster,
+    parse_label_kvs,
+    sanitise_labels,
+)
 
 
 def _make_cluster(**kwargs) -> HailDataprocCluster:  # noqa: ANN003
@@ -48,16 +53,39 @@ class TestDataprocRunnerPackages(unittest.TestCase):
             'cpg-utils',
         )
 
+
 def test_good_keys():
     kv_pairs = ['good=key', 'also=good']
     assert parse_label_kvs(kv_pairs) == {'good': 'key', 'also': 'good'}
+
 
 def test_missing_equals_keys():
     kv_pairs = ['good=key', 'bad']
     with pytest.raises(ValueError) as ve:
         parse_label_kvs(kv_pairs)
-    assert 'One or more key=value parameters did not contain an equals character, so they could' in str(ve.value)
+    assert (
+        'One or more key=value parameters did not contain an equals character, so they could'
+        in str(ve.value)
+    )
+
 
 def test_key_sanitation():
     kv_pairs = ['good=key', 'also=good', r'what\'s_this!=#ARGH#']
-    assert parse_label_kvs(kv_pairs) == {'good': 'key', 'also': 'good', 'what-s_this': 'argh'}
+    assert parse_label_kvs(kv_pairs) == {
+        'good': 'key',
+        'also': 'good',
+        'what-s_this': 'argh',
+    }
+
+
+def test_sanitise_labels_good():
+    assert sanitise_labels({'AR-GUID': 'Abc123', 'Bad Key!': 'x'}) == {
+        'ar-guid': 'abc123',
+        'bad-key': 'x',
+    }
+
+
+def test_sanitise_labels_bad():
+    with pytest.raises(ValueError) as ve:
+        sanitise_labels({'1AR-GUID': 'Abc123'})
+    assert "Failures: {'1ar-guid': 'abc123'}" in str(ve.value)
