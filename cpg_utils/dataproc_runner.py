@@ -41,8 +41,7 @@ from typing import Any
 
 from google.api_core import exceptions as gax_exceptions
 from google.cloud import dataproc_v1, storage
-
-from cpg_utils.string_manipulation import slugify
+from slugify import slugify
 
 
 DEFAULT_HAIL_VERSION = '0.2.138'
@@ -61,9 +60,9 @@ DEFAULT_JOB_POLL_MAX_SECONDS = 60.0
 DEFAULT_JOB_POLL_BACKOFF = 1.5
 
 # GCP label keys/values: lowercase letters, digits, underscore, hyphen; <=63 chars.
-# Keys must start with a lowercase letter; values may be empty.
-_LABEL_INVALID = re.compile(r'[^a-z0-9_-]')
-# Cluster names are stricter: no underscores allowed.
+# Keys must start with a lowercase letter. values may be empty.
+_KEY_VALUE_INVALID = re.compile(r'[^a-z0-9_-]')
+# Cluster names are stricter: no underscores allowed, max length 52 chars.
 _CLUSTER_INVALID = re.compile(r'[^a-z0-9-]')
 
 _TERMINAL_ERROR_STATES = frozenset({'ERROR', 'CANCELLED'})
@@ -87,40 +86,6 @@ class DataprocJobError(RuntimeError):
         self.state = state
 
 
-def sanitise_gcp_string(
-    s: str,
-    *,
-    pattern: re.Pattern[str] = _LABEL_INVALID,
-    max_len: int = 63,
-) -> str:
-    """Coerce a string into a valid GCP label key or value.
-
-    Lowercases the input, replaces any character matched by pattern with a
-    hyphen, and truncates to max_len characters. The default pattern allows
-    underscores as required for label keys and values. Pass the stricter
-    _CLUSTER_INVALID pattern for Dataproc cluster names, which disallow
-    underscores.
-
-    Args:
-        s: The string to sanitise.
-        pattern: Compiled regex matching characters to replace with a hyphen.
-        max_len: Maximum length of the returned string.
-
-    Returns:
-        The sanitised string, no longer than max_len characters.
-
-    >>> sanitise_gcp_string('My Cool Label')
-    'my-cool-label'
-    >>> sanitise_gcp_string('foo_bar-123')
-    'foo_bar-123'
-    >>> len(sanitise_gcp_string('X' * 200))
-    63
-    >>> len(sanitise_gcp_string('X' * 200, max_len=2))
-    2
-    """
-    return pattern.sub('-', s.lower())[:max_len]
-
-
 def unique_cluster_name(name: str) -> str:
     """Build a unique Dataproc cluster name from a prefix.
 
@@ -140,7 +105,7 @@ def unique_cluster_name(name: str) -> str:
     'my-cluster-1'
     """
     # sanitised name, truncated to 42 chars - the hyphen and uuid add 9 chars, for a 51-char dataproc max length name
-    sanitised_name = slugify(name, pattern=_CLUSTER_INVALID, max_len=42)
+    sanitised_name = slugify(name, regex_pattern=_CLUSTER_INVALID, max_length=42)
     if not sanitised_name[0].isalpha():
         raise ValueError(
             f'Invalid cluster name: {sanitised_name} - must start with a lowercase letter.',
@@ -162,22 +127,27 @@ def sanitise_labels(labels: dict[str, str]) -> dict[str, str]:
         A new dictionary containing only the valid sanitised entries.
 
     >>> sanitise_labels({'AR-GUID': 'Abc123', 'Bad Key!': 'x'})
-    {'ar-guid': 'abc123', 'bad-key-': 'x'}
-    >>> sanitise_labels({'1nvalid': 'x'})
-    {}
+    {'ar-guid': 'abc123', 'bad-key': 'x'}
     """
+    failing_labels: dict[str, str] = {}
     result: dict[str, str] = {}
     for raw_key, raw_value in labels.items():
-        key = slugify(raw_key, pattern=_LABEL_INVALID, max_len=63)
-        value = slugify(str(raw_value), pattern=_LABEL_INVALID)
+        key = slugify(raw_key, regex_pattern=_KEY_VALUE_INVALID, max_length=63)
+        value = slugify(str(raw_value), regex_pattern=_KEY_VALUE_INVALID)
         if not key or not key[0].isalpha():
-            print(
-                f'Skipping label with invalid key {raw_key!r} '
-                f'(sanitised to {key!r})',
-                file=sys.stderr,
-            )
+            failing_labels[key] = value
             continue
         result[key] = value
+    if failing_labels:
+        fail_string = f"""\
+        During key-value sanitisation on the provided labels, the following failed to conform to requirements:
+        Input: {labels}
+        Failures: {failing_labels}
+        
+        Note: keys must start with a lowercase letter and contain only letters, digits, underscores, and hyphens.
+        See https://docs.cloud.google.com/resource-manager/docs/labels-overview
+        """
+        raise ValueError(fail_string)
     return result
 
 
@@ -193,25 +163,30 @@ def parse_label_kvs(items: list[str]) -> dict[str, str]:
     Returns:
         A sanitised label dictionary.
 
-    >>> parse_label_kvs(['ar-guid=abc', 'Stage=Align', 'no-equals'])
+    >>> parse_label_kvs(['ar-guid=abc', 'Stage=Align'])
     {'ar-guid': 'abc', 'stage': 'align'}
     """
     parsed: dict[str, str] = {}
+    failing_kv: list[str] = []
     for item in items:
         if '=' not in item:
-            print(
-                f'Skipping invalid label {item!r} (expected key=value)',
-                file=sys.stderr,
-            )
+            failing_kv.append(item)
             continue
         key, value = item.split('=', 1)
         parsed[key] = value
+
+    if failing_kv:
+        fail_string = f"""\
+        One or more key=value parameters did not contain an equals character, so they could not be parsed:
+        {failing_kv}
+        """
+        raise ValueError(fail_string)
     return sanitise_labels(parsed)
 
 
 def resolve_autoscaling_policy_uri(
-    project: str,
-    region: str,
+    project: str | None,
+    region: str | None,
     policy_ref: str,
 ) -> str:
     """Return the full resource URI for an autoscaling policy.
@@ -220,8 +195,8 @@ def resolve_autoscaling_policy_uri(
     policy_ref already starts with projects/ it is returned unchanged.
 
     Args:
-        project: GCP project ID owning the policy.
-        region: Dataproc region hosting the policy.
+        project: GCP project ID owning the policy. Can be None if policy_ref is a full path.
+        region: Dataproc region hosting the policy. Can be None if policy_ref is a full path.
         policy_ref: Bare policy ID or full resource URI.
 
     Returns:
@@ -237,6 +212,10 @@ def resolve_autoscaling_policy_uri(
     """
     if policy_ref.startswith('projects/'):
         return policy_ref
+    if any(value is None for value in [project, region, policy_ref]):
+        raise ValueError(
+            f'Invalid autoscaling policy components: {project}, {region}, {policy_ref}'
+        )
     return f'projects/{project}/regions/{region}/autoscalingPolicies/{policy_ref}'
 
 

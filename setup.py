@@ -30,6 +30,7 @@ setup(
         'google-cloud-secret-manager',
         'google-cloud-storage',
         'metamist',
+        'python-slugify',
         'requests',
         'tabulate',
         'toml',
