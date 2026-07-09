@@ -38,6 +38,7 @@ from contextlib import suppress
 from types import FrameType, TracebackType
 from typing import Any
 
+from cloudpathlib import GSClient, GSPath
 from google.api_core import exceptions as gax_exceptions
 from google.cloud import dataproc_v1, storage
 from slugify import slugify
@@ -220,9 +221,10 @@ def upload_to_gcs(
     local_path: str,
     bucket: str,
     prefix: str = '',
-    storage_client: storage.Client | None = None,
+    client: GSClient | None = None,
 ) -> str:
-    """Upload a local file to GCS and return the gs:// URI.
+    """
+    Upload a local file to GCS and return the gs:// URI.
 
     The uploaded blob path is bucket/prefix/basename. Passing an empty prefix
     uploads to the bucket root.
@@ -231,19 +233,19 @@ def upload_to_gcs(
         local_path: Path to the file on the local filesystem.
         bucket: Target bucket, either as gs://bucket-name or bucket-name.
         prefix: Blob path prefix within the bucket.
-        storage_client: Optional pre-built storage client, mainly for tests.
+        client: Optional pre-built storage client, mainly for tests.
 
     Returns:
         The gs:// URI of the uploaded blob.
     """
-    client = storage_client or storage.Client()
     bucket_name = bucket.removeprefix('gs://').rstrip('/')
-    basename = os.path.basename(local_path)
-    blob_name = f'{prefix.strip("/")}/{basename}' if prefix else basename
-    client.bucket(bucket_name).blob(blob_name).upload_from_filename(local_path)
-    gcs_uri = f'gs://{bucket_name}/{blob_name}'
-    print(f'Uploaded {local_path} to {gcs_uri}')
-    return gcs_uri
+    dest = (
+        GSPath(f'gs://{bucket_name}', client=client)
+        / prefix.strip('/')
+        / os.path.basename(local_path)
+    )
+    dest.upload_from(local_path)
+    return str(dest)
 
 
 class HailDataprocCluster:
@@ -318,7 +320,7 @@ class HailDataprocCluster:
         self._job_client = job_client or dataproc_v1.JobControllerClient(
             client_options={'api_endpoint': endpoint},
         )
-        self._storage_client = storage_client or storage.Client()
+        self._storage_client = storage_client or GSClient()
 
         self._started = False
         self._shutdown_called = False
@@ -484,7 +486,7 @@ class HailDataprocCluster:
             local_path=local_path,
             bucket=self._staging_bucket,
             prefix=effective_prefix,
-            storage_client=self._storage_client,
+            client=self._storage_client,
         )
 
     def submit_job(
