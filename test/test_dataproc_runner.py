@@ -1,7 +1,8 @@
+import pytest
 import unittest
 from unittest.mock import MagicMock
 
-from cpg_utils.dataproc_runner import HailDataprocCluster
+from cpg_utils.dataproc_runner import HailDataprocCluster, parse_label_kvs
 
 
 def _make_cluster(**kwargs) -> HailDataprocCluster:  # noqa: ANN003
@@ -46,3 +47,17 @@ class TestDataprocRunnerPackages(unittest.TestCase):
             config['config']['gce_cluster_config']['metadata']['PKGS'],
             'cpg-utils',
         )
+
+def test_good_keys():
+    kv_pairs = ['good=key', 'also=good']
+    assert parse_label_kvs(kv_pairs) == {'good': 'key', 'also': 'good'}
+
+def test_missing_equals_keys():
+    kv_pairs = ['good=key', 'bad']
+    with pytest.raises(ValueError) as ve:
+        parse_label_kvs(kv_pairs)
+    assert 'One or more key=value parameters did not contain an equals character, so they could' in str(ve.value)
+
+def test_key_sanitation():
+    kv_pairs = ['good=key', 'also=good', r'what\'s_this!=#ARGH#']
+    assert parse_label_kvs(kv_pairs) == {'good': 'key', 'also': 'good', 'what-s_this': 'argh'}

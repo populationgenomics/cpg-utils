@@ -36,12 +36,12 @@ import threading
 import time
 import uuid
 from contextlib import suppress
+from slugify import slugify
 from types import FrameType, TracebackType
 from typing import Any
 
 from google.api_core import exceptions as gax_exceptions
 from google.cloud import dataproc_v1, storage
-from slugify import slugify
 
 
 DEFAULT_HAIL_VERSION = '0.2.138'
@@ -142,8 +142,7 @@ def sanitise_labels(labels: dict[str, str]) -> dict[str, str]:
         fail_string = f"""\
         During key-value sanitisation on the provided labels, the following failed to conform to requirements:
         Input: {labels}
-        Failures: {failing_labels}
-        
+        Failures: {failing_labels}\n
         Note: keys must start with a lowercase letter and contain only letters, digits, underscores, and hyphens.
         See https://docs.cloud.google.com/resource-manager/docs/labels-overview
         """
@@ -214,7 +213,7 @@ def resolve_autoscaling_policy_uri(
         return policy_ref
     if any(value is None for value in [project, region, policy_ref]):
         raise ValueError(
-            f'Invalid autoscaling policy components: {project}, {region}, {policy_ref}'
+            f'Invalid autoscaling policy components: {project}, {region}, {policy_ref}',
         )
     return f'projects/{project}/regions/{region}/autoscalingPolicies/{policy_ref}'
 
