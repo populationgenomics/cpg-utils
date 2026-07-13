@@ -48,7 +48,7 @@ DEFAULT_HAIL_IMAGE = '2.2-debian12'
 DEFAULT_MASTER_TYPE = 'n1-highmem-4'
 DEFAULT_WORKER_TYPE = 'n1-highmem-4'
 DEFAULT_NUM_WORKERS = 2
-DEFAULT_NUM_SECONDARY_WORKERS = 0
+DEFAULT_NUM_SECONDARY_WORKERS = 2
 DEFAULT_MAX_IDLE_SECONDS = 900
 DEFAULT_MAX_AGE_SECONDS = 86400
 DEFAULT_BOOT_DISK_SIZE_GB = 100
@@ -358,11 +358,15 @@ class HailDataprocCluster:
     def is_started(self) -> bool:
         return self._started
 
-    def start(self) -> dataproc_v1.Cluster:
-        """Create the cluster if not already started and return it.
+    @property
+    def hail_version(self) -> str:
+        return self._hail_version
 
-        Idempotent. If start has already been called, the existing cluster is
-        returned without another API call.
+    def start(self) -> dataproc_v1.Cluster:
+        """
+        Create the cluster if not already started and return it.
+
+        Idempotent. If start has already been called, the existing cluster is returned without another API call.
 
         Returns:
             The created or already-running Dataproc Cluster.
