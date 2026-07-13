@@ -300,7 +300,13 @@ class HailDataprocCluster:
         self._max_age_seconds = max_age_seconds
         self._hail_version = hail_version
         self._hail_image = hail_image
-        self._packages = list(packages) if packages is not None else ['cpg-utils']
+        self._packages = list(packages) if packages is not None else []
+
+        # hail's dataproc starter doesn't install hail's dependencies, just hail
+        for essential in ['cpg-utils', f'hail=={hail_version}']:
+            if essential not in self._packages:
+                self._packages.append(essential)
+
         self._boot_disk_size_gb = boot_disk_size_gb
         self._init_timeout_seconds = init_timeout_seconds
         self._labels = sanitise_labels(labels or {})
