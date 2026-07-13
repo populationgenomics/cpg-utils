@@ -320,7 +320,8 @@ class HailDataprocCluster:
         self._job_client = job_client or dataproc_v1.JobControllerClient(
             client_options={'api_endpoint': endpoint},
         )
-        self._storage_client = storage_client or GSClient()
+        self._storage_client = storage_client or storage.Client()
+        self._gs_client = GSClient(storage_client=self._storage_client)
 
         self._started = False
         self._shutdown_called = False
@@ -490,7 +491,7 @@ class HailDataprocCluster:
             local_path=local_path,
             bucket=self._staging_bucket,
             prefix=effective_prefix,
-            client=self._storage_client,
+            client=self._gs_client,
         )
 
     def submit_job(
