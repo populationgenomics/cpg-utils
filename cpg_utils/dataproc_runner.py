@@ -247,6 +247,39 @@ def upload_to_gcs(
     dest.upload_from(local_path)
     return str(dest)
 
+def populate_packages(packages: list[str] | None = None, hail_version: str = DEFAULT_HAIL_VERSION) -> list[str]:
+    """
+    Blend any requested packages with default packages
+
+    Args:
+        packages:
+        hail_version: str, the version of hail to use
+
+    Returns:
+        a list of packages. At minimum this will contain cpg-utils and a version of hail
+        if hail was not user specified, it will be added at the default version pin.
+    """
+    new_packages: list[str] = []
+
+    # two key packages
+    cpg_utils_specified: bool = False
+    hail_specified: bool = False
+
+    # iterate over the provided package list
+    for each_package in packages or []:
+        if each_package.startswith('hail'):
+            hail_specified = True
+        elif each_package.startswith('cpg-utils'):
+            cpg_utils_specified = True
+        new_packages.append(each_package)
+
+    if not cpg_utils_specified:
+        new_packages.append('cpg-utils')
+    if not hail_specified:
+        new_packages.append(f'hail=={hail_version}')
+
+    return new_packages
+
 
 class HailDataprocCluster:
     """Ephemeral Dataproc cluster preconfigured for Hail PySpark jobs.
@@ -300,13 +333,7 @@ class HailDataprocCluster:
         self._max_age_seconds = max_age_seconds
         self._hail_version = hail_version
         self._hail_image = hail_image
-        self._packages = list(packages) if packages is not None else []
-
-        # hail's dataproc starter doesn't install hail's dependencies, just hail
-        for essential in ['cpg-utils', f'hail=={hail_version}']:
-            if essential not in self._packages:
-                self._packages.append(essential)
-
+        self._packages = populate_packages(packages, hail_version=hail_version)
         self._boot_disk_size_gb = boot_disk_size_gb
         self._init_timeout_seconds = init_timeout_seconds
         self._labels = sanitise_labels(labels or {})
@@ -518,8 +545,7 @@ class HailDataprocCluster:
             script_uri: gs:// URI of the main Python script to run.
             args: Positional arguments passed to the script.
             file_uris: Extra files localised into the job working directory
-                on the cluster. Matches the Dataproc pyspark_job.file_uris
-                field.
+                on the cluster. Matches the Dataproc pyspark_job.file_uris field.
             properties: Extra Spark or Dataproc job properties.
 
         Returns:

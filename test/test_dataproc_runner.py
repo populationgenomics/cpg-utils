@@ -7,6 +7,7 @@ from cpg_utils.dataproc_runner import (
     HailDataprocCluster,
     parse_label_kvs,
     sanitise_labels,
+    DEFAULT_HAIL_VERSION,
 )
 
 
@@ -29,7 +30,7 @@ class TestDataprocRunnerPackages(unittest.TestCase):
         cluster = _make_cluster()
         config = cluster._build_cluster_config()
         pkgs = config['config']['gce_cluster_config']['metadata']['PKGS']
-        self.assertEqual(pkgs, 'cpg-utils')
+        self.assertEqual(pkgs, f'cpg-utils|hail=={DEFAULT_HAIL_VERSION}')
 
     def test_custom_packages_populate_pkgs_metadata(self):
         cluster = _make_cluster(packages=['cpg-utils', 'hail==0.2.999', 'gnomad'])
@@ -42,7 +43,7 @@ class TestDataprocRunnerPackages(unittest.TestCase):
         config = cluster._build_cluster_config()
         self.assertEqual(
             config['config']['gce_cluster_config']['metadata'].get('PKGS'),
-            None,
+            'cpg-utils|hail==0.2.138',
         )
 
     def test_null_pkgs(self):
@@ -50,7 +51,7 @@ class TestDataprocRunnerPackages(unittest.TestCase):
         config = cluster._build_cluster_config()
         self.assertEqual(
             config['config']['gce_cluster_config']['metadata']['PKGS'],
-            'cpg-utils',
+            'cpg-utils|hail==0.2.138',
         )
 
 
