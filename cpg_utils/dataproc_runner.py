@@ -116,8 +116,7 @@ def unique_cluster_name(name: str) -> str:
 def sanitise_labels(labels: dict[str, str]) -> dict[str, str]:
     """Return a copy of labels with keys and values sanitised for GCP.
 
-    Entries whose key does not start with a lowercase letter after sanitisation
-    are dropped with a warning to stderr, matching the GCP label constraints.
+    Entries whose sanitised key does not start with a lowercase letter causes an error.
 
     Args:
         labels: Raw label mapping from caller input.
@@ -152,8 +151,7 @@ def sanitise_labels(labels: dict[str, str]) -> dict[str, str]:
 def parse_label_kvs(items: list[str]) -> dict[str, str]:
     """Parse key=value strings into a sanitised label dictionary.
 
-    Intended for CLI arguments. Malformed entries missing an equals sign are
-    skipped with a warning to stderr.
+    Intended to format CLI-passed arguments. Malformed entries missing an equals sign cause an error.
 
     Args:
         items: Raw key=value strings from the command line.
