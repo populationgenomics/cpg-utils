@@ -4,10 +4,11 @@ from unittest.mock import MagicMock
 import pytest
 
 from cpg_utils.dataproc_runner import (
+    DEFAULT_HAIL_VERSION,
     HailDataprocCluster,
     parse_label_kvs,
+    resolve_autoscaling_policy_uri,
     sanitise_labels,
-    DEFAULT_HAIL_VERSION,
 )
 
 
@@ -90,3 +91,24 @@ def test_sanitise_labels_bad():
     with pytest.raises(ValueError) as ve:
         sanitise_labels({'1AR-GUID': 'Abc123'})
     assert "Failures: {'1ar-guid': 'abc123'}" in str(ve.value)
+
+
+def test_autoscaling_policy_resolver():
+    assert resolve_autoscaling_policy_uri(policy_ref='projects/stub') == 'projects/stub'
+
+
+def test_autoscaling_policy_resolver_from_parts():
+    assert (
+        resolve_autoscaling_policy_uri(
+            policy_ref='1234',
+            project='project',
+            region='aus',
+        )
+        == 'projects/project/regions/aus/autoscalingPolicies/1234'
+    )
+
+
+def test_autoscaling_policy_resolver_fails():
+    with pytest.raises(ValueError) as ve:
+        _ = resolve_autoscaling_policy_uri(policy_ref='not_projects/stub')
+    assert 'Invalid autoscaling policy' in str(ve.value)

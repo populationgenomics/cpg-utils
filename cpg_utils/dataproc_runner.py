@@ -181,9 +181,9 @@ def parse_label_kvs(items: list[str]) -> dict[str, str]:
 
 
 def resolve_autoscaling_policy_uri(
-    project: str | None,
-    region: str | None,
     policy_ref: str,
+    project: str | None = None,
+    region: str | None = None,
 ) -> str:
     """Return the full resource URI for an autoscaling policy.
 
@@ -245,7 +245,11 @@ def upload_to_gcs(
     dest.upload_from(local_path)
     return str(dest)
 
-def populate_packages(packages: list[str] | None = None, hail_version: str = DEFAULT_HAIL_VERSION) -> list[str]:
+
+def populate_packages(
+    packages: list[str] | None = None,
+    hail_version: str = DEFAULT_HAIL_VERSION,
+) -> list[str]:
     """
     Blend any requested packages with default packages
 
