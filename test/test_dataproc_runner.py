@@ -43,7 +43,7 @@ class TestDataprocRunnerPackages(unittest.TestCase):
         config = cluster._build_cluster_config()
         self.assertEqual(
             config['config']['gce_cluster_config']['metadata'].get('PKGS'),
-            'cpg-utils|hail==0.2.138',
+            f'cpg-utils|hail=={DEFAULT_HAIL_VERSION}',
         )
 
     def test_null_pkgs(self):
@@ -51,7 +51,7 @@ class TestDataprocRunnerPackages(unittest.TestCase):
         config = cluster._build_cluster_config()
         self.assertEqual(
             config['config']['gce_cluster_config']['metadata']['PKGS'],
-            'cpg-utils|hail==0.2.138',
+            f'cpg-utils|hail=={DEFAULT_HAIL_VERSION}',
         )
 
 
