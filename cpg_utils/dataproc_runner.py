@@ -208,7 +208,7 @@ def resolve_autoscaling_policy_uri(
     """
     if policy_ref.startswith('projects/'):
         return policy_ref
-    if any(value is None for value in [project, region, policy_ref]):
+    if not all((project, region, policy_ref)):
         raise ValueError(
             f'Invalid autoscaling policy components: {project}, {region}, {policy_ref}',
         )
