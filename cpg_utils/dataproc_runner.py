@@ -43,8 +43,10 @@ from google.api_core import exceptions as gax_exceptions
 from google.cloud import dataproc_v1, storage
 from slugify import slugify
 
+DEFAULT_CPG_WHEEL = 'gs://cpg-hail-ci/wheels/hail-{hail_version}-py3-none-any.whl'
 DEFAULT_HAIL_VERSION = '0.2.138'
 DEFAULT_HAIL_IMAGE = '2.2-debian12'
+DEFAULT_INIT = 'gs://hail-common/hailctl/dataproc/{version}/init_notebook.py'
 DEFAULT_MASTER_TYPE = 'n1-highmem-4'
 DEFAULT_WORKER_TYPE = 'n1-highmem-4'
 DEFAULT_NUM_WORKERS = 2
@@ -316,6 +318,8 @@ class HailDataprocCluster:
         labels: dict[str, str] | None = None,
         hail_version: str = DEFAULT_HAIL_VERSION,
         hail_image: str = DEFAULT_HAIL_IMAGE,
+        wheel: str | None = None,
+        init_script: str | None = None,
         packages: list[str] | None = None,
         boot_disk_size_gb: int = DEFAULT_BOOT_DISK_SIZE_GB,
         init_timeout_seconds: int = DEFAULT_INIT_TIMEOUT_SECONDS,
@@ -335,6 +339,8 @@ class HailDataprocCluster:
         self._max_age_seconds = max_age_seconds
         self._hail_version = hail_version
         self._hail_image = hail_image
+        self._wheel = wheel or DEFAULT_CPG_WHEEL.format(hail_version=hail_version)
+        self._init_script = init_script or DEFAULT_INIT.format(version=hail_version)
         self._packages = populate_packages(packages, hail_version=hail_version)
         self._boot_disk_size_gb = boot_disk_size_gb
         self._init_timeout_seconds = init_timeout_seconds
@@ -398,6 +404,14 @@ class HailDataprocCluster:
     def hail_version(self) -> str:
         return self._hail_version
 
+    @property
+    def wheel(self) -> str:
+        return self._wheel
+
+    @property
+    def init_script(self) -> str:
+        return self._init_script
+
     def start(self) -> dataproc_v1.Cluster:
         """
         Create the cluster if not already started and return it.
@@ -407,7 +421,7 @@ class HailDataprocCluster:
         Returns:
             The created or already-running Dataproc Cluster.
         """
-        if self._started and self._cluster is not None:
+        if self.is_started and self._cluster is not None:
             return self._cluster
 
         cluster_config = self._build_cluster_config()
@@ -428,14 +442,6 @@ class HailDataprocCluster:
         return self._cluster
 
     def _build_cluster_config(self) -> dict[str, Any]:
-        init_action_uri = (
-            f'gs://hail-common/hailctl/dataproc/{self._hail_version}/init_notebook.py'
-        )
-        wheel_uri = (
-            f'gs://hail-common/hailctl/dataproc/{self._hail_version}/'
-            f'hail-{self._hail_version}-py3-none-any.whl'
-        )
-
         disk_config = {
             'boot_disk_type': 'pd-standard',
             'boot_disk_size_gb': self._boot_disk_size_gb,
@@ -449,7 +455,7 @@ class HailDataprocCluster:
                 'gce_cluster_config': {
                     'zone_uri': '',  # Let Dataproc auto-zone within region.
                     'metadata': {
-                        'WHEEL': wheel_uri,
+                        'WHEEL': self.wheel,
                     },
                 },
                 'master_config': {
@@ -478,7 +484,7 @@ class HailDataprocCluster:
                 },
                 'initialization_actions': [
                     {
-                        'executable_file': init_action_uri,
+                        'executable_file': self.init_script,
                         'execution_timeout': {'seconds': self._init_timeout_seconds},
                     },
                 ],
