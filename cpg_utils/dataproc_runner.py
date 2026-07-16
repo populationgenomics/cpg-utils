@@ -214,6 +214,8 @@ def resolve_autoscaling_policy_uri(
         raise ValueError(
             f'Invalid autoscaling policy components: {project}, {region}, {policy_ref}',
         )
+    # projects/seqera-trial/regions/australia-southeast1/autoscalingPolicies/trial-combiner-1
+    # projects/australia-southeast1/regions/trial-combiner-1
     return f'projects/{project}/regions/{region}/autoscalingPolicies/{policy_ref}'
 
 
@@ -346,7 +348,7 @@ class HailDataprocCluster:
         self._init_timeout_seconds = init_timeout_seconds
         self._labels = sanitise_labels(labels or {})
         self._policy_uri: str | None = (
-            resolve_autoscaling_policy_uri(project, region, autoscaling_policy)
+            resolve_autoscaling_policy_uri(project=project, region=region, policy_ref=autoscaling_policy)
             if autoscaling_policy
             else None
         )
