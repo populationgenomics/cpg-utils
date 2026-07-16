@@ -43,7 +43,9 @@ from google.api_core import exceptions as gax_exceptions
 from google.cloud import dataproc_v1, storage
 from slugify import slugify
 
-DEFAULT_CPG_WHEEL = 'gs://cpg-hail-ci/wheels/hail-{hail_version}-py3-none-any.whl'
+DEFAULT_WHEEL = (
+    'gs://hail-common/hailctl/dataproc/{version}/hail-{version}-py3-none-any.whl'
+)
 DEFAULT_HAIL_VERSION = '0.2.138'
 DEFAULT_HAIL_IMAGE = '2.2-debian12'
 DEFAULT_INIT = 'gs://hail-common/hailctl/dataproc/{version}/init_notebook.py'
@@ -341,14 +343,18 @@ class HailDataprocCluster:
         self._max_age_seconds = max_age_seconds
         self._hail_version = hail_version
         self._hail_image = hail_image
-        self._wheel = wheel or DEFAULT_CPG_WHEEL.format(hail_version=hail_version)
+        self._wheel = wheel or DEFAULT_WHEEL.format(version=hail_version)
         self._init_script = init_script or DEFAULT_INIT.format(version=hail_version)
         self._packages = populate_packages(packages, hail_version=hail_version)
         self._boot_disk_size_gb = boot_disk_size_gb
         self._init_timeout_seconds = init_timeout_seconds
         self._labels = sanitise_labels(labels or {})
         self._policy_uri: str | None = (
-            resolve_autoscaling_policy_uri(project=project, region=region, policy_ref=autoscaling_policy)
+            resolve_autoscaling_policy_uri(
+                project=project,
+                region=region,
+                policy_ref=autoscaling_policy,
+            )
             if autoscaling_policy
             else None
         )
