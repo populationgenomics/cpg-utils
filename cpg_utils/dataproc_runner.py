@@ -330,6 +330,7 @@ class HailDataprocCluster:
         cluster_client: dataproc_v1.ClusterControllerClient | None = None,
         job_client: dataproc_v1.JobControllerClient | None = None,
         storage_client: storage.Client | None = None,
+        preemptible_workers: bool = True,
     ) -> None:
         self._project = project
         self._region = region
@@ -376,6 +377,7 @@ class HailDataprocCluster:
         self._shutdown_called = False
         self._cluster: dataproc_v1.Cluster | None = None
         self._job_ids: list[str] = []
+        self._preemptible_workers = preemptible_workers
 
     @property
     def name(self) -> str:
@@ -419,6 +421,10 @@ class HailDataprocCluster:
     @property
     def init_script(self) -> str:
         return self._init_script
+
+    @property
+    def preemptible_workers(self) -> bool:
+        return self._preemptible_workers
 
     def start(self) -> dataproc_v1.Cluster:
         """
@@ -515,7 +521,7 @@ class HailDataprocCluster:
             config['config']['secondary_worker_config'] = {
                 'num_instances': self._num_secondary_workers,
                 'machine_type_uri': self._worker_type,
-                'is_preemptible': True,
+                'is_preemptible': self.preemptible_workers,
                 'disk_config': dict(disk_config),
             }
 
