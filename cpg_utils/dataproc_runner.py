@@ -202,11 +202,11 @@ def resolve_autoscaling_policy_uri(
     Returns:
         The fully qualified autoscaling policy resource URI.
 
-    >>> resolve_autoscaling_policy_uri('proj', 'australia-southeast1', 'my-policy')
+    >>> resolve_autoscaling_policy_uri('my-policy', 'proj', 'australia-southeast1')
     'projects/proj/regions/australia-southeast1/autoscalingPolicies/my-policy'
     >>> resolve_autoscaling_policy_uri(
-    ...     'proj', 'australia-southeast1',
     ...     'projects/other/regions/eu/autoscalingPolicies/foo',
+    ...     'proj', 'australia-southeast1',
     ... )
     'projects/other/regions/eu/autoscalingPolicies/foo'
     """
