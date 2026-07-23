@@ -570,3 +570,21 @@ def get_gcloud_set_project(gcp_project: str | None = None) -> str:
     gcp_project = gcp_project or get_gcp_project()
     command = ['gcloud', 'config', 'set', 'project', gcp_project]
     return ' '.join([quote(c) for c in command])
+
+
+def dataset_with_test_suffix(dataset_name: str) -> str:
+    """
+    Quick method to check the current access_level, and modify the dataset name if 'test'.
+    Centralises this simple logic, instead of being repeated in CPG-Flow/various repositories.
+
+    >>> dataset_with_test_suffix('dataset')  # with access_level != 'test'
+    'dataset'
+    >>> dataset_with_test_suffix('dataset')  # with access_level == 'test'
+    'dataset-test'
+    """
+    if config_retrieve(
+        ['workflow', 'access_level'],
+        'standard',
+    ) == 'test' and not dataset_name.endswith('-test'):
+        return f'{dataset_name}-test'
+    return dataset_name
