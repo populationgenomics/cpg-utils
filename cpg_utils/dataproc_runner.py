@@ -818,7 +818,7 @@ def _stream_driver_logs(
                     },
                 )
                 uri_prefix = job.driver_output_resource_uri or None
-            except Exception:  # noqa: BLE001 - log streamer must not kill the run
+            except gax_exceptions.GoogleAPIError:
                 print(f'[log-stream] failed to get job {job_id}', flush=True)
             if not uri_prefix:
                 time.sleep(poll_interval)
@@ -848,7 +848,7 @@ def _stream_driver_logs(
                     )
                     file_index += 1
                     offset = 0
-        except Exception as e:  # noqa: BLE001 - log streamer must not kill the run
+        except gax_exceptions.GoogleAPIError as e:
             print(f'[log-stream] warning: {e}', file=sys.stderr)
 
         time.sleep(poll_interval)
