@@ -8,7 +8,7 @@ with open('README.md') as f:
 setup(
     name='cpg-utils',
     # This tag is automatically updated by bumpversion
-    version='5.7.1',
+    version='5.8.0',
     description='Library of convenience functions specific to the CPG',
     long_description=long_description,
     long_description_content_type='text/markdown',
@@ -26,8 +26,11 @@ setup(
         'google-auth>=1.27.0',
         'google-auth-oauthlib',
         'google-cloud-artifact-registry',
+        'google-cloud-dataproc',
         'google-cloud-secret-manager',
+        'google-cloud-storage',
         'metamist',
+        'python-slugify',
         'requests',
         'tabulate',
         'toml',

@@ -48,6 +48,7 @@ repos:
             types-requests,
             types-tabulate,
             types-toml,
+            types-python-slugify,
           ]
 
   - repo: https://github.com/koalaman/shellcheck-precommit

@@ -37,3 +37,5 @@ venv/
 .vscode/
 .scannerwork/
 .python-version
+# Added by code-review-graph
+.code-review-graph/
