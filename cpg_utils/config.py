@@ -576,9 +576,12 @@ def dataset_for_access_level(dataset_name: str) -> str:
     """
     Checks access_level in config, modifying dataset with "-test" suffix if appropriate.
 
-    >>> dataset_for_access_level('dataset')  # with access_level != 'test'
+    # with access_level != 'test'
+    > dataset_for_access_level('dataset')
     'dataset'
-    >>> dataset_for_access_level('dataset')  # with access_level == 'test'
+
+    # with access_level == 'test'
+    > dataset_for_access_level('dataset')
     'dataset-test'
     """
     access_level = config_retrieve(['workflow', 'access_level'], 'standard')
