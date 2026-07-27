@@ -56,6 +56,31 @@ class TestDataprocRunnerPackages(unittest.TestCase):
         )
 
 
+_DISK_ROLES = ('master_config', 'worker_config', 'secondary_worker_config')
+
+
+class TestDataprocRunnerDiskConfig(unittest.TestCase):
+    def test_default_disk_config(self):
+        config = _make_cluster()._build_cluster_config()['config']
+        for role in _DISK_ROLES:
+            disk_config = config[role]['disk_config']
+            self.assertEqual(disk_config['boot_disk_type'], 'pd-standard')
+            # num_local_ssds is omitted by default rather than set to 0.
+            self.assertNotIn('num_local_ssds', disk_config)
+
+    def test_custom_boot_disk_type(self):
+        config = _make_cluster(boot_disk_type='pd-ssd')._build_cluster_config()[
+            'config'
+        ]
+        for role in _DISK_ROLES:
+            self.assertEqual(config[role]['disk_config']['boot_disk_type'], 'pd-ssd')
+
+    def test_local_ssds_added_to_every_role(self):
+        config = _make_cluster(num_local_ssds=2)._build_cluster_config()['config']
+        for role in _DISK_ROLES:
+            self.assertEqual(config[role]['disk_config']['num_local_ssds'], 2)
+
+
 def test_good_keys():
     kv_pairs = ['good=key', 'also=good']
     assert parse_label_kvs(kv_pairs) == {'good': 'key', 'also': 'good'}

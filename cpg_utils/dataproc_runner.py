@@ -56,6 +56,8 @@ DEFAULT_NUM_SECONDARY_WORKERS = 2
 DEFAULT_MAX_IDLE_SECONDS = 900
 DEFAULT_MAX_AGE_SECONDS = 86400
 DEFAULT_BOOT_DISK_SIZE_GB = 100
+DEFAULT_BOOT_DISK_TYPE = 'pd-standard'
+DEFAULT_NUM_LOCAL_SSDS = 0
 DEFAULT_INIT_TIMEOUT_SECONDS = 600
 DEFAULT_LOG_POLL_SECONDS = 5.0
 DEFAULT_JOB_POLL_INITIAL_SECONDS = 10.0
@@ -326,6 +328,8 @@ class HailDataprocCluster:
         init_script: str | None = None,
         packages: list[str] | None = None,
         boot_disk_size_gb: int = DEFAULT_BOOT_DISK_SIZE_GB,
+        boot_disk_type: str = DEFAULT_BOOT_DISK_TYPE,
+        num_local_ssds: int = DEFAULT_NUM_LOCAL_SSDS,
         init_timeout_seconds: int = DEFAULT_INIT_TIMEOUT_SECONDS,
         cluster_client: dataproc_v1.ClusterControllerClient | None = None,
         job_client: dataproc_v1.JobControllerClient | None = None,
@@ -348,6 +352,8 @@ class HailDataprocCluster:
         self._init_script = init_script or DEFAULT_INIT.format(version=hail_version)
         self._packages = populate_packages(packages, hail_version=hail_version)
         self._boot_disk_size_gb = boot_disk_size_gb
+        self._boot_disk_type = boot_disk_type
+        self._num_local_ssds = num_local_ssds
         self._init_timeout_seconds = init_timeout_seconds
         self._labels = sanitise_labels(labels or {})
         self._policy_uri: str | None = (
@@ -456,10 +462,14 @@ class HailDataprocCluster:
         return self._cluster
 
     def _build_cluster_config(self) -> dict[str, Any]:
-        disk_config = {
-            'boot_disk_type': 'pd-standard',
+        disk_config: dict[str, Any] = {
+            'boot_disk_type': self._boot_disk_type,
             'boot_disk_size_gb': self._boot_disk_size_gb,
         }
+        # Local SSDs are a fixed 375 GB each on GCE; only the count is
+        # configurable, so there is no size field to set here.
+        if self._num_local_ssds:
+            disk_config['num_local_ssds'] = self._num_local_ssds
 
         config: dict[str, Any] = {
             'project_id': self._project,
