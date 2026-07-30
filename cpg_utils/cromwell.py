@@ -222,6 +222,7 @@ def run_cromwell_workflow(  # noqa: C901
 
     workflow_options = {
         'backend': 'batch',
+        # pass the user-service-account-json to cromwell to submit jobs as this user
         'user_service_account_json': service_account_json,
         'google_compute_service_account': service_account_email,
         'google_project': _project,
