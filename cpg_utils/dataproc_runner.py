@@ -304,6 +304,11 @@ class HailDataprocCluster:
     cluster. shutdown deletes the cluster and is idempotent. The context
     manager runs shutdown on exit, and install_sigterm_cleanup wires it to
     SIGTERM.
+
+    service_account sets the identity the cluster VMs run as, i.e. the identity Hail code uses to
+    read from and write to GCS.
+    If unset, Dataproc falls back to the project's default compute service account. At CPG that should
+    normally be dataproc-<access_level>@<project>.iam.gserviceaccount.com, as in the hailctl implementation.
     """
 
     def __init__(
@@ -321,6 +326,7 @@ class HailDataprocCluster:
         max_idle_seconds: int = DEFAULT_MAX_IDLE_SECONDS,
         max_age_seconds: int = DEFAULT_MAX_AGE_SECONDS,
         autoscaling_policy: str | None = None,
+        service_account: str | None = None,
         labels: dict[str, str] | None = None,
         hail_version: str = DEFAULT_HAIL_VERSION,
         hail_image: str = DEFAULT_HAIL_IMAGE,
@@ -355,6 +361,7 @@ class HailDataprocCluster:
         self._boot_disk_type = boot_disk_type
         self._num_local_ssds = num_local_ssds
         self._init_timeout_seconds = init_timeout_seconds
+        self._service_account = service_account
         self._labels = sanitise_labels(labels or {})
         self._policy_uri: str | None = (
             resolve_autoscaling_policy_uri(
@@ -406,6 +413,11 @@ class HailDataprocCluster:
     @property
     def autoscaling_policy_uri(self) -> str | None:
         return self._policy_uri
+
+    @property
+    def service_account(self) -> str | None:
+        """The service account the cluster VMs run as, or None for the GCE default."""
+        return self._service_account
 
     @property
     def job_ids(self) -> list[str]:
@@ -520,6 +532,12 @@ class HailDataprocCluster:
             },
         }
 
+        # Without this the VMs run as the project's default compute service account, typically
+        # this has no access to dataset buckets.
+        if self._service_account:
+            config['config']['gce_cluster_config']['service_account'] = (
+                self._service_account
+            )
         if self._packages:
             pkgs = '|'.join(self._packages)
             config['config']['gce_cluster_config']['metadata']['PKGS'] = pkgs

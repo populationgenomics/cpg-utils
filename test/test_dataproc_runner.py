@@ -56,6 +56,27 @@ class TestDataprocRunnerPackages(unittest.TestCase):
         )
 
 
+class TestDataprocRunnerServiceAccount(unittest.TestCase):
+    def test_service_account_omitted_by_default(self):
+        cluster = _make_cluster()
+        config = cluster._build_cluster_config()
+        self.assertIsNone(cluster.service_account)
+        self.assertNotIn(
+            'service_account',
+            config['config']['gce_cluster_config'],
+        )
+
+    def test_explicit_service_account(self):
+        sa = 'dataproc-test@test-project.iam.gserviceaccount.com'
+        cluster = _make_cluster(service_account=sa)
+        config = cluster._build_cluster_config()
+        self.assertEqual(cluster.service_account, sa)
+        self.assertEqual(
+            config['config']['gce_cluster_config']['service_account'],
+            sa,
+        )
+
+
 _DISK_ROLES = ('master_config', 'worker_config', 'secondary_worker_config')
 
 
