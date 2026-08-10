@@ -62,7 +62,6 @@ def get_batch(
 ) -> 'Batch':
     """
     Wrapper around Hail's `Batch` class, which allows to register created jobs
-    This has been migrated (currently duplicated) out of cpg_workflows
 
     Parameters
     ----------

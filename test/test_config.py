@@ -12,6 +12,7 @@ import toml
 from cpg_utils.config import (
     ConfigError,
     config_retrieve,
+    dataset_for_access_level,
     dataset_path,
     get_config,
     image_path,
@@ -204,3 +205,19 @@ class TestConfig(TestCase):
         """
         mock_get_config.return_value = {'images': {'image-name': 'image/path:version'}}
         self.assertEqual('image/path:version', image_path('image-name'))
+
+    @patch('cpg_utils.config.get_config')
+    def test_dataset_access_levels_test(self, mock_get_config: MagicMock):
+        """
+        Test image_path
+        """
+        mock_get_config.return_value = {'workflow': {'access_level': 'test'}}
+        self.assertEqual(dataset_for_access_level('dataset'), 'dataset-test')
+
+    @patch('cpg_utils.config.get_config')
+    def test_dataset_access_levels_standard(self, mock_get_config: MagicMock):
+        """
+        Test image_path
+        """
+        mock_get_config.return_value = {'workflow': {'access_level': 'standard'}}
+        self.assertEqual(dataset_for_access_level('dataset'), 'dataset')
