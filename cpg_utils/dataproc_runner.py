@@ -535,9 +535,9 @@ class HailDataprocCluster:
         # Without this the VMs run as the project's default compute service account, typically
         # this has no access to dataset buckets.
         if self._service_account:
-            config['config']['gce_cluster_config']['service_account'] = (
-                self._service_account
-            )
+            config['config']['gce_cluster_config'][
+                'service_account'
+            ] = self._service_account
         if self._packages:
             pkgs = '|'.join(self._packages)
             config['config']['gce_cluster_config']['metadata']['PKGS'] = pkgs
