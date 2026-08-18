@@ -54,7 +54,9 @@ def _get_token() -> str:
     return slack_token
 
 
-def send_message(text: str, blocks: list[dict] | None = None, color: str | None = None) -> None:
+def send_message(
+    text: str, blocks: list[dict] | None = None, color: str | None = None,
+) -> None:
     """
     Sends `text` as a Slack message, reading credentials from the config.
 
@@ -67,6 +69,7 @@ def send_message(text: str, blocks: list[dict] | None = None, color: str | None 
 
     kwargs = {'channel': _get_channel(), 'text': text}
     if blocks and color:
+        # attachments is legacy, but still the only way to get a colored border on a block message
         kwargs['attachments'] = [{'color': color, 'blocks': blocks}]
     elif blocks:
         kwargs['blocks'] = blocks
@@ -75,6 +78,7 @@ def send_message(text: str, blocks: list[dict] | None = None, color: str | None 
         slack_client.chat_postMessage(**kwargs)
     except _get_slack_sdk().errors.SlackApiError as err:
         logging.error(f'Error posting to Slack: {err}')
+
 
 def upload_file(
     content: bytes,
