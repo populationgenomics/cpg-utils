@@ -9,6 +9,7 @@ configuration values are set.
 """
 
 import logging
+from typing import Any
 
 try:
     import slack_sdk
@@ -55,7 +56,9 @@ def _get_token() -> str:
 
 
 def send_message(
-    text: str, blocks: list[dict] | None = None, color: str | None = None,
+    text: str,
+    blocks: list[dict] | None = None,
+    color: str | None = None,
 ) -> None:
     """
     Sends `text` as a Slack message, reading credentials from the config.
@@ -67,7 +70,7 @@ def send_message(
     """
     slack_client = _get_slack_sdk().WebClient(token=_get_token())
 
-    kwargs = {'channel': _get_channel(), 'text': text}
+    kwargs: dict[str, Any] = {'channel': _get_channel(), 'text': text}
     if blocks and color:
         # attachments is legacy, but still the only way to get a colored border on a block message
         kwargs['attachments'] = [{'color': color, 'blocks': blocks}]
