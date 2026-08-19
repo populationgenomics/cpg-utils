@@ -9,6 +9,7 @@ configuration values are set.
 """
 
 import logging
+from typing import Any
 
 try:
     import slack_sdk
@@ -54,14 +55,30 @@ def _get_token() -> str:
     return slack_token
 
 
-def send_message(text: str) -> None:
-    """Sends `text` as a Slack message, reading credentials from the config."""
+def send_message(
+    text: str,
+    blocks: list[dict] | None = None,
+    color: str | None = None,
+) -> None:
+    """
+    Sends `text` as a Slack message, reading credentials from the config.
+
+    `text` is always sent as the fallback shown in notifications/previews.
+    If `blocks` is provided, it's used for the rendered message body.
+    If `color` is also provided, blocks are wrapped in a colored attachment
+    (e.g. '#fa1e3b' for failure, '#ecb22e' for warning, '#2eb67d' for ok).
+    """
     slack_client = _get_slack_sdk().WebClient(token=_get_token())
+
+    kwargs: dict[str, Any] = {'channel': _get_channel(), 'text': text}
+    if blocks and color:
+        # attachments is legacy, but still the only way to get a colored border on a block message
+        kwargs['attachments'] = [{'color': color, 'blocks': blocks}]
+    elif blocks:
+        kwargs['blocks'] = blocks
+
     try:
-        slack_client.chat_postMessage(
-            channel=_get_channel(),
-            text=text,
-        )
+        slack_client.chat_postMessage(**kwargs)
     except _get_slack_sdk().errors.SlackApiError as err:
         logging.error(f'Error posting to Slack: {err}')
 
