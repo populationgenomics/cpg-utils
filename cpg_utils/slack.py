@@ -66,7 +66,7 @@ def send_message(
     `text` is always sent as the fallback shown in notifications/previews.
     If `blocks` is provided, it's used for the rendered message body.
     If `color` is also provided, blocks are wrapped in a colored attachment
-    (e.g. '#e01e5a' for failure, '#ecb22e' for warning, '#2eb67d' for ok).
+    (e.g. '#fa1e3b' for failure, '#ecb22e' for warning, '#2eb67d' for ok).
     """
     slack_client = _get_slack_sdk().WebClient(token=_get_token())
 
