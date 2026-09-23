@@ -341,7 +341,7 @@ class HailDataprocCluster:
         job_client: dataproc_v1.JobControllerClient | None = None,
         storage_client: storage.Client | None = None,
         preemptible_workers: bool = True,
-        internal_ip_only: bool = False,
+        internal_ip_only: bool = True,
     ) -> None:
         self._project = project
         self._region = region
