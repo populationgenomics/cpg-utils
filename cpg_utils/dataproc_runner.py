@@ -341,6 +341,7 @@ class HailDataprocCluster:
         job_client: dataproc_v1.JobControllerClient | None = None,
         storage_client: storage.Client | None = None,
         preemptible_workers: bool = True,
+        internal_ip_only: bool = True,
     ) -> None:
         self._project = project
         self._region = region
@@ -391,6 +392,7 @@ class HailDataprocCluster:
         self._cluster: dataproc_v1.Cluster | None = None
         self._job_ids: list[str] = []
         self._preemptible_workers = preemptible_workers
+        self._internal_ip_only = internal_ip_only
 
     @property
     def name(self) -> str:
@@ -490,6 +492,7 @@ class HailDataprocCluster:
             'config': {
                 'gce_cluster_config': {
                     'zone_uri': '',  # Let Dataproc auto-zone within region.
+                    'internal_ip_only': self._internal_ip_only,
                     'metadata': {
                         'WHEEL': self.wheel,
                     },
