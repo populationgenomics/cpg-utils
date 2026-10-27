@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "cpg-utils"
 # This tag is automatically updated by bumpversion
-version = "5.8.1"
+version = "5.8.2"
 description = "Library of convenience functions specific to the CPG"
 readme = "README.md"
 license = "MIT"
