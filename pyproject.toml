@@ -43,7 +43,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "bump2version",
+    "bump-my-version",
     "coverage",
     "hail",
     "pre-commit",
@@ -118,3 +118,21 @@ cpg = [
 [tool.pytest.ini_options]
 addopts = "--doctest-modules"
 testpaths = ["test", "cpg_utils"]
+
+[tool.bumpversion]
+current_version = "5.8.2"
+parse = "(?P<major>\\d+)\\.(?P<minor>\\d+)\\.(?P<patch>\\d+)"
+serialize = ["{major}.{minor}.{patch}"]
+commit = true
+message = "Bump version: {current_version} → {new_version}"
+commit_args = ""
+
+[[tool.bumpversion.files]]
+filename = "pyproject.toml"
+search = 'version = "{current_version}"'
+replace = 'version = "{new_version}"'
+
+[[tool.bumpversion.files]]
+filename = ".github/workflows/docker.yaml"
+search = 'VERSION: {current_version}'
+replace = 'VERSION: {new_version}'

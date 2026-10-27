@@ -16,7 +16,7 @@ from cpg_utils.cloud import email_from_id_token
 _email_string = email_from_id_token(id_token_jwt='TOKEN_STRING')
 ```
 
-We use `bumpversion` for incrementing the library's semantic version. A new conda package gets published automatically in the `cpg` conda channel whenever a version bump commit is merged with the `main` branch.
+We use `bump-my-version` for incrementing the library's semantic version. A new conda package gets published automatically in the `cpg` conda channel whenever a version bump commit is merged with the `main` branch.
 
 
 ## Contents
