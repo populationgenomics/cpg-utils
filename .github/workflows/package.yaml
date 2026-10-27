@@ -15,12 +15,10 @@ jobs:
           python-version: "3.11"
 
       - name: Install prerequisites
-        run: |
-          # Ensure setuptools produces a PEP625-compliant sdist filename
-          pip install --upgrade setuptools
+        run: pip install --upgrade build
 
       - name: Build
-        run: python setup.py sdist
+        run: python -m build --sdist
 
       - name: Test install + import
         run: |

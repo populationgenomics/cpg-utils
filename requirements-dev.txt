@@ -1,7 +1,0 @@
--r requirements.txt
-bump2version
-coverage
-hail
-pre-commit
-pytest
-setuptools>=65.5.1

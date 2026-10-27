@@ -1,3 +1,65 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cpg-utils"
+# This tag is automatically updated by bumpversion
+version = "5.8.1"
+description = "Library of convenience functions specific to the CPG"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+keywords = ["bioinformatics"]
+classifiers = [
+    "Environment :: Console",
+    "Intended Audience :: Science/Research",
+    "Natural Language :: English",
+    "Operating System :: MacOS :: MacOS X",
+    "Operating System :: POSIX",
+    "Operating System :: Unix",
+    "Programming Language :: Python",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+]
+dependencies = [
+    "boto3>=1.28.56",
+    "botocore>=1.31.56",
+    "cloudpathlib[all]",
+    "frozendict",
+    "google-auth>=1.27.0",
+    "google-auth-oauthlib",
+    "google-cloud-artifact-registry",
+    "google-cloud-dataproc",
+    "google-cloud-secret-manager",
+    "google-cloud-storage",
+    "metamist",
+    "python-slugify",
+    "requests",
+    "tabulate",
+    "toml",
+    "deprecated",
+]
+
+[project.optional-dependencies]
+dev = [
+    "bump2version",
+    "coverage",
+    "hail",
+    "pre-commit",
+    "pytest",
+    "setuptools>=65.5.1",
+]
+
+[project.urls]
+Homepage = "https://github.com/populationgenomics/cpg-utils"
+
+[tool.setuptools.packages.find]
+include = ["cpg_utils*"]
+
+[tool.setuptools.package-data]
+cpg_utils = ["py.typed"]
+
 [tool.black]
 line-length = 88
 skip-string-normalization = true

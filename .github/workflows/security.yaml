@@ -14,15 +14,10 @@ jobs:
         with:
           python-version: '3.11'
           cache: 'pip'
-          cache-dependency-path: |
-            requirements.txt
-            requirements-dev.txt
+          cache-dependency-path: pyproject.toml
 
       - name: Install packages
-        run: pip install -r requirements-dev.txt
-
-      - name: Install from setup.py
-        run: pip install .
+        run: pip install ".[dev]"
 
       - uses: pypa/gh-action-pip-audit@v1.1.0
         with:
