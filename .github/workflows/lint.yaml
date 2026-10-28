@@ -18,7 +18,7 @@ jobs:
         cache-dependency-path: pyproject.toml
 
     - name: Install packages
-      run: pip install ".[dev]"
+      run: pip install --group dev .
 
     - name: pre-commit
       run: pre-commit run --all-files

@@ -38,7 +38,7 @@ dependencies = [
     "deprecated",
 ]
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
     "bump-my-version",
     "coverage",
