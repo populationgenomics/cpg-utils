@@ -27,7 +27,7 @@ jobs:
         version: 0.13.6 #uv version
 
     - name: Install packages
-      run: uv sync
+      run: uv sync --locked
 
     - name: pre-commit
       run: uv run pre-commit run --all-files

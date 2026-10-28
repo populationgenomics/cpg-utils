@@ -23,7 +23,7 @@ jobs:
           version: 0.13.6 #uv version
 
       - name: Install packages
-        run: uv sync
+        run: uv sync --locked
 
       - uses: pypa/gh-action-pip-audit@v1.1.0
         with:
