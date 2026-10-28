@@ -792,6 +792,7 @@ def _copy_resource_group_into_batch(
         jq_els,
         error_descriptions,
         rg.keys(),
+        strict=True,
     ):
         j.command(
             f"""

@@ -8,24 +8,31 @@ jobs:
   package:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Install prerequisites
-        run: |
-          # Ensure setuptools produces a PEP625-compliant sdist filename
-          pip install --upgrade setuptools
+      - name: Install uv
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e #v10.3.2
+        with:
+          enable-cache: false
+          version: 0.13.6 #uv version
 
       - name: Build
-        run: python setup.py sdist
+        run: uv build --out-dir dist
 
-      - name: Test install + import
+      - name: Smoke test package
         run: |
-          pip install dist/*
-          python -c "import cpg_utils.cloud"
+          for dist in dist/*; do
+            echo "Testing package dist $dist"
+            uv run \
+              --with "$dist" \
+              --no-project \
+              --isolated \
+              -- python -I -c "import cpg_utils.cloud"
+          done
 
       - uses: actions/upload-artifact@v4
         with:

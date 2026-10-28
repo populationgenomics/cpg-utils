@@ -3,8 +3,9 @@
 import os
 import re
 import uuid
+from collections.abc import Collection
 from shlex import quote
-from typing import Any, Collection
+from typing import Any
 
 import hailtop.batch as hb
 
