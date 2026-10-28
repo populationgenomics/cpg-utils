@@ -19,7 +19,7 @@ jobs:
         cache-dependency-path: pyproject.toml
 
     - name: Install packages
-      run: pip install ".[dev]"
+      run: pip install --group dev .
 
     - name: "Run unit tests"
       id: runtests
