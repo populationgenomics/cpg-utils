@@ -43,6 +43,7 @@ dev = [
     "bump-my-version",
     "coverage",
     "hail",
+    "pip-audit>=2.7.3",
     "pre-commit",
     "pytest",
     "setuptools>=77",

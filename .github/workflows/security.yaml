@@ -1,8 +1,10 @@
 name: Security Checks
 
 on:
-  workflow_dispatch:
   push:
+    branches: [main]
+  pull_request:
+    branches: ['**']
 
 permissions: {}
 
@@ -11,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     name: Pip Audit
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           persist-credentials: false
 
