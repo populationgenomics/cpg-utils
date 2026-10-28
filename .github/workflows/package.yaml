@@ -14,22 +14,40 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e #v6.8.0
+        with:
+          activate-environment: true
+          enable-cache: false
+          version: 0.8.22 #uv version
+
+      - name: Setup build env
+        run: uv sync
+
       - name: Install prerequisites
         run: pip install --upgrade build
 
       - name: Build
-        run: python -m build --sdist
-
-      - name: Test install + import
         run: |
-          pip install dist/*
-          python -c "import cpg_utils.cloud"
+          uv build --sdist --out-dir dist
 
-      - uses: actions/upload-artifact@v4
+      - name: Smoke test package
+        run: |
+          for tarball in packages/cpg-utils/dist/*.tar.gz; do
+            echo "Testing package dist $tarball"
+            uv run \
+              --with "$tarball" \
+              --no-project \
+              --isolated \
+              -- python -c "import cpg_utils.cloud"
+          done
+
+      - name: Publish package
+        if: github.ref == 'refs/heads/main'
+        uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          name: sdist
-          path: dist/*
-          retention-days: 2
+          packages-dir: packages/cpg-utils/dist
+          skip-existing: true
 
   upload_pypi:
     needs: package
