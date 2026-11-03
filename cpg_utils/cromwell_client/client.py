@@ -17,6 +17,7 @@ from typing import Any
 import requests
 
 from cpg_utils.constants import CROMWELL_AUDIENCE, CROMWELL_URL
+from cpg_utils.cromwell_client.common import check_input_document_count
 from cpg_utils.cromwell_client.errors import (
     CromwellNotFound,
     CromwellRequestError,
@@ -25,7 +26,6 @@ from cpg_utils.cromwell_client.errors import (
 
 logger = logging.getLogger(__name__)
 
-MAX_INPUT_DOCUMENTS = 5
 FALLBACK_TOKEN_LIFETIME_SECONDS = 50 * 60
 _BODY_SNIPPET_CHARS = 500
 _UNAVAILABLE_STATUS_CODES = frozenset({401, 408, 429})
@@ -177,7 +177,7 @@ class CromwellClient:
         *,
         timeout: float | None = None,
         **kwargs: Any,
-    ) -> Any:
+    ) -> dict[str, Any]:
         url = f'{self.api_url}{path}'
         headers = {'Authorization': f'Bearer {self.token_provider()}'}
         try:
@@ -210,11 +210,19 @@ class CromwellClient:
                 status_code=code,
             )
         try:
-            return response.json()
+            body = response.json()
         except ValueError as e:
             raise CromwellUnavailable(
                 f'{method} {url} returned a non-JSON body: {_snippet(response)}',
             ) from e
+        # Every endpoint used here returns a JSON object; anything else is a broken
+        # response (e.g. from a proxy), and is treated like a non-JSON body.
+        if not isinstance(body, dict):
+            raise CromwellUnavailable(
+                f'{method} {url} returned JSON that is not an object: '
+                f'{_snippet(response)}',
+            )
+        return body
 
     def submit(
         self,
@@ -238,11 +246,7 @@ class CromwellClient:
             dependencies: a zip of imported WDL/libs, if any.
             labels: Cromwell workflow labels (not ``google_labels``).
         """
-        if len(input_documents) > MAX_INPUT_DOCUMENTS:
-            raise ValueError(
-                f'Cromwell accepts at most {MAX_INPUT_DOCUMENTS} input documents, '
-                f'got {len(input_documents)}',
-            )
+        check_input_document_count(len(input_documents))
         files: list[tuple[str, tuple[str | None, Any] | tuple[str | None, Any, str]]]
         files = [('workflowSource', (workflow_filename, workflow_source))]
         for index, document in enumerate(input_documents, start=1):
@@ -262,7 +266,7 @@ class CromwellClient:
             files=files,
             timeout=self.submit_timeout_seconds,
         )
-        workflow_id = body.get('id') if isinstance(body, dict) else None
+        workflow_id = body.get('id')
         if not workflow_id:
             raise CromwellUnavailable(
                 f'Cromwell accepted the submission but returned no id: {body!r:.500}',
@@ -272,7 +276,7 @@ class CromwellClient:
     def status(self, workflow_id: str) -> str:
         """Return the Workflow's current status, e.g. ``Running`` or ``Succeeded``."""
         body = self._request('GET', f'/{workflow_id}/status')
-        status = body.get('status') if isinstance(body, dict) else None
+        status = body.get('status')
         if not status:
             raise CromwellUnavailable(
                 f'Cromwell returned no status for {workflow_id}: {body!r:.500}',
@@ -298,7 +302,13 @@ class CromwellClient:
     def outputs(self, workflow_id: str) -> dict[str, Any]:
         """Return the Workflow outputs (the ``outputs`` object of the response)."""
         body = self._request('GET', f'/{workflow_id}/outputs')
-        return body.get('outputs') or {}
+        outputs = body.get('outputs') or {}
+        if not isinstance(outputs, dict):
+            raise CromwellUnavailable(
+                f'Cromwell returned non-object outputs for {workflow_id}: '
+                f'{outputs!r:.500}',
+            )
+        return outputs
 
     def abort(self, workflow_id: str) -> str:
         """Request an abort and return the status Cromwell reports, e.g. ``Aborting``."""
@@ -316,4 +326,9 @@ class CromwellClient:
             '/query',
             params=[('label', f'{key}:{value}'), ('includeSubworkflows', 'false')],
         )
-        return list(body.get('results') or [])
+        results = body.get('results') or []
+        if not isinstance(results, list):
+            raise CromwellUnavailable(
+                f'Cromwell returned non-list query results: {results!r:.500}',
+            )
+        return results

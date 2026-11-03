@@ -2,6 +2,7 @@
 
 import json
 import pathlib
+from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 from unittest.mock import patch
@@ -9,8 +10,7 @@ from unittest.mock import patch
 import pytest
 
 from cpg_utils.cromwell_client import collect as collect_module
-from cpg_utils.cromwell_client import submission as submission_module
-from cpg_utils.cromwell_client import watch as watch_module
+from cpg_utils.cromwell_client import common as common_module
 from cpg_utils.cromwell_client.client import CromwellClient
 from cpg_utils.cromwell_client.errors import CromwellError, CromwellUnavailable
 from cpg_utils.cromwell_client.gcp_batch import build_workflow_options
@@ -40,7 +40,7 @@ class FakeCromwell:
     def add(
         self,
         workflow_id: str,
-        statuses: list[str],
+        statuses: Sequence[str | Exception],
         *,
         key: str | None = None,
         submitted: str = '2026-11-03T10:00:00.000Z',
@@ -86,6 +86,8 @@ class FakeCromwell:
         statuses = self.workflows[workflow_id]['statuses']
         if len(statuses) > 1:
             statuses.pop(0)
+        if isinstance(statuses[0], BaseException):
+            raise statuses[0]
         return statuses[0]
 
     def metadata(
@@ -124,9 +126,8 @@ class Clock:
 @pytest.fixture(autouse=True)
 def clock(monkeypatch: pytest.MonkeyPatch) -> Clock:
     c = Clock()
-    monkeypatch.setattr(watch_module, '_sleep', c.sleep)
-    monkeypatch.setattr(watch_module, '_utcnow', lambda: c.now)
-    monkeypatch.setattr(submission_module, '_sleep', c.sleep)
+    monkeypatch.setattr(common_module, 'sleep', c.sleep)
+    monkeypatch.setattr(common_module, 'utcnow', lambda: c.now)
     return c
 
 
@@ -249,6 +250,28 @@ def test_aborting_too_long_raises(
     assert sum(clock.sleeps) == ABORTING_WAIT_SECONDS
 
 
+def test_aborting_wait_retries_transient_errors(
+    fake: FakeCromwell,
+    wdl: pathlib.Path,
+):
+    blip = CromwellUnavailable('503')
+    fake.add('old', ['Aborting', blip, 'Aborting', blip, 'Aborted'], key=_key(wdl))
+    result = _run(fake, wdl, max_sequential_exception_count=2)
+    assert result.workflow_id == 'new-1'
+    assert fake.calls.count('status:old') == 4  # noqa: PLR2004
+
+
+def test_aborting_wait_gives_up_when_budget_runs_out(
+    fake: FakeCromwell,
+    wdl: pathlib.Path,
+):
+    blip = CromwellUnavailable('503')
+    fake.add('old', ['Aborting', blip], key=_key(wdl))
+    with pytest.raises(CromwellUnavailable, match='2 consecutive errors'):
+        _run(fake, wdl, max_sequential_exception_count=2)
+    assert 'submit' not in fake.calls
+
+
 def test_newest_result_wins(fake: FakeCromwell, wdl: pathlib.Path):
     key = _key(wdl)
     fake.add('oldest', ['Running', 'Succeeded'], key=key, submitted='2026-11-01T00:00Z')
@@ -369,7 +392,7 @@ def test_round_trip_reattaches_despite_new_secret_and_ar_guid(
     first_options = options('key-1', 'guid-1')
     with (
         pytest.raises(KeyboardInterrupt),
-        patch.object(watch_module, '_sleep', side_effect=KeyboardInterrupt),
+        patch.object(common_module, 'sleep', side_effect=KeyboardInterrupt),
     ):
         _run(fake, wdl, options=first_options)
     assert fake.calls.count('submit') == 1

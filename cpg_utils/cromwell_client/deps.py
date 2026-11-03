@@ -30,6 +30,18 @@ def _files_under(top: pathlib.Path) -> list[pathlib.Path]:
     return found
 
 
+def _named_path(candidate: pathlib.Path, target: pathlib.Path) -> pathlib.Path:
+    """
+    The path a lib's entries are named under: its parent resolved, but the lib itself
+    left as given. A symlinked ``Structs.wdl`` or ``tasks/`` keeps the link's name, as
+    ``zip -r`` would, rather than taking its target's path. A trailing ``..`` has no
+    name to keep, so the fully resolved ``target`` is used instead.
+    """
+    if candidate.name in {'', '..'}:
+        return target
+    return candidate.parent.resolve() / candidate.name
+
+
 def zip_dependencies(
     cwd: str | os.PathLike[str],
     libs: Sequence[str | os.PathLike[str]],
@@ -62,9 +74,14 @@ def zip_dependencies(
         candidate = given if given.is_absolute() else root / given
         if not candidate.exists():
             raise ValueError(f'Dependency {str(lib)!r} does not exist under {root}')
-        top = candidate.resolve()
+        target = candidate.resolve()
+        if not target.is_relative_to(root):
+            raise ValueError(
+                f'Dependency {str(lib)!r} resolves outside {root}: {target}',
+            )
+        top = _named_path(candidate, target)
         if not top.is_relative_to(root):
-            raise ValueError(f'Dependency {str(lib)!r} resolves outside {root}: {top}')
+            raise ValueError(f'Dependency {str(lib)!r} lies outside {root}: {top}')
         for path in _files_under(top):
             names[path.relative_to(root).as_posix()] = path
 

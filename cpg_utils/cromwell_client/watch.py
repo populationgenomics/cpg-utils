@@ -4,12 +4,21 @@ Watch a Cromwell Workflow until it finishes, and return its Workflow outputs.
 
 import logging
 import math
-import time
 from collections.abc import Iterable
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Any
 
+from cpg_utils.cromwell_client import common
 from cpg_utils.cromwell_client.client import CromwellClient
+from cpg_utils.cromwell_client.common import (
+    DEFAULT_MAX_POLL_INTERVAL,
+    DEFAULT_MAX_SEQUENTIAL_EXCEPTION_COUNT,
+    SUCCEEDED,
+    TERMINAL_STATUSES,
+    UNSUCCESSFUL_STATUSES,
+    ErrorBudget,
+    parse_cromwell_datetime,
+)
 from cpg_utils.cromwell_client.errors import (
     CromwellRequestError,
     CromwellUnavailable,
@@ -19,10 +28,6 @@ from cpg_utils.cromwell_client.errors import (
 from cpg_utils.cromwell_model import WorkflowMetadataModel
 
 logger = logging.getLogger(__name__)
-
-SUCCEEDED = 'Succeeded'
-FAILED_STATUSES = frozenset({'Failed', 'Aborted'})
-TERMINAL_STATUSES = FAILED_STATUSES | {SUCCEEDED}
 
 METADATA_REPORT_KEYS = (
     'id',
@@ -44,18 +49,9 @@ METADATA_REPORT_KEYS = (
 )
 
 
-def _sleep(seconds: float) -> None:
-    """Indirection so tests can replace sleeping."""
-    time.sleep(seconds)
-
-
-def _utcnow() -> datetime:
-    """Indirection so tests can control the clock."""
-    return datetime.now(UTC)
-
-
 def poll_interval(
     elapsed_seconds: float,
+    *,
     min_seconds: int,
     max_seconds: int,
     ramp_seconds: int,
@@ -64,51 +60,16 @@ def poll_interval(
     Seconds to wait before the next poll: a cosine ramp from ``min_seconds`` up to
     ``max_seconds`` over the first ``ramp_seconds``, then flat.
 
-    >>> poll_interval(0, 5, 60, 1200), poll_interval(600, 5, 60, 1200)
+    >>> curve = {'min_seconds': 5, 'max_seconds': 60, 'ramp_seconds': 1200}
+    >>> poll_interval(0, **curve), poll_interval(600, **curve)
     (5, 29)
-    >>> poll_interval(5000, 5, 60, 1200)
+    >>> poll_interval(5000, **curve)
     60
     """
     factor = elapsed_seconds / ramp_seconds
     if factor > 1:
         return max_seconds
     return max(min_seconds, int((1 - math.cos(math.pi * factor)) * max_seconds // 2))
-
-
-class _ErrorBudget:
-    """Counts consecutive errors, raising once ``limit`` of them have happened."""
-
-    def __init__(self, limit: int, workflow_id: str) -> None:
-        self.limit = limit
-        self.remaining = limit
-        self.workflow_id = workflow_id
-
-    def reset(self) -> None:
-        self.remaining = self.limit
-
-    def spend(self, error: Exception, what: str) -> None:
-        self.remaining -= 1
-        if self.remaining <= 0:
-            raise CromwellUnavailable(
-                f'Giving up on Workflow {self.workflow_id} after {self.limit} '
-                f'consecutive errors; last one while {what}: {error}',
-            ) from error
-        logger.warning(
-            f'Error while {what} for Workflow {self.workflow_id} '
-            f'({self.remaining} retries left): {error}',
-        )
-
-
-def _parse_cromwell_datetime(value: Any) -> datetime | None:
-    if not isinstance(value, str) or not value:
-        return None
-    try:
-        parsed = datetime.fromisoformat(value)
-    except ValueError:
-        return None
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=UTC)
-    return parsed.astimezone(UTC)
 
 
 def _flatten_failures(failures: Iterable[Any]) -> list[str]:
@@ -131,24 +92,22 @@ def _flatten_failures(failures: Iterable[Any]) -> list[str]:
 def _submission_time(
     client: CromwellClient,
     workflow_id: str,
-    budget: _ErrorBudget,
+    budget: ErrorBudget,
     retry_seconds: int,
 ) -> datetime:
     """When Cromwell received the Workflow, so re-attaching doesn't restart the clock."""
-    while True:
-        try:
-            meta = client.metadata(workflow_id, include_keys=('submission',))
-            break
-        except CromwellUnavailable as e:
-            budget.spend(e, 'reading the submission time')
-            _sleep(retry_seconds)
-    submitted = _parse_cromwell_datetime(meta.get('submission'))
+    meta = budget.retry(
+        lambda: client.metadata(workflow_id, include_keys=('submission',)),
+        'reading the submission time',
+        wait_seconds=retry_seconds,
+    )
+    submitted = parse_cromwell_datetime(meta.get('submission'))
     if submitted is None:
         logger.warning(
             f'Workflow {workflow_id} has no usable submission time '
             f'({meta.get("submission")!r}); timing from now',
         )
-        return _utcnow()
+        return common.utcnow()
     return submitted
 
 
@@ -173,7 +132,7 @@ def _abort_for_time_limit(
     client: CromwellClient,
     workflow_id: str,
     time_limit_seconds: int,
-    budget: _ErrorBudget,
+    budget: ErrorBudget,
     retry_seconds: int,
 ) -> WorkflowTimedOut:
     """Abort the Workflow, retrying within the budget; return the error to raise."""
@@ -181,22 +140,17 @@ def _abort_for_time_limit(
         f'Workflow {workflow_id} exceeded its time limit of {time_limit_seconds}s; '
         'aborting',
     )
-    while True:
-        try:
-            status = client.abort(workflow_id)
-        except (CromwellUnavailable, CromwellRequestError) as e:
-            try:
-                budget.spend(e, 'aborting')
-            except CromwellUnavailable:
-                return WorkflowTimedOut(
-                    workflow_id,
-                    time_limit_seconds,
-                    abort_confirmed=False,
-                )
-            _sleep(retry_seconds)
-            continue
-        logger.info(f'Abort requested for Workflow {workflow_id}: {status}')
-        return WorkflowTimedOut(workflow_id, time_limit_seconds, abort_confirmed=True)
+    try:
+        status = budget.retry(
+            lambda: client.abort(workflow_id),
+            'aborting',
+            wait_seconds=retry_seconds,
+            retry_on=(CromwellUnavailable, CromwellRequestError),
+        )
+    except CromwellUnavailable:  # the budget ran out
+        return WorkflowTimedOut(workflow_id, time_limit_seconds, abort_confirmed=False)
+    logger.info(f'Abort requested for Workflow {workflow_id}: {status}')
+    return WorkflowTimedOut(workflow_id, time_limit_seconds, abort_confirmed=True)
 
 
 def watch_workflow(
@@ -204,9 +158,9 @@ def watch_workflow(
     workflow_id: str,
     *,
     min_poll_interval: int = 5,
-    max_poll_interval: int = 60,
+    max_poll_interval: int = DEFAULT_MAX_POLL_INTERVAL,
     exponential_decrease_seconds: int = 1200,
-    max_sequential_exception_count: int = 25,
+    max_sequential_exception_count: int = DEFAULT_MAX_SEQUENTIAL_EXCEPTION_COUNT,
     time_limit_seconds: int | None = None,
     abort_on_interrupt: bool = False,
 ) -> dict[str, Any]:
@@ -280,26 +234,25 @@ def _watch(
     max_sequential_exception_count: int,
     time_limit_seconds: int | None,
 ) -> dict[str, Any]:
-    budget = _ErrorBudget(max_sequential_exception_count, workflow_id)
+    budget = ErrorBudget(max_sequential_exception_count, workflow_id)
     submitted = _submission_time(client, workflow_id, budget, min_poll_interval)
     logger.info(f'Watching Workflow {workflow_id}, submitted {submitted.isoformat()}')
     report: dict[str, Any] | None = None
     reported = False
 
     while True:
-        elapsed = (_utcnow() - submitted).total_seconds()
+        elapsed = (common.utcnow() - submitted).total_seconds()
         wait = poll_interval(
             elapsed,
-            min_poll_interval,
-            max_poll_interval,
-            exponential_decrease_seconds,
+            min_seconds=min_poll_interval,
+            max_seconds=max_poll_interval,
+            ramp_seconds=exponential_decrease_seconds,
         )
-        try:
-            status = client.status(workflow_id)
-        except CromwellUnavailable as e:
-            budget.spend(e, 'polling status')
-            _sleep(wait)
-            continue
+        status = budget.retry(
+            lambda: client.status(workflow_id),
+            'polling status',
+            wait_seconds=wait,
+        )
         budget.reset()
 
         if status in TERMINAL_STATUSES and not reported:
@@ -307,17 +260,15 @@ def _watch(
             report = _report(client, workflow_id)
 
         if status == SUCCEEDED:
-            while True:
-                try:
-                    outputs = client.outputs(workflow_id)
-                except CromwellUnavailable as e:
-                    budget.spend(e, 'fetching outputs')
-                    _sleep(wait)
-                    continue
-                logger.info(f'Workflow {workflow_id} succeeded')
-                return outputs
+            outputs = budget.retry(
+                lambda: client.outputs(workflow_id),
+                'fetching outputs',
+                wait_seconds=wait,
+            )
+            logger.info(f'Workflow {workflow_id} succeeded')
+            return outputs
 
-        if status in FAILED_STATUSES:
+        if status in UNSUCCESSFUL_STATUSES:
             failures = _flatten_failures((report or {}).get('failures') or ())
             logger.error(f'Workflow {workflow_id} finished with status {status}')
             raise WorkflowFailed(workflow_id, status, failures)
@@ -334,4 +285,4 @@ def _watch(
             )
 
         logger.info(f'Workflow {workflow_id} is {status} (next poll in {wait}s)')
-        _sleep(wait)
+        common.sleep(wait)

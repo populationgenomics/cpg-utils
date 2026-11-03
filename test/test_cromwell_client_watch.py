@@ -7,7 +7,7 @@ from typing import Any, cast
 
 import pytest
 
-from cpg_utils.cromwell_client import watch as watch_module
+from cpg_utils.cromwell_client import common as common_module
 from cpg_utils.cromwell_client.client import CromwellClient
 from cpg_utils.cromwell_client.errors import (
     CromwellNotFound,
@@ -117,8 +117,8 @@ class Clock:
 @pytest.fixture(autouse=True)
 def clock(monkeypatch: pytest.MonkeyPatch) -> Clock:
     c = Clock()
-    monkeypatch.setattr(watch_module, '_sleep', c.sleep)
-    monkeypatch.setattr(watch_module, '_utcnow', c.utcnow)
+    monkeypatch.setattr(common_module, 'sleep', c.sleep)
+    monkeypatch.setattr(common_module, 'utcnow', c.utcnow)
     return c
 
 
@@ -137,7 +137,8 @@ def _old_formula(elapsed: float, lo: int, hi: int, ramp: int) -> int:
 @pytest.mark.parametrize('ramp', [1200, 600])
 def test_poll_interval_matches_old_formula(ramp: int):
     for elapsed in (0, 1, ramp / 4, ramp / 2, ramp, 2 * ramp):
-        assert poll_interval(elapsed, 5, 60, ramp) == _old_formula(elapsed, 5, 60, ramp)
+        new = poll_interval(elapsed, min_seconds=5, max_seconds=60, ramp_seconds=ramp)
+        assert new == _old_formula(elapsed, 5, 60, ramp)
 
 
 def test_happy_path(caplog: pytest.LogCaptureFixture, clock: Clock):

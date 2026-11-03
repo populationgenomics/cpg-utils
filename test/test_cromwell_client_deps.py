@@ -101,3 +101,40 @@ def test_python_imports_resolve_from_zip_root(
     assert pkg.VALUE == 42  # noqa: PLR2004
     assert str(zip_path) in pkg.__file__
     monkeypatch.delitem(sys.modules, 'pkg', raising=False)
+
+
+def test_symlinked_lib_keeps_the_link_name(tree: pathlib.Path):
+    (tree / 'Linked.wdl').symlink_to(tree / 'Structs.wdl')
+    (tree / 'linked_tasks').symlink_to(tree / 'tasks', target_is_directory=True)
+    assert _names(zip_dependencies(tree, ['Linked.wdl', 'linked_tasks'])) == [
+        'Linked.wdl',
+        'linked_tasks/a.wdl',
+        'linked_tasks/b.wdl',
+    ]
+
+
+def test_cwd_reached_through_a_symlink(tree: pathlib.Path, tmp_path: pathlib.Path):
+    alias = tmp_path / 'alias'
+    alias.symlink_to(tree, target_is_directory=True)
+    assert _names(zip_dependencies(alias, [alias / 'tasks', 'Structs.wdl'])) == [
+        'Structs.wdl',
+        'tasks/a.wdl',
+        'tasks/b.wdl',
+    ]
+
+
+def test_lib_named_by_a_trailing_parent_reference(tree: pathlib.Path):
+    assert _names(zip_dependencies(tree, ['tasks/..'])) == _names(
+        zip_dependencies(tree, ['.']),
+    )
+
+
+def test_symlink_inside_cwd_pointing_outside_raises(
+    tree: pathlib.Path,
+    tmp_path: pathlib.Path,
+):
+    outside = tmp_path / 'outside.wdl'
+    outside.write_text('version 1.0\n')
+    (tree / 'escape.wdl').symlink_to(outside)
+    with pytest.raises(ValueError, match='outside'):
+        zip_dependencies(tree, ['escape.wdl'])

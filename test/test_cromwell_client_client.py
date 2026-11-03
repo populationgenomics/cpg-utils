@@ -360,3 +360,42 @@ def test_query_by_label(stub: Stub):
         ('label', 'cpg-submission-key:abc'),
         ('includeSubworkflows', 'false'),
     ]
+
+
+CLIENT_CALLS: list[tuple[str, Callable[[CromwellClient], Any]]] = [
+    ('status', lambda c: c.status('wf-1')),
+    ('metadata', lambda c: c.metadata('wf-1')),
+    ('outputs', lambda c: c.outputs('wf-1')),
+    ('abort', lambda c: c.abort('wf-1')),
+    ('query_by_label', lambda c: c.query_by_label('k', 'v')),
+    ('submit', lambda c: c.submit(b'wdl', options={})),
+]
+
+
+@pytest.mark.parametrize('body', [['a', 'list'], 'a string', 42, True])
+@pytest.mark.parametrize(
+    ('name', 'call'),
+    CLIENT_CALLS,
+    ids=[n for n, _ in CLIENT_CALLS],
+)
+def test_json_body_that_is_not_an_object_is_unavailable(
+    stub: Stub,
+    body: Any,
+    name: str,  # noqa: ARG001
+    call: Callable[[CromwellClient], Any],
+):
+    stub(_Response(body=body))
+    with pytest.raises(CromwellUnavailable, match='not an object'):
+        call(_client())
+
+
+def test_outputs_that_are_not_an_object_are_unavailable(stub: Stub):
+    stub(_Response(body={'id': 'wf-1', 'outputs': ['gs://b/o']}))
+    with pytest.raises(CromwellUnavailable, match='non-object outputs'):
+        _client().outputs('wf-1')
+
+
+def test_query_results_that_are_not_a_list_are_unavailable(stub: Stub):
+    stub(_Response(body={'results': {'id': 'wf-1'}}))
+    with pytest.raises(CromwellUnavailable, match='non-list query results'):
+        _client().query_by_label('k', 'v')

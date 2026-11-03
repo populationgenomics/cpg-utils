@@ -11,15 +11,26 @@ import hashlib
 import inspect
 import json
 import logging
-import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
 from cpg_utils import Path, to_path
-from cpg_utils.cromwell_client.client import MAX_INPUT_DOCUMENTS, CromwellClient
+from cpg_utils.cromwell_client import common
+from cpg_utils.cromwell_client.client import CromwellClient
 from cpg_utils.cromwell_client.collect import Destination, collect_outputs
+from cpg_utils.cromwell_client.common import (
+    ABORTING,
+    ACTIVE_STATUSES,
+    DEFAULT_MAX_POLL_INTERVAL,
+    DEFAULT_MAX_SEQUENTIAL_EXCEPTION_COUNT,
+    SUCCEEDED,
+    UNSUCCESSFUL_STATUSES,
+    ErrorBudget,
+    check_input_document_count,
+    parse_cromwell_datetime,
+)
 from cpg_utils.cromwell_client.errors import CromwellError
 from cpg_utils.cromwell_client.watch import watch_workflow
 
@@ -83,10 +94,6 @@ def compute_submission_key(
     return _sha256(canonical.encode())[:_KEY_LENGTH]
 
 
-ACTIVE_STATUSES = frozenset({'Submitted', 'Running', 'On Hold'})
-RESUBMIT_STATUSES = frozenset({'Failed', 'Aborted'})
-ABORTING = 'Aborting'
-SUCCEEDED = 'Succeeded'
 ABORTING_WAIT_SECONDS = 900
 
 _WATCH_KWARGS = frozenset(
@@ -94,11 +101,6 @@ _WATCH_KWARGS = frozenset(
     for name, parameter in inspect.signature(watch_workflow).parameters.items()
     if parameter.kind is inspect.Parameter.KEYWORD_ONLY
 )
-
-
-def _sleep(seconds: float) -> None:
-    """Indirection so tests can replace sleeping."""
-    time.sleep(seconds)
 
 
 @dataclass(frozen=True)
@@ -115,15 +117,10 @@ class WorkflowResult:
 
 
 def _submission_sort_key(result: Mapping[str, Any]) -> datetime:
-    value = result.get('submission')
-    if isinstance(value, str):
-        try:
-            parsed = datetime.fromisoformat(value)
-        except ValueError:
-            pass
-        else:
-            return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
-    return datetime.min.replace(tzinfo=UTC)
+    """Newest first under ``max``; results without a parsable time sort oldest."""
+    return parse_cromwell_datetime(result.get('submission')) or datetime.min.replace(
+        tzinfo=UTC,
+    )
 
 
 def _wait_for_abort(
@@ -131,19 +128,30 @@ def _wait_for_abort(
     workflow_id: str,
     *,
     interval_seconds: int,
+    max_sequential_exception_count: int,
 ) -> str:
-    """Poll until the Workflow stops ``Aborting``; return its final status."""
-    waited = 0
+    """
+    Poll until the Workflow stops ``Aborting``; return its final status.
+
+    Transient ``CromwellUnavailable`` errors are retried within an error budget, as
+    ``watch_workflow`` does; time spent retrying counts towards the wait limit.
+    """
+    budget = ErrorBudget(max_sequential_exception_count, workflow_id)
+    started = common.utcnow()
     status = ABORTING
     while status == ABORTING:
-        if waited >= ABORTING_WAIT_SECONDS:
+        if (common.utcnow() - started).total_seconds() >= ABORTING_WAIT_SECONDS:
             raise CromwellError(
                 f'Workflow {workflow_id} with the same Submission key is still '
                 f'Aborting after {ABORTING_WAIT_SECONDS}s; not submitting a new one',
             )
-        _sleep(interval_seconds)
-        waited += interval_seconds
-        status = client.status(workflow_id)
+        common.sleep(interval_seconds)
+        status = budget.retry(
+            lambda: client.status(workflow_id),
+            'waiting for an Aborting Workflow',
+            wait_seconds=interval_seconds,
+        )
+        budget.reset()
     return status
 
 
@@ -152,6 +160,7 @@ def _find_existing(
     key: str,
     *,
     poll_seconds: int,
+    max_sequential_exception_count: int,
 ) -> str | None:
     """Return the ID of a Workflow to attach to, or None if a new one is needed."""
     results = client.query_by_label(SUBMISSION_KEY_LABEL, key)
@@ -164,8 +173,13 @@ def _find_existing(
         f'Found Workflow {workflow_id} ({status}) with Submission key {key}{newest_of}',
     )
     if status == ABORTING:
-        status = _wait_for_abort(client, workflow_id, interval_seconds=poll_seconds)
-    if status in RESUBMIT_STATUSES:
+        status = _wait_for_abort(
+            client,
+            workflow_id,
+            interval_seconds=poll_seconds,
+            max_sequential_exception_count=max_sequential_exception_count,
+        )
+    if status in UNSUCCESSFUL_STATUSES:
         logger.info(f'Workflow {workflow_id} is {status}; submitting a new one')
         return None
     if status not in ACTIVE_STATUSES and status != SUCCEEDED:
@@ -241,11 +255,7 @@ def run_workflow(
     input_documents = [to_path(f).read_bytes() for f in input_files]
     if inputs is not None:
         input_documents.append(serialise_inputs(inputs))
-    if len(input_documents) > MAX_INPUT_DOCUMENTS:
-        raise ValueError(
-            f'Cromwell accepts at most {MAX_INPUT_DOCUMENTS} input documents, '
-            f'got {len(input_documents)}',
-        )
+    check_input_document_count(len(input_documents))
 
     key = compute_submission_key(
         workflow_source=workflow_source,
@@ -259,7 +269,14 @@ def run_workflow(
         workflow_id = _find_existing(
             client,
             key,
-            poll_seconds=watch_kwargs.get('max_poll_interval', 60),
+            poll_seconds=watch_kwargs.get(
+                'max_poll_interval',
+                DEFAULT_MAX_POLL_INTERVAL,
+            ),
+            max_sequential_exception_count=watch_kwargs.get(
+                'max_sequential_exception_count',
+                DEFAULT_MAX_SEQUENTIAL_EXCEPTION_COUNT,
+            ),
         )
     reused = workflow_id is not None
     if workflow_id is None:
