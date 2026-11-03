@@ -26,14 +26,27 @@ Example:
         )
         # Multiple jobs can be submitted to the same cluster before shutdown.
         cluster.run_job(script_uri, args=['--samplesheet', input_uri, '--stage', 'qc'])
+
+        # Helper modules the script imports go on the driver's sys.path via
+        # python_file_uris. A package directory is zipped so `import my_helpers`
+        # works on the cluster.
+        pyfile_uris = cluster.upload_pyfiles(['my_helpers/', 'extra_module.py'])
+        cluster.run_job(script_uri, python_file_uris=pyfile_uris)
 """
 
+import hashlib
+import io
 import os
+import pathlib
+import posixpath
 import signal
 import sys
+import tempfile
 import threading
 import time
 import uuid
+import zipfile
+from collections.abc import Sequence
 from contextlib import suppress
 from types import FrameType, TracebackType
 from typing import Any
@@ -71,6 +84,18 @@ _KEY_VALUE_INVALID = r'[^a-z0-9_-]'
 _CLUSTER_INVALID = r'[^a-z0-9-]'
 
 _TERMINAL_ERROR_STATES = frozenset({'ERROR', 'CANCELLED'})
+
+# File types Dataproc's pyspark_job.python_file_uris accepts, and that Spark puts on
+# the PYTHONPATH of the driver and executors.
+PYFILE_SUFFIXES = ('.py', '.egg', '.zip')
+# Python package zips: the earliest timestamp a zip entry can hold, fixed (along with
+# permissions and entry order) so zipping an unchanged tree gives identical bytes.
+_ZIP_FIXED_DATE_TIME = (1980, 1, 1, 0, 0, 0)
+_ZIP_FILE_MODE = 0o644
+_ZIP_UNIX_CREATE_SYSTEM = 3
+_ZIP_EXCLUDED_DIRS = frozenset({'__pycache__'})
+_ZIP_EXCLUDED_SUFFIXES = frozenset({'.pyc', '.pyo'})
+_PYFILE_HASH_LENGTH = 16
 
 
 class DataprocJobError(RuntimeError):
@@ -289,6 +314,131 @@ def populate_packages(
         new_packages.append(f'hail=={hail_version}')
 
     return new_packages
+
+
+def validate_python_file_uris(uris: Sequence[str]) -> None:
+    """Check URIs are valid for a single job's pyspark_job.python_file_uris.
+
+    Each URI must end in .py, .egg or .zip, the only types Dataproc accepts. No two may
+    share a basename, because Spark localises them into one working directory by
+    basename. The URI scheme is not checked: Dataproc accepts any HCFS URI (gs://,
+    hdfs://, file://), although gs:// is the usual choice.
+
+    Args:
+        uris: The URIs to check.
+
+    Raises:
+        ValueError: If a URI has an unsupported suffix or two URIs share a basename.
+
+    >>> validate_python_file_uris(['gs://b/a/helpers.zip', 'gs://b/c/util.py'])
+    >>> validate_python_file_uris(['gs://b/helpers.tar.gz'])
+    Traceback (most recent call last):
+    ...
+    ValueError: python_file_uris must end in .py, .egg or .zip: ['gs://b/helpers.tar.gz']
+    >>> validate_python_file_uris(['gs://b/x/util.py', 'gs://b/y/util.py'])
+    Traceback (most recent call last):
+    ...
+    ValueError: python_file_uris share a basename, so would overwrite each other on the cluster: ['util.py']
+    """
+    bad_suffix = [uri for uri in uris if not uri.endswith(PYFILE_SUFFIXES)]
+    if bad_suffix:
+        raise ValueError(
+            f'python_file_uris must end in .py, .egg or .zip: {bad_suffix}',
+        )
+    seen: set[str] = set()
+    duplicates: list[str] = []
+    for uri in uris:
+        basename = posixpath.basename(uri)
+        if basename in seen and basename not in duplicates:
+            duplicates.append(basename)
+        seen.add(basename)
+    if duplicates:
+        raise ValueError(
+            'python_file_uris share a basename, so would overwrite each other on the '
+            f'cluster: {duplicates}',
+        )
+
+
+def _package_files(root: pathlib.Path) -> list[pathlib.Path]:
+    """Files under root to include in a package zip, excluding bytecode caches.
+
+    Symlinks to files are included by content. Symlinked directories are not walked.
+    """
+    found: list[pathlib.Path] = []
+    for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
+        dirnames[:] = [d for d in dirnames if d not in _ZIP_EXCLUDED_DIRS]
+        for filename in filenames:
+            path = pathlib.Path(dirpath, filename)
+            if path.suffix not in _ZIP_EXCLUDED_SUFFIXES and path.is_file():
+                found.append(path)
+    return found
+
+
+def zip_python_package(package_dir: str | os.PathLike[str]) -> bytes:
+    """Zip a local package directory so it can be imported from python_file_uris.
+
+    The directory is the zip's top-level entry, so a zip of `my_helpers/` placed on
+    sys.path supports `import my_helpers.annotations`. `__pycache__` directories and
+    `.pyc`/`.pyo` files are left out. Entries are sorted, with a fixed timestamp and
+    permissions, so zipping an unchanged directory gives identical bytes.
+
+    The directory name is taken as given rather than from a resolved symlink target,
+    and must be a valid Python identifier, otherwise it could not be imported.
+
+    Args:
+        package_dir: The package directory on the local filesystem.
+
+    Returns:
+        The zip file contents.
+
+    Raises:
+        ValueError: If package_dir is not a directory, its name is not a valid Python
+            identifier, or it contains no files to zip.
+    """
+    root = pathlib.Path(os.path.abspath(package_dir))
+    if not root.is_dir():
+        raise ValueError(f'Python package {str(package_dir)!r} is not a directory')
+    if not root.name.isidentifier():
+        raise ValueError(
+            f'Python package directory name {root.name!r} is not a valid Python '
+            'identifier, so it could not be imported',
+        )
+    names = {
+        f'{root.name}/{path.relative_to(root).as_posix()}': path
+        for path in _package_files(root)
+    }
+    if not names:
+        raise ValueError(f'Python package {str(package_dir)!r} contains no files')
+
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, 'w', compression=zipfile.ZIP_DEFLATED) as archive:
+        for name in sorted(names):
+            info = zipfile.ZipInfo(name, date_time=_ZIP_FIXED_DATE_TIME)
+            info.compress_type = zipfile.ZIP_DEFLATED
+            info.external_attr = _ZIP_FILE_MODE << 16
+            info.create_system = _ZIP_UNIX_CREATE_SYSTEM
+            archive.writestr(info, names[name].read_bytes())
+    return buffer.getvalue()
+
+
+def _pyfile_payload(local_path: str | os.PathLike[str]) -> tuple[str, bytes]:
+    """The file name and contents to upload for one local pyfile.
+
+    A directory is zipped with zip_python_package and named <dir>.zip. A .py, .egg or
+    .zip file is uploaded unchanged.
+    """
+    path = pathlib.Path(local_path)
+    if path.is_dir():
+        data = zip_python_package(path)
+        return f'{pathlib.Path(os.path.abspath(path)).name}.zip', data
+    if not path.is_file():
+        raise ValueError(f'pyfile {str(local_path)!r} does not exist')
+    if path.suffix not in PYFILE_SUFFIXES:
+        raise ValueError(
+            f'pyfile {str(local_path)!r} must be a package directory or a .py, .egg '
+            'or .zip file',
+        )
+    return path.name, path.read_bytes()
 
 
 class HailDataprocCluster:
@@ -580,6 +730,60 @@ class HailDataprocCluster:
             client=self._gs_client,
         )
 
+    def upload_pyfiles(
+        self,
+        local_paths: Sequence[str | os.PathLike[str]],
+        prefix: str | None = None,
+    ) -> list[str]:
+        """Upload local Python code for a job's python_file_uris and return the URIs.
+
+        Each entry may be a package directory, which is zipped by zip_python_package
+        and uploaded as <dir>.zip, or a .py, .egg or .zip file, which is uploaded
+        unchanged. Pass the returned URIs to submit_job or run_job as
+        python_file_uris.
+
+        Every file is uploaded under <prefix>/<content-hash>/<name>, so a re-upload
+        of unchanged code returns the same URI, and changed code with the same name
+        never overwrites a URI an earlier job on this cluster is using. The default
+        prefix is scripts/<cluster_name>/pyfiles.
+
+        Does not start the cluster.
+
+        Args:
+            local_paths: Package directories and .py, .egg or .zip files.
+            prefix: Optional override for the blob path prefix, before the hash.
+
+        Returns:
+            The gs:// URIs of the uploaded files, in the order given.
+
+        Raises:
+            ValueError: If an entry is missing or of an unsupported type, if a package
+                directory cannot be zipped (see zip_python_package), or if two
+                entries would upload with the same name.
+        """
+        payloads = [_pyfile_payload(path) for path in local_paths]
+        validate_python_file_uris([name for name, _ in payloads])
+
+        base = prefix if prefix is not None else f'scripts/{self._name}/pyfiles'
+        uris: list[str] = []
+        with tempfile.TemporaryDirectory() as tmp:
+            for name, data in payloads:
+                digest = hashlib.sha256(data).hexdigest()[:_PYFILE_HASH_LENGTH]
+                local = pathlib.Path(tmp, digest, name)
+                local.parent.mkdir(parents=True, exist_ok=True)
+                local.write_bytes(data)
+                uris.append(
+                    upload_to_gcs(
+                        local_path=str(local),
+                        bucket=self._staging_bucket,
+                        prefix='/'.join(
+                            part for part in (base.strip('/'), digest) if part
+                        ),
+                        client=self._gs_client,
+                    ),
+                )
+        return uris
+
     def submit_job(
         self,
         script_uri: str,
@@ -587,6 +791,7 @@ class HailDataprocCluster:
         args: list[str] | None = None,
         file_uris: list[str] | None = None,
         properties: dict[str, str] | None = None,
+        python_file_uris: list[str] | None = None,
     ) -> str:
         """
         Submit a PySpark job to the cluster and return the Dataproc job id.
@@ -599,11 +804,24 @@ class HailDataprocCluster:
             args: Positional arguments passed to the script.
             file_uris: Extra files localised into the job working directory
                 on the cluster. Matches the Dataproc pyspark_job.file_uris field.
+                These are not put on sys.path; use python_file_uris for importable code.
             properties: Extra Spark or Dataproc job properties.
+            python_file_uris: URIs of .py, .egg or .zip files to put on the PYTHONPATH
+                of the job's driver and executors, so the script can import them.
+                Matches the Dataproc pyspark_job.python_file_uris field, and the
+                --pyfiles option of hailctl dataproc submit. See upload_pyfiles for
+                building these from local code.
 
         Returns:
             The Dataproc job id assigned by the API.
+
+        Raises:
+            ValueError: If python_file_uris fails validate_python_file_uris. This is
+                checked before the cluster is started.
         """
+        if python_file_uris:
+            validate_python_file_uris(python_file_uris)
+
         if not self._started:
             self.start()
 
@@ -616,6 +834,8 @@ class HailDataprocCluster:
             pyspark_job['args'] = list(args)
         if file_uris:
             pyspark_job['file_uris'] = list(file_uris)
+        if python_file_uris:
+            pyspark_job['python_file_uris'] = list(python_file_uris)
 
         job = {
             'placement': {'cluster_name': self._name},
@@ -690,6 +910,7 @@ class HailDataprocCluster:
         file_uris: list[str] | None = None,
         properties: dict[str, str] | None = None,
         stream_logs: bool = True,
+        python_file_uris: list[str] | None = None,
     ) -> dataproc_v1.Job:
         """Submit a job and wait for it to reach a terminal state.
 
@@ -701,6 +922,8 @@ class HailDataprocCluster:
             file_uris: Extra files localised into the job working directory.
             properties: Extra Spark or Dataproc job properties.
             stream_logs: Whether to stream driver stdout in the background.
+            python_file_uris: URIs of .py, .egg or .zip files to put on the job's
+                PYTHONPATH. See submit_job.
 
         Returns:
             The final Dataproc Job on success.
@@ -714,6 +937,7 @@ class HailDataprocCluster:
             args=args,
             file_uris=file_uris,
             properties=properties,
+            python_file_uris=python_file_uris,
         )
         return self.wait_for_job(job_id, stream_logs=stream_logs)
 
