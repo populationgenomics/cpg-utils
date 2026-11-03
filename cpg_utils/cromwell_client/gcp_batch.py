@@ -21,8 +21,9 @@ AR_GUID_LABEL = 'ar-guid'
 
 def build_workflow_options(
     *,
-    service_account_secret: str,
-    secret_project: str,
+    service_account_secret: str | None = None,
+    secret_project: str | None = None,
+    service_account_json: str | None = None,
     google_project: str,
     logs_dir: str | Path,
     gcs_root: str | Path,
@@ -33,14 +34,18 @@ def build_workflow_options(
     """
     Build Workflow options for Cromwell's GCP Batch backend.
 
-    The service account key is read from GCP Secret Manager, and Cromwell runs the
-    Workflow's jobs as that service account.
+    Cromwell runs the Workflow's jobs as the service account whose key JSON is either
+    read from GCP Secret Manager (``service_account_secret`` and ``secret_project``)
+    or given directly (``service_account_json``), e.g. by a test or a dry run that
+    must not read Secret Manager.
 
     Args:
         service_account_secret: name of the secret holding the service account key
             JSON.
         secret_project: GCP project that holds the secret. This can differ from
             ``google_project``.
+        service_account_json: the service account key JSON itself, instead of the
+            two arguments above.
         google_project: GCP project the Workflow's jobs run (and are billed) in.
         logs_dir: where Cromwell writes call and Workflow logs.
         gcs_root: Cromwell's execution root for intermediate files.
@@ -52,6 +57,10 @@ def build_workflow_options(
     Returns:
         The Workflow options dict, ready to pass to ``CromwellClient.submit`` or
         ``run_workflow``.
+
+    Raises:
+        ValueError: neither or both ways of giving the key were used, the secret
+            doesn't exist, or the key has no ``client_email``.
 
     Example, reproducing what ``cpg_utils.cromwell.run_cromwell_workflow`` builds for
     a dataset (``dataset_bucket`` and friends are the dataset's bucket URLs)::
@@ -67,9 +76,20 @@ def build_workflow_options(
             ar_guid=ar_guid,
         )
     """
-    service_account_json = read_secret(secret_project, service_account_secret)
-    if not service_account_json:
-        raise ValueError(f"Couldn't find secret: {service_account_secret}")
+    if service_account_json is None:
+        if service_account_secret is None or secret_project is None:
+            raise ValueError(
+                'Give either service_account_secret and secret_project, '
+                'or service_account_json',
+            )
+        service_account_json = read_secret(secret_project, service_account_secret)
+        if not service_account_json:
+            raise ValueError(f"Couldn't find secret: {service_account_secret}")
+    elif service_account_secret is not None or secret_project is not None:
+        raise ValueError(
+            'Give either service_account_secret and secret_project, '
+            'or service_account_json, not both',
+        )
 
     service_account_email = json.loads(service_account_json).get('client_email')
     if not service_account_email:

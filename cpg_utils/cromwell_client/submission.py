@@ -19,7 +19,7 @@ from typing import Any
 from cpg_utils import Path, to_path
 from cpg_utils.cromwell_client import common
 from cpg_utils.cromwell_client.client import CromwellClient
-from cpg_utils.cromwell_client.collect import Destination, collect_outputs
+from cpg_utils.cromwell_client.collect import CopyFile, Destination, collect_outputs
 from cpg_utils.cromwell_client.common import (
     ABORTING,
     ACTIVE_STATUSES,
@@ -267,6 +267,7 @@ def run_prepared_workflow(
     reuse_succeeded_within: timedelta | None = DEFAULT_REUSE_SUCCEEDED_WITHIN,
     polling: Polling = DEFAULT_POLLING,
     collect_threads: int = 8,
+    copy_file: CopyFile | None = None,
     stop: threading.Event | None = None,
 ) -> WorkflowResult:
     """``run_workflow`` for a ``PreparedWorkflow``; the arguments are the same."""
@@ -305,7 +306,12 @@ def run_prepared_workflow(
         stop=stop,
     )
     outputs = (
-        collect_outputs(raw_outputs, destinations, threads=collect_threads)
+        collect_outputs(
+            raw_outputs,
+            destinations,
+            threads=collect_threads,
+            copy_file=copy_file,
+        )
         if destinations is not None
         else raw_outputs
     )
@@ -326,6 +332,7 @@ def run_workflow(
     reuse_succeeded_within: timedelta | None = DEFAULT_REUSE_SUCCEEDED_WITHIN,
     polling: Polling = DEFAULT_POLLING,
     collect_threads: int = 8,
+    copy_file: CopyFile | None = None,
     client: CromwellClient | None = None,
     stop: threading.Event | None = None,
 ) -> WorkflowResult:
@@ -361,6 +368,7 @@ def run_workflow(
             always reused.
         polling: the polling curve and consecutive-error budget.
         collect_threads: parallel copies when collecting.
+        copy_file: how to copy one file when collecting (see ``collect_outputs``).
         client: the Cromwell client. Defaults to ``CromwellClient()``.
         stop: if given, setting it from another thread ends any wait at once and
             raises ``Stopped``, and nothing new is submitted (see ``watch_workflow``).
@@ -400,5 +408,6 @@ def run_workflow(
         reuse_succeeded_within=reuse_succeeded_within,
         polling=polling,
         collect_threads=collect_threads,
+        copy_file=copy_file,
         stop=stop,
     )

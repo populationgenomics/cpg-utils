@@ -57,3 +57,59 @@ def test_directories_accept_paths(make_path: Any, tmp_path: pathlib.Path):
     assert options['final_workflow_outputs_dir'] == str(out)
     # every value must survive the JSON encoding the client does on submit
     json.dumps(options)
+
+
+def test_service_account_json_skips_secret_manager():
+    with patch(
+        'cpg_utils.cromwell_client.gcp_batch.read_secret',
+        side_effect=AssertionError('Secret Manager must not be read'),
+    ):
+        options = build_workflow_options(
+            service_account_json=KEY_JSON,
+            google_project='ds-project',
+            logs_dir='gs://ds-analysis/cromwell_logs/x',
+            gcs_root='gs://ds-tmp/cromwell',
+        )
+    assert options['user_service_account_json'] == KEY_JSON
+    assert options['google_compute_service_account'] == (
+        'sa@project.iam.gserviceaccount.com'
+    )
+    # the same options as reading the same key from Secret Manager
+    assert options == _build()
+
+
+@pytest.mark.parametrize(
+    'key_args',
+    [
+        {},
+        {'service_account_secret': 'ds-cromwell-test-key'},
+        {'secret_project': 'ds-project'},
+        {'service_account_json': KEY_JSON, 'service_account_secret': 'k'},
+        {'service_account_json': KEY_JSON, 'secret_project': 'p'},
+    ],
+    ids=['neither', 'no-project', 'no-secret', 'both-secret', 'both-project'],
+)
+def test_exactly_one_way_of_giving_the_key(key_args: dict[str, Any]):
+    with (
+        patch(
+            'cpg_utils.cromwell_client.gcp_batch.read_secret',
+            side_effect=AssertionError('Secret Manager must not be read'),
+        ),
+        pytest.raises(ValueError, match='service_account_json'),
+    ):
+        build_workflow_options(
+            **key_args,
+            google_project='ds-project',
+            logs_dir='gs://ds-analysis/cromwell_logs/x',
+            gcs_root='gs://ds-tmp/cromwell',
+        )
+
+
+def test_service_account_json_without_client_email():
+    with pytest.raises(ValueError, match='client_email'):
+        build_workflow_options(
+            service_account_json='{}',
+            google_project='ds-project',
+            logs_dir='gs://ds-analysis/cromwell_logs/x',
+            gcs_root='gs://ds-tmp/cromwell',
+        )

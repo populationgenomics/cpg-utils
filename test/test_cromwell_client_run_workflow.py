@@ -224,6 +224,24 @@ def test_succeeded_workflow_is_attached_and_collected_again(
     assert fake.calls.count('status:old') == 2  # noqa: PLR2004
 
 
+def test_copy_file_is_used_when_collecting(fake: FakeCromwell, wdl: pathlib.Path):
+    fake.add(
+        'old',
+        ['Succeeded'],
+        key=_key(wdl),
+        outputs={'w.out': 'gs://exec/w/old/out.txt'},
+    )
+    copied: list[tuple[str, str]] = []
+    result = _run(
+        fake,
+        wdl,
+        destinations={'w.out': 'gs://dest/out.txt'},
+        copy_file=lambda source, destination: copied.append((source, destination)),
+    )
+    assert copied == [('gs://exec/w/old/out.txt', 'gs://dest/out.txt')]
+    assert result.outputs == {'w.out': 'gs://dest/out.txt'}
+
+
 @pytest.mark.parametrize('status', ['Failed', 'Aborted'])
 def test_failed_or_aborted_workflow_is_resubmitted(
     fake: FakeCromwell,

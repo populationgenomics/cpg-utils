@@ -170,6 +170,53 @@ def test_one_failing_copy_does_not_stop_the_others(
     assert (dst / 'w.b').read_text() == 'content of b.txt\n'
 
 
+def test_copy_file_replaces_the_default_copy(
+    src: pathlib.Path,
+    dst: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    def default(*_args: Any) -> None:
+        raise AssertionError('the default copy must not run')
+
+    monkeypatch.setattr(collect_module, '_copy_file', default)
+    copied: list[tuple[str, str]] = []
+
+    def copy_file(source: str, destination: str) -> None:
+        assert isinstance(source, str)
+        assert isinstance(destination, str)
+        copied.append((source, destination))
+
+    outputs = {'w.a': str(src / 'a.txt'), 'w.arr': [str(src / 'b.txt')], 'w.n': 3}
+    located = collect_outputs(
+        outputs,
+        {'w.a': dst / 'a.txt', 'w.arr': [dst / 'b.txt']},
+        copy_file=copy_file,
+    )
+    assert sorted(copied) == [
+        (str(src / 'a.txt'), str(dst / 'a.txt')),
+        (str(src / 'b.txt'), str(dst / 'b.txt')),
+    ]
+    assert located == {
+        'w.a': str(dst / 'a.txt'),
+        'w.arr': [str(dst / 'b.txt')],
+        'w.n': 3,
+    }
+    assert not dst.exists()
+
+
+def test_copy_file_failures_are_collected(src: pathlib.Path, dst: pathlib.Path):
+    def copy_file(source: str, _destination: str) -> None:
+        if source.endswith('a.txt'):
+            raise OSError('no space left')
+
+    outputs = {'w.a': str(src / 'a.txt'), 'w.b': str(src / 'b.txt')}
+    with pytest.raises(CollectError) as exc:
+        collect_outputs(outputs, {k: dst / k for k in outputs}, copy_file=copy_file)
+    assert len(exc.value.problems) == 1
+    assert exc.value.problems[0].startswith('w.a: copying')
+    assert 'OSError: no space left' in exc.value.problems[0]
+
+
 def test_rerun_overwrites(src: pathlib.Path, dst: pathlib.Path):
     target = dst / 'out.txt'
     collect_outputs({'w.a': str(src / 'a.txt')}, {'w.a': target})

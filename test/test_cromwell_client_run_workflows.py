@@ -227,6 +227,30 @@ def test_on_result_error_is_recorded_with_the_result(
     assert outcomes[1].result.workflow_id == 'wf-b'
 
 
+def test_copy_file_is_shared_by_every_workflow(
+    fake: FakeCromwell,
+    wdl: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(fake, 'outputs', lambda wid: {'w.out': f'gs://exec/{wid}.txt'})
+    copied: list[tuple[str, str]] = []
+    lock = threading.Lock()
+
+    def copy_file(source: str, destination: str) -> None:
+        with lock:
+            copied.append((source, destination))
+
+    requests = [
+        _request(wdl, s, destinations={'w.out': f'gs://dest/{s}.txt'}) for s in 'ab'
+    ]
+    outcomes = _run(fake, requests, copy_file=copy_file)
+    assert all(o.ok for o in outcomes)
+    assert sorted(copied) == [
+        ('gs://exec/wf-a.txt', 'gs://dest/a.txt'),
+        ('gs://exec/wf-b.txt', 'gs://dest/b.txt'),
+    ]
+
+
 def test_existing_workflow_is_reused(fake: FakeCromwell, wdl: pathlib.Path):
     key = prepare_workflow(
         wdl,

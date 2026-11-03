@@ -152,7 +152,9 @@ options = build_workflow_options(
 
 This reads the service account key from Secret Manager, and Cromwell runs the
 Workflow's jobs as that account. The secret's project can differ from
-`google_project`. The directories can be strings or paths. `google_labels` are
+`google_project`. To skip Secret Manager, for example in a test or a dry run, pass
+the key JSON itself as `service_account_json=` instead of `service_account_secret` and
+`secret_project`. The directories can be strings or paths. `google_labels` are
 attached to the cloud resources the Workflow creates; they aren't Cromwell workflow
 labels. They always get `compute-category: cromwell`, and also `ar-guid` when
 `ar_guid` is given. The result matches what `run_cromwell_workflow`
@@ -332,7 +334,7 @@ for outcome in outcomes:  # in request order
   `options`, `inputs`, `input_files`, `dependencies`, `destinations`,
   `time_limit_seconds`, `polling`) plus a `name`. Names must be unique. The arguments
   that apply to every request (`reuse_existing`, `reuse_succeeded_within`,
-  `collect_threads`, `client`) are arguments of `run_workflows` itself.
+  `collect_threads`, `copy_file`, `client`) are arguments of `run_workflows` itself.
 - **Checked first.** Every request is read and its Submission key computed before
   anything is sent. Repeated names, two requests with the same Submission key (both
   would find nothing and submit), too many input documents and unreadable files all
@@ -398,6 +400,22 @@ points there, the copy is skipped.
 Copies run in `threads` parallel threads. A gs→gs copy uses `Blob.rewrite`, so
 multi-GB objects copy correctly across buckets, locations and storage classes. Every
 copy is attempted even if some fail. Collecting again overwrites the destinations.
+
+To copy some other way, pass `copy_file`, a function taking the source and the
+destination as strings, which raises on failure. `collect_outputs`, `run_workflow`
+and `run_workflows` all take it. It runs in several threads at once.
+
+## Testing code that uses the client
+
+Everything a caller's tests need to replace is an argument, so there is no need to
+patch this package's modules:
+
+- **A real Cromwell:** pass `client=`, any object with `CromwellClient`'s methods.
+- **Sleeping:** pass `polling=Polling(min_seconds=0, max_seconds=0)`, and
+  `submit_interval_seconds=0` to `run_workflows`.
+- **Secret Manager:** pass `service_account_json=` to `build_workflow_options`.
+- **Copying on GCS:** pass `copy_file=` to `collect_outputs`, `run_workflow` or
+  `run_workflows`.
 
 ## Failures
 

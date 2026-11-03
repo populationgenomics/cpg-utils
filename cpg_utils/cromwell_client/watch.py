@@ -58,6 +58,13 @@ class Polling:
     ``max_seconds`` over the first ``ramp_seconds`` after the Workflow's submission,
     then stays at ``max_seconds``. The defaults match ``cpg_utils.cromwell``.
 
+    ``Polling(min_seconds=0, max_seconds=0)`` never waits: between polls, between
+    retries, or while an ``Aborting`` Workflow finishes. Tests against a fake
+    ``CromwellClient`` use it (with ``submit_interval_seconds=0`` for
+    ``run_workflows``) instead of patching out sleeping.
+
+    >>> Polling(min_seconds=0, max_seconds=0).interval(600)
+    0
     >>> polling = Polling()
     >>> polling.interval(0), polling.interval(600), polling.interval(5000)
     (5, 29, 60)

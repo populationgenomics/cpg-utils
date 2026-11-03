@@ -6,7 +6,7 @@ import logging
 import pathlib
 import shutil
 import threading
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any, TypeAlias
@@ -21,6 +21,8 @@ logger = logging.getLogger(__name__)
 
 # a local or cloud path; equivalent to `str | cpg_utils.Path`
 Destination: TypeAlias = str | CloudPath | pathlib.Path
+# copies one file: (source, destination), both as strings; raises on failure
+CopyFile: TypeAlias = Callable[[str, str], None]
 
 _local = threading.local()
 
@@ -83,7 +85,7 @@ def _copy_file(src: Path, dst: Path) -> None:
         shutil.copyfile(src, dst)
 
 
-def _run_copy(copy: _Copy) -> str | None:
+def _run_copy(copy: _Copy, copy_file: CopyFile | None) -> str | None:
     """Do one copy, returning a problem description instead of raising."""
     src, dst = to_path(copy.src), to_path(copy.dst)
     if str(src) == str(dst):
@@ -91,7 +93,10 @@ def _run_copy(copy: _Copy) -> str | None:
         return None
     try:
         logger.info(f'Copying output {copy.key}: {src} -> {dst}')
-        _copy_file(src, dst)
+        if copy_file is None:
+            _copy_file(src, dst)
+        else:
+            copy_file(str(src), str(dst))
     except Exception as e:  # noqa: BLE001 - every failure is reported together
         return f'{copy.key}: copying {src} to {dst} failed: {type(e).__name__}: {e}'
     return None
@@ -178,6 +183,7 @@ def collect_outputs(
     destinations: Mapping[str, Destination | Sequence[Destination]],
     *,
     threads: int = 8,
+    copy_file: CopyFile | None = None,
 ) -> dict[str, Any]:
     """
     Copy Workflow outputs to their Destinations, and return every output where it
@@ -197,6 +203,10 @@ def collect_outputs(
         outputs: the Workflow outputs, e.g. from ``watch_workflow``.
         destinations: ``{output name: path | [paths]}``.
         threads: number of parallel copies.
+        copy_file: copies one file, given its source and destination as strings,
+            and raises on failure. It is called from several threads at once.
+            Defaults to copying with ``Blob.rewrite`` (gs→gs) or cloudpathlib; pass
+            one to copy some other way, or to keep a test off GCS.
 
     Returns:
         A copy of ``outputs`` in which each key in ``destinations`` is replaced by its
@@ -221,7 +231,11 @@ def collect_outputs(
     result, copies = _plan(outputs, destinations)
     if copies:
         with ThreadPoolExecutor(max_workers=max(1, threads)) as pool:
-            problems = [p for p in pool.map(_run_copy, copies) if p is not None]
+            problems = [
+                p
+                for p in pool.map(lambda c: _run_copy(c, copy_file), copies)
+                if p is not None
+            ]
         if problems:
             raise CollectError(problems)
     return {**outputs, **result}

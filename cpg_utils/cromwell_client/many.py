@@ -19,7 +19,7 @@ from typing import Any
 from cpg_utils import Path
 from cpg_utils.cromwell_client import common
 from cpg_utils.cromwell_client.client import CromwellClient
-from cpg_utils.cromwell_client.collect import Destination
+from cpg_utils.cromwell_client.collect import CopyFile, Destination
 from cpg_utils.cromwell_client.errors import Stopped
 from cpg_utils.cromwell_client.submission import (
     DEFAULT_REUSE_SUCCEEDED_WITHIN,
@@ -132,6 +132,7 @@ class _Runner:
     reuse_existing: bool
     reuse_succeeded_within: timedelta | None
     collect_threads: int
+    copy_file: CopyFile | None
 
     def run(self, request: WorkflowRequest, ready: PreparedWorkflow) -> WorkflowOutcome:
         """Run one request in this thread. Only ``Stopped`` escapes."""
@@ -147,6 +148,7 @@ class _Runner:
                 reuse_succeeded_within=self.reuse_succeeded_within,
                 polling=request.polling,
                 collect_threads=self.collect_threads,
+                copy_file=self.copy_file,
                 stop=self.stop,
             )
         except Stopped:
@@ -173,6 +175,7 @@ def run_workflows(
     reuse_existing: bool = True,
     reuse_succeeded_within: timedelta | None = DEFAULT_REUSE_SUCCEEDED_WITHIN,
     collect_threads: int = 8,
+    copy_file: CopyFile | None = None,
     client: CromwellClient | None = None,
 ) -> list[WorkflowOutcome]:
     """
@@ -210,6 +213,8 @@ def run_workflows(
         reuse_existing: see ``run_workflow``; applies to every request.
         reuse_succeeded_within: see ``run_workflow``; applies to every request.
         collect_threads: parallel copies per Workflow when collecting.
+        copy_file: how to copy one file when collecting (see ``collect_outputs``),
+            shared by every thread.
         client: the Cromwell client, shared by every thread. Defaults to
             ``CromwellClient()``.
 
@@ -269,6 +274,7 @@ def run_workflows(
         reuse_existing=reuse_existing,
         reuse_succeeded_within=reuse_succeeded_within,
         collect_threads=collect_threads,
+        copy_file=copy_file,
     )
 
     workers = min(max_in_flight or len(requests), len(requests))
