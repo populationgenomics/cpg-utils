@@ -81,6 +81,7 @@ print(result.outputs['Align.vcf'])  # an output that wasn't collected: its raw v
 | `collect`    | `collect_outputs`: copy outputs to Destinations                 | no                |
 | `deps`       | `zip_dependencies`: a reproducible dependencies zip             | no                |
 | `submission` | Submission key and `run_workflow`                               | no                |
+| `many`       | `run_workflows`: many Workflows from one process, in threads    | no                |
 | `gcp_batch`  | `build_workflow_options` for the GCP Batch backend              | **yes**           |
 | `errors`     | the exception hierarchy                                         | no                |
 
@@ -252,11 +253,104 @@ result = run_workflow(
 )
 ```
 
+`watch_workflow` and `run_workflow` also take `stop`, a `threading.Event`. Setting it
+from another thread ends any wait at once with `Stopped`, and nothing new is submitted.
+With `abort_on_interrupt=True`, the Workflow being watched is aborted on the way out.
+`run_workflows` uses this to stop its threads.
+
 This reads the WDL and the inputs up front. It then looks up an existing Workflow by
 [Submission key](#resubmission-and-submission-keys), or submits a new one, then
 watches it and collects the outputs if `destinations` is given. Input documents are
 sent in this order: `input_files`, then `inputs` serialised as canonical JSON.
 Cromwell applies later documents over earlier ones, so `inputs` wins.
+
+### `run_workflows`
+
+Runs many Workflows from one process, for example one per sample. Each Workflow goes
+through `run_workflow` in its own thread, so it gets the same lookup, watching, time
+limit and collecting. The threads mostly sleep between polls, so one process can watch
+dozens of Workflows.
+
+```python
+import logging
+import signal
+import sys
+
+from cpg_utils.cromwell_client import (
+    WorkflowRequest,
+    WorkflowResult,
+    build_workflow_options,
+    run_workflows,
+    zip_dependencies,
+)
+
+logger = logging.getLogger(__name__)
+
+options = build_workflow_options(
+    service_account_secret='my-dataset-cromwell-main-key',
+    secret_project='my-dataset-project',
+    google_project='my-dataset-project',
+    logs_dir='gs://cpg-my-dataset-main-analysis/cromwell_logs/align/v1',
+    gcs_root='gs://cpg-my-dataset-main-tmp/cromwell',
+)
+deps = zip_dependencies('wdl', ['tasks'])
+prefix = 'gs://cpg-my-dataset-main/align/v1'
+
+
+def register(request: WorkflowRequest, result: WorkflowResult) -> None:
+    # runs in that Workflow's thread as soon as its outputs are collected
+    logger.info(f'{request.name}: {result.outputs["Align.cram"]}')
+
+
+# make SIGTERM interrupt the main thread, as Ctrl-C does
+signal.signal(signal.SIGTERM, lambda *_: sys.exit(143))
+
+outcomes = run_workflows(
+    [
+        WorkflowRequest(
+            name=sample,
+            workflow='wdl/Align.wdl',
+            options=options,
+            inputs={'Align.sample_id': sample},
+            dependencies=deps,
+            destinations={'Align.cram': f'{prefix}/{sample}.cram'},
+            time_limit_seconds=12 * 60 * 60,
+        )
+        for sample in ['sample-1', 'sample-2', 'sample-3']
+    ],
+    max_in_flight=50,  # default: all of them at once
+    submit_interval_seconds=1.0,  # space out lookups and submissions
+    on_result=register,
+    abort_on_interrupt=True,
+)
+for outcome in outcomes:  # in request order
+    if not outcome.ok:
+        print(outcome.name, outcome.error)
+```
+
+- **`WorkflowRequest`** holds `run_workflow`'s per-Workflow arguments (`workflow`,
+  `options`, `inputs`, `input_files`, `dependencies`, `destinations`,
+  `time_limit_seconds`, `polling`) plus a `name`. Names must be unique. The arguments
+  that apply to every request (`reuse_existing`, `reuse_succeeded_within`,
+  `collect_threads`, `client`) are arguments of `run_workflows` itself.
+- **Checked first.** Every request is read and its Submission key computed before
+  anything is sent. Repeated names, two requests with the same Submission key (both
+  would find nothing and submit), too many input documents and unreadable files all
+  raise before any request.
+- **Independent.** A Workflow that fails, or whose `on_result` raises, never stops the
+  others. Each `WorkflowOutcome` has `name`, `result` (once the Workflow succeeded and
+  was collected) and `error`. Both are set when only `on_result` raised. `ok` is true
+  when `error` is `None`.
+- **`on_result`** runs in that Workflow's thread, so it must be thread-safe.
+- **Interrupts.** If the calling thread is interrupted while it waits, by
+  `KeyboardInterrupt` or by anything raised from your own signal handler, every thread
+  is told to stop (see `stop` above). Waiting threads stop at once, nothing new is
+  submitted, and queued requests never start. With `abort_on_interrupt=True`, each
+  thread aborts the Workflow it was watching. `run_workflows` waits for the threads,
+  then re-raises the interrupt, so no outcomes are returned. A thread that is
+  collecting finishes its copies first. `run_workflows` installs no signal handlers:
+  Python turns SIGINT into `KeyboardInterrupt`, but SIGTERM needs a handler that
+  raises, as in the example.
 
 ### `WorkflowResult`
 
@@ -314,6 +408,7 @@ CromwellError
 │   └── CromwellNotFound   # 404: unknown Workflow ID
 ├── WorkflowFailed         # .workflow_id, .status, .failures
 ├── WorkflowTimedOut       # .workflow_id, .time_limit_seconds, .abort_confirmed
+├── Stopped                # the caller set the stop event
 └── CollectError           # .problems
 ```
 
@@ -324,6 +419,7 @@ CromwellError
 | `CromwellNotFound` | 404 | No. Check the Workflow ID and server URL. |
 | `WorkflowFailed` | The Workflow ended `Failed` or `Aborted`. `failures` holds Cromwell's messages, flattened through `causedBy`. | Only after fixing the cause. A rerun with the same content submits a new Workflow. |
 | `WorkflowTimedOut` | The time limit passed and an abort was requested. `abort_confirmed=False` means the abort request itself never succeeded, so check the Workflow by hand. | Only with a longer limit. |
+| `Stopped` | The caller set `stop` (`run_workflows` does this when interrupted). The Workflow keeps running unless it was aborted on the way out. | Yes. A rerun re-attaches. |
 | `CollectError` | Outputs were missing, null, not files or the wrong shape, or copies failed. | Yes for failed copies: rerunning re-attaches to the `Succeeded` Workflow and collects again. |
 
 `ValueError` (bad arguments, a missing secret) is raised before anything is

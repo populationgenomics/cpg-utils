@@ -4,6 +4,7 @@ Watch a Cromwell Workflow until it finishes, and return its Workflow outputs.
 
 import logging
 import math
+import threading
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
@@ -174,6 +175,7 @@ def watch_workflow(
     time_limit_seconds: int | None = None,
     abort_on_interrupt: bool = False,
     polling: Polling = DEFAULT_POLLING,
+    stop: threading.Event | None = None,
 ) -> dict[str, Any]:
     """
     Poll a Workflow until it finishes, and return its Workflow outputs.
@@ -189,15 +191,20 @@ def watch_workflow(
         time_limit_seconds: abort the Workflow if it is still running this long after
             submission.
         abort_on_interrupt: abort the Workflow if watching stops for any reason other
-            than the Workflow failing or timing out (e.g. ``KeyboardInterrupt``). Off
-            by default, so that preempting a watcher doesn't kill its Workflow.
+            than the Workflow failing or timing out (e.g. ``KeyboardInterrupt``, or
+            ``stop`` being set). Off by default, so that preempting a watcher doesn't
+            kill its Workflow.
         polling: the polling curve and the consecutive-error budget.
+        stop: if given, setting it from another thread ends the watch at once,
+            rather than at the end of the current wait between polls. The watch then
+            raises ``Stopped``.
 
     Raises:
         WorkflowFailed: the Workflow finished as ``Failed`` or ``Aborted``.
         WorkflowTimedOut: the time limit passed and an abort was requested.
         CromwellUnavailable: ``polling.max_consecutive_errors`` errors in a row.
         CromwellNotFound: Cromwell doesn't know the Workflow ID.
+        Stopped: ``stop`` was set.
 
     Example::
 
@@ -209,6 +216,7 @@ def watch_workflow(
             workflow_id,
             time_limit_seconds=time_limit_seconds,
             polling=polling,
+            stop=stop,
         )
     except (WorkflowFailed, WorkflowTimedOut):
         raise
@@ -234,8 +242,9 @@ def _watch(
     *,
     time_limit_seconds: int | None,
     polling: Polling,
+    stop: threading.Event | None,
 ) -> dict[str, Any]:
-    budget = ErrorBudget(polling.max_consecutive_errors, workflow_id)
+    budget = ErrorBudget(polling.max_consecutive_errors, workflow_id, stop=stop)
     submitted = _submission_time(client, workflow_id, budget, polling.min_seconds)
     logger.info(f'Watching Workflow {workflow_id}, submitted {submitted.isoformat()}')
     report: dict[str, Any] | None = None
@@ -281,4 +290,4 @@ def _watch(
             )
 
         logger.info(f'Workflow {workflow_id} is {status} (next poll in {wait}s)')
-        common.sleep(wait)
+        common.pause(wait, stop)

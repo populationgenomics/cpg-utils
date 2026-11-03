@@ -76,6 +76,15 @@ class WorkflowTimedOut(CromwellError):  # noqa: N818
         )
 
 
+class Stopped(CromwellError):  # noqa: N818
+    """
+    The caller set the ``stop`` event, so waiting ended early.
+
+    This isn't a Workflow failure. Unless an abort was requested on the way out
+    (``abort_on_interrupt``), the Workflow carries on running in Cromwell.
+    """
+
+
 class CollectError(CromwellError):
     """One or more Workflow outputs couldn't be planned or copied."""
 

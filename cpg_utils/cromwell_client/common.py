@@ -1,18 +1,19 @@
 """
 Pieces shared by more than one module in this package: Cromwell status names, the
-input-document limit, the clock and sleep indirections, timestamp
-parsing, and the consecutive-error budget used when retrying Cromwell calls.
+input-document limit, the clock and sleep indirections, the stoppable ``pause``,
+timestamp parsing, and the consecutive-error budget used when retrying Cromwell calls.
 
 Internal to the package: nothing here is re-exported from ``cpg_utils.cromwell_client``.
 """
 
 import logging
+import threading
 import time
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any, TypeVar
 
-from cpg_utils.cromwell_client.errors import CromwellUnavailable
+from cpg_utils.cromwell_client.errors import CromwellUnavailable, Stopped
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +53,31 @@ def sleep(seconds: float) -> None:
     time.sleep(seconds)
 
 
+def wait_for(event: threading.Event, seconds: float) -> bool:
+    """Indirection so tests can replace stoppable waits (patch ``common.wait_for``)."""
+    return event.wait(seconds)
+
+
+def pause(seconds: float, stop: threading.Event | None = None) -> None:
+    """
+    Sleep for ``seconds``. With a ``stop`` event, wake as soon as it is set instead,
+    and raise ``Stopped``; this also happens if it is set already.
+
+    >>> pause(0)
+    >>> stop = threading.Event()
+    >>> stop.set()
+    >>> pause(60, stop)
+    Traceback (most recent call last):
+    ...
+    cpg_utils.cromwell_client.errors.Stopped: stop requested
+    """
+    if stop is None:
+        sleep(seconds)
+        return
+    if stop.is_set() or wait_for(stop, seconds):
+        raise Stopped('stop requested')
+
+
 def utcnow() -> datetime:
     """Indirection so tests can control the clock (patch ``common.utcnow``)."""
     return datetime.now(UTC)
@@ -78,12 +104,23 @@ def parse_cromwell_datetime(value: Any) -> datetime | None:
 
 
 class ErrorBudget:
-    """Counts consecutive errors, raising ``CromwellUnavailable`` once ``limit`` happen."""
+    """
+    Counts consecutive errors, raising ``CromwellUnavailable`` once ``limit`` happen.
 
-    def __init__(self, limit: int, workflow_id: str) -> None:
+    The waits between retries are stoppable through ``stop`` (see ``pause``).
+    """
+
+    def __init__(
+        self,
+        limit: int,
+        workflow_id: str,
+        *,
+        stop: threading.Event | None = None,
+    ) -> None:
         self.limit = limit
         self.remaining = limit
         self.workflow_id = workflow_id
+        self.stop = stop
 
     def reset(self) -> None:
         self.remaining = self.limit
@@ -119,4 +156,4 @@ class ErrorBudget:
                 return call()
             except retry_on as e:
                 self.spend(e, what)
-                sleep(wait_seconds)
+                pause(wait_seconds, self.stop)

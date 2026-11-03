@@ -10,6 +10,7 @@ the Workflow it already submitted instead of submitting a duplicate.
 import hashlib
 import json
 import logging
+import threading
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -28,7 +29,7 @@ from cpg_utils.cromwell_client.common import (
     check_input_document_count,
     parse_cromwell_datetime,
 )
-from cpg_utils.cromwell_client.errors import CromwellError
+from cpg_utils.cromwell_client.errors import CromwellError, Stopped
 from cpg_utils.cromwell_client.watch import DEFAULT_POLLING, Polling, watch_workflow
 
 logger = logging.getLogger(__name__)
@@ -123,6 +124,7 @@ def _wait_for_abort(
     *,
     interval_seconds: int,
     max_sequential_exception_count: int,
+    stop: threading.Event | None,
 ) -> str:
     """
     Poll until the Workflow stops ``Aborting``; return its final status.
@@ -130,7 +132,7 @@ def _wait_for_abort(
     Transient ``CromwellUnavailable`` errors are retried within an error budget, as
     ``watch_workflow`` does; time spent retrying counts towards the wait limit.
     """
-    budget = ErrorBudget(max_sequential_exception_count, workflow_id)
+    budget = ErrorBudget(max_sequential_exception_count, workflow_id, stop=stop)
     started = common.utcnow()
     status = ABORTING
     while status == ABORTING:
@@ -139,7 +141,7 @@ def _wait_for_abort(
                 f'Workflow {workflow_id} with the same Submission key is still '
                 f'Aborting after {ABORTING_WAIT_SECONDS}s; not submitting a new one',
             )
-        common.sleep(interval_seconds)
+        common.pause(interval_seconds, stop)
         status = budget.retry(
             lambda: client.status(workflow_id),
             'waiting for an Aborting Workflow',
@@ -162,6 +164,7 @@ def _find_existing(
     *,
     polling: Polling,
     reuse_succeeded_within: timedelta | None,
+    stop: threading.Event | None,
 ) -> str | None:
     """Return the ID of a Workflow to attach to, or None if a new one is needed."""
     results = client.query_by_label(SUBMISSION_KEY_LABEL, key)
@@ -179,6 +182,7 @@ def _find_existing(
             workflow_id,
             interval_seconds=polling.max_seconds,
             max_sequential_exception_count=polling.max_consecutive_errors,
+            stop=stop,
         )
     if status in UNSUCCESSFUL_STATUSES:
         logger.info(f'Workflow {workflow_id} is {status}; submitting a new one')
@@ -199,6 +203,115 @@ def _find_existing(
     return workflow_id
 
 
+@dataclass(frozen=True)
+class PreparedWorkflow:
+    """Everything a submission sends, read up front, and its Submission key."""
+
+    workflow_source: bytes
+    workflow_filename: str
+    input_documents: tuple[bytes, ...]
+    dependencies: bytes | None
+    options: Mapping[str, Any]
+    submission_key: str
+
+
+def prepare_workflow(
+    workflow: str | Path,
+    *,
+    options: Mapping[str, Any],
+    inputs: Mapping[str, Any] | None = None,
+    input_files: Sequence[str | Path] = (),
+    dependencies: bytes | None = None,
+) -> PreparedWorkflow:
+    """
+    Read the WDL and inputs, and compute the Submission key. Makes no requests.
+
+    Input documents are ``input_files`` in order, then ``inputs`` serialised with
+    ``serialise_inputs``, so ``inputs`` wins where they overlap.
+
+    Raises:
+        ValueError: more than five input documents.
+        OSError: the WDL or an input file can't be read.
+    """
+    workflow_path = to_path(workflow)
+    workflow_source = workflow_path.read_bytes()
+    input_documents = [to_path(f).read_bytes() for f in input_files]
+    if inputs is not None:
+        input_documents.append(serialise_inputs(inputs))
+    check_input_document_count(len(input_documents))
+
+    key = compute_submission_key(
+        workflow_source=workflow_source,
+        dependencies=dependencies,
+        input_documents=input_documents,
+        options=options,
+    )
+    return PreparedWorkflow(
+        workflow_source=workflow_source,
+        workflow_filename=workflow_path.name,
+        input_documents=tuple(input_documents),
+        dependencies=dependencies,
+        options=options,
+        submission_key=key,
+    )
+
+
+def run_prepared_workflow(
+    prepared: PreparedWorkflow,
+    *,
+    client: CromwellClient,
+    destinations: Mapping[str, Destination | Sequence[Destination]] | None = None,
+    time_limit_seconds: int | None = None,
+    abort_on_interrupt: bool = False,
+    reuse_existing: bool = True,
+    reuse_succeeded_within: timedelta | None = DEFAULT_REUSE_SUCCEEDED_WITHIN,
+    polling: Polling = DEFAULT_POLLING,
+    collect_threads: int = 8,
+    stop: threading.Event | None = None,
+) -> WorkflowResult:
+    """``run_workflow`` for a ``PreparedWorkflow``; the arguments are the same."""
+    key = prepared.submission_key
+    workflow_id = None
+    if reuse_existing:
+        workflow_id = _find_existing(
+            client,
+            key,
+            polling=polling,
+            reuse_succeeded_within=reuse_succeeded_within,
+            stop=stop,
+        )
+    reused = workflow_id is not None
+    if workflow_id is None:
+        if stop is not None and stop.is_set():
+            raise Stopped('stop requested before submitting')
+        workflow_id = client.submit(
+            prepared.workflow_source,
+            workflow_filename=prepared.workflow_filename,
+            input_documents=list(prepared.input_documents),
+            options=prepared.options,
+            dependencies=prepared.dependencies,
+            labels={SUBMISSION_KEY_LABEL: key},
+        )
+        logger.info(f'Submitted Workflow {workflow_id} with Submission key {key}')
+    else:
+        logger.info(f'Attaching to Workflow {workflow_id} (Submission key {key})')
+
+    raw_outputs = watch_workflow(
+        client,
+        workflow_id,
+        time_limit_seconds=time_limit_seconds,
+        abort_on_interrupt=abort_on_interrupt,
+        polling=polling,
+        stop=stop,
+    )
+    outputs = (
+        collect_outputs(raw_outputs, destinations, threads=collect_threads)
+        if destinations is not None
+        else raw_outputs
+    )
+    return WorkflowResult(workflow_id=workflow_id, outputs=outputs, reused=reused)
+
+
 def run_workflow(
     workflow: str | Path,
     *,
@@ -214,6 +327,7 @@ def run_workflow(
     polling: Polling = DEFAULT_POLLING,
     collect_threads: int = 8,
     client: CromwellClient | None = None,
+    stop: threading.Event | None = None,
 ) -> WorkflowResult:
     """
     Run a Workflow to completion: find or submit it, watch it, and collect its outputs.
@@ -248,6 +362,8 @@ def run_workflow(
         polling: the polling curve and consecutive-error budget.
         collect_threads: parallel copies when collecting.
         client: the Cromwell client. Defaults to ``CromwellClient()``.
+        stop: if given, setting it from another thread ends any wait at once and
+            raises ``Stopped``, and nothing new is submitted (see ``watch_workflow``).
 
     Raises:
         ValueError: more than five input documents.
@@ -267,53 +383,22 @@ def run_workflow(
     """
     if client is None:
         client = CromwellClient()
-
-    workflow_path = to_path(workflow)
-    workflow_source = workflow_path.read_bytes()
-    input_documents = [to_path(f).read_bytes() for f in input_files]
-    if inputs is not None:
-        input_documents.append(serialise_inputs(inputs))
-    check_input_document_count(len(input_documents))
-
-    key = compute_submission_key(
-        workflow_source=workflow_source,
-        dependencies=dependencies,
-        input_documents=input_documents,
+    prepared = prepare_workflow(
+        workflow,
         options=options,
+        inputs=inputs,
+        input_files=input_files,
+        dependencies=dependencies,
     )
-
-    workflow_id = None
-    if reuse_existing:
-        workflow_id = _find_existing(
-            client,
-            key,
-            polling=polling,
-            reuse_succeeded_within=reuse_succeeded_within,
-        )
-    reused = workflow_id is not None
-    if workflow_id is None:
-        workflow_id = client.submit(
-            workflow_source,
-            workflow_filename=workflow_path.name,
-            input_documents=input_documents,
-            options=options,
-            dependencies=dependencies,
-            labels={SUBMISSION_KEY_LABEL: key},
-        )
-        logger.info(f'Submitted Workflow {workflow_id} with Submission key {key}')
-    else:
-        logger.info(f'Attaching to Workflow {workflow_id} (Submission key {key})')
-
-    raw_outputs = watch_workflow(
-        client,
-        workflow_id,
+    return run_prepared_workflow(
+        prepared,
+        client=client,
+        destinations=destinations,
         time_limit_seconds=time_limit_seconds,
         abort_on_interrupt=abort_on_interrupt,
+        reuse_existing=reuse_existing,
+        reuse_succeeded_within=reuse_succeeded_within,
         polling=polling,
+        collect_threads=collect_threads,
+        stop=stop,
     )
-    outputs = (
-        collect_outputs(raw_outputs, destinations, threads=collect_threads)
-        if destinations is not None
-        else raw_outputs
-    )
-    return WorkflowResult(workflow_id=workflow_id, outputs=outputs, reused=reused)

@@ -18,10 +18,16 @@ from cpg_utils.cromwell_client.errors import (
     CromwellNotFound,
     CromwellRequestError,
     CromwellUnavailable,
+    Stopped,
     WorkflowFailed,
     WorkflowTimedOut,
 )
 from cpg_utils.cromwell_client.gcp_batch import build_workflow_options
+from cpg_utils.cromwell_client.many import (
+    WorkflowOutcome,
+    WorkflowRequest,
+    run_workflows,
+)
 from cpg_utils.cromwell_client.submission import WorkflowResult, run_workflow
 from cpg_utils.cromwell_client.watch import Polling, watch_workflow
 
@@ -34,12 +40,16 @@ __all__ = [
     'CromwellRequestError',
     'CromwellUnavailable',
     'Polling',
+    'Stopped',
     'WorkflowFailed',
+    'WorkflowOutcome',
+    'WorkflowRequest',
     'WorkflowResult',
     'WorkflowTimedOut',
     'build_workflow_options',
     'collect_outputs',
     'run_workflow',
+    'run_workflows',
     'watch_workflow',
     'zip_dependencies',
 ]
