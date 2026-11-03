@@ -319,7 +319,8 @@ class CromwellClient:
         """
         Return the Workflows carrying the Cromwell label ``key:value``.
 
-        Each result has ``id``, ``status`` and ``submission``.
+        Each result has ``id``, ``status`` and ``submission``, plus ``end`` once the
+        Workflow has finished.
         """
         body = self._request(
             'GET',

@@ -103,7 +103,7 @@ def test_options_match_old_wrapper(
             outputs_dir=(
                 dataset_path(PREFIX, dataset=DATASET) if copy_outputs_to_gcp else None
             ),
-            labels=labels,
+            google_labels=labels,
             ar_guid=ar_guid_override or try_get_ar_guid(),
         )
 

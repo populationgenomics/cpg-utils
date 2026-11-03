@@ -17,7 +17,7 @@ from cpg_utils.cromwell_client.errors import (
 )
 from cpg_utils.cromwell_client.watch import (
     METADATA_REPORT_KEYS,
-    poll_interval,
+    Polling,
     watch_workflow,
 )
 from cpg_utils.cromwell_model import WorkflowMetadataModel
@@ -136,9 +136,18 @@ def _old_formula(elapsed: float, lo: int, hi: int, ramp: int) -> int:
 
 @pytest.mark.parametrize('ramp', [1200, 600])
 def test_poll_interval_matches_old_formula(ramp: int):
+    polling = Polling(min_seconds=5, max_seconds=60, ramp_seconds=ramp)
     for elapsed in (0, 1, ramp / 4, ramp / 2, ramp, 2 * ramp):
-        new = poll_interval(elapsed, min_seconds=5, max_seconds=60, ramp_seconds=ramp)
-        assert new == _old_formula(elapsed, 5, 60, ramp)
+        assert polling.interval(elapsed) == _old_formula(elapsed, 5, 60, ramp)
+
+
+def test_polling_defaults_match_old_watcher():
+    assert Polling() == Polling(
+        min_seconds=5,
+        max_seconds=60,
+        ramp_seconds=1200,
+        max_consecutive_errors=25,
+    )
 
 
 def test_happy_path(caplog: pytest.LogCaptureFixture, clock: Clock):
@@ -195,13 +204,13 @@ def test_transient_errors_recover_and_budget_resets():
     statuses = [blip, blip, 'Running', blip, blip, 'Running', blip, blip, 'Succeeded']
     client = FakeClient(statuses)
     # three errors in a row would exhaust the budget; two never do
-    assert _watch(client, max_sequential_exception_count=3) == OUTPUTS
+    assert _watch(client, polling=Polling(max_consecutive_errors=3)) == OUTPUTS
 
 
 def test_exhausted_budget_raises_unavailable():
     client = FakeClient([CromwellUnavailable('503')])
     with pytest.raises(CromwellUnavailable, match='3 consecutive errors'):
-        _watch(client, max_sequential_exception_count=3)
+        _watch(client, polling=Polling(max_consecutive_errors=3))
     assert client.count('status') == 3  # noqa: PLR2004
 
 
@@ -216,7 +225,7 @@ def test_submission_time_errors_count_against_budget():
         submission_errors=[CromwellUnavailable('503')] * 2,
     )
     with pytest.raises(CromwellUnavailable):
-        _watch(client, max_sequential_exception_count=2)
+        _watch(client, polling=Polling(max_consecutive_errors=2))
 
 
 def test_submission_time_not_found_propagates():
@@ -258,7 +267,7 @@ def test_abort_that_keeps_failing_is_unconfirmed():
         abort=[CromwellUnavailable('503')],
     )
     with pytest.raises(WorkflowTimedOut) as exc:
-        _watch(client, time_limit_seconds=60, max_sequential_exception_count=4)
+        _watch(client, time_limit_seconds=60, polling=Polling(max_consecutive_errors=4))
     assert exc.value.abort_confirmed is False
     assert client.count('abort') == 4  # noqa: PLR2004
 
@@ -283,7 +292,7 @@ def test_outputs_transient_failure_recovers_and_reports_once(
         outputs=[CromwellUnavailable('500'), CromwellUnavailable('500'), OUTPUTS],
     )
     with caplog.at_level(logging.INFO, logger='cpg_utils.cromwell_client.watch'):
-        assert _watch(client, max_sequential_exception_count=3) == OUTPUTS
+        assert _watch(client, polling=Polling(max_consecutive_errors=3)) == OUTPUTS
     assert client.count('outputs') == 3  # noqa: PLR2004
     assert sum(1 for _, keys in client.calls if keys == METADATA_REPORT_KEYS) == 1
     assert sum('report' in r.message for r in caplog.records) == 1
@@ -292,7 +301,7 @@ def test_outputs_transient_failure_recovers_and_reports_once(
 def test_outputs_that_never_recover_exhaust_budget():
     client = FakeClient(['Succeeded'], outputs=[CromwellUnavailable('500')])
     with pytest.raises(CromwellUnavailable):
-        _watch(client, max_sequential_exception_count=3)
+        _watch(client, polling=Polling(max_consecutive_errors=3))
 
 
 def test_report_failure_does_not_fail_watch(caplog: pytest.LogCaptureFixture):

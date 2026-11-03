@@ -8,12 +8,11 @@ the Workflow it already submitted instead of submitting a duplicate.
 """
 
 import hashlib
-import inspect
 import json
 import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from cpg_utils import Path, to_path
@@ -23,8 +22,6 @@ from cpg_utils.cromwell_client.collect import Destination, collect_outputs
 from cpg_utils.cromwell_client.common import (
     ABORTING,
     ACTIVE_STATUSES,
-    DEFAULT_MAX_POLL_INTERVAL,
-    DEFAULT_MAX_SEQUENTIAL_EXCEPTION_COUNT,
     SUCCEEDED,
     UNSUCCESSFUL_STATUSES,
     ErrorBudget,
@@ -32,7 +29,7 @@ from cpg_utils.cromwell_client.common import (
     parse_cromwell_datetime,
 )
 from cpg_utils.cromwell_client.errors import CromwellError
-from cpg_utils.cromwell_client.watch import watch_workflow
+from cpg_utils.cromwell_client.watch import DEFAULT_POLLING, Polling, watch_workflow
 
 logger = logging.getLogger(__name__)
 
@@ -95,12 +92,9 @@ def compute_submission_key(
 
 
 ABORTING_WAIT_SECONDS = 900
-
-_WATCH_KWARGS = frozenset(
-    name
-    for name, parameter in inspect.signature(watch_workflow).parameters.items()
-    if parameter.kind is inspect.Parameter.KEYWORD_ONLY
-)
+# How long a Succeeded Workflow stays reusable. Its outputs may have been deleted by a
+# bucket lifecycle rule since, or the files its inputs point to rewritten in place.
+DEFAULT_REUSE_SUCCEEDED_WITHIN = timedelta(weeks=1)
 
 
 @dataclass(frozen=True)
@@ -108,10 +102,10 @@ class WorkflowResult:
     """What ``run_workflow`` returns."""
 
     workflow_id: str
-    #: the raw Workflow outputs, as Cromwell reports them
+    #: every Workflow output where it now lives: a collected output's destination
+    #: path(s), otherwise the raw value Cromwell reported. The original locations of
+    #: collected outputs are available from ``client.outputs(workflow_id)``.
     outputs: dict[str, Any]
-    #: the ``collect_outputs`` result; ``{}`` when no destinations were given
-    collected: dict[str, Any]
     #: True if an existing Workflow was found via the Submission key
     reused: bool
 
@@ -155,12 +149,19 @@ def _wait_for_abort(
     return status
 
 
+def _finished_at(result: Mapping[str, Any]) -> datetime | None:
+    """When a query result finished (``end``), falling back to its ``submission``."""
+    return parse_cromwell_datetime(result.get('end')) or parse_cromwell_datetime(
+        result.get('submission'),
+    )
+
+
 def _find_existing(
     client: CromwellClient,
     key: str,
     *,
-    poll_seconds: int,
-    max_sequential_exception_count: int,
+    polling: Polling,
+    reuse_succeeded_within: timedelta | None,
 ) -> str | None:
     """Return the ID of a Workflow to attach to, or None if a new one is needed."""
     results = client.query_by_label(SUBMISSION_KEY_LABEL, key)
@@ -176,12 +177,21 @@ def _find_existing(
         status = _wait_for_abort(
             client,
             workflow_id,
-            interval_seconds=poll_seconds,
-            max_sequential_exception_count=max_sequential_exception_count,
+            interval_seconds=polling.max_seconds,
+            max_sequential_exception_count=polling.max_consecutive_errors,
         )
     if status in UNSUCCESSFUL_STATUSES:
         logger.info(f'Workflow {workflow_id} is {status}; submitting a new one')
         return None
+    if status == SUCCEEDED and reuse_succeeded_within is not None:
+        finished = _finished_at(newest)
+        if finished is None or common.utcnow() - finished > reuse_succeeded_within:
+            logger.info(
+                f'Workflow {workflow_id} succeeded more than {reuse_succeeded_within} '
+                f'ago ({finished.isoformat() if finished else "at an unknown time"}); '
+                'submitting a new one',
+            )
+            return None
     if status not in ACTIVE_STATUSES and status != SUCCEEDED:
         logger.warning(
             f'Workflow {workflow_id} has unexpected status {status!r}; attaching to it',
@@ -190,7 +200,6 @@ def _find_existing(
 
 
 def run_workflow(
-    client: CromwellClient,
     workflow: str | Path,
     *,
     options: Mapping[str, Any],
@@ -198,36 +207,49 @@ def run_workflow(
     input_files: Sequence[str | Path] = (),
     dependencies: bytes | None = None,
     destinations: Mapping[str, Destination | Sequence[Destination]] | None = None,
+    time_limit_seconds: int | None = None,
+    abort_on_interrupt: bool = False,
     reuse_existing: bool = True,
+    reuse_succeeded_within: timedelta | None = DEFAULT_REUSE_SUCCEEDED_WITHIN,
+    polling: Polling = DEFAULT_POLLING,
     collect_threads: int = 8,
-    **watch_kwargs: Any,
+    client: CromwellClient | None = None,
 ) -> WorkflowResult:
     """
     Run a Workflow to completion: find or submit it, watch it, and collect its outputs.
 
     The Submission key (see :func:`compute_submission_key`) is attached to every
     submission as the Cromwell label ``cpg-submission-key``. With ``reuse_existing``,
-    a Workflow carrying the same key is looked up first:
+    the newest Workflow carrying the same key is looked up first:
 
-    - ``Submitted``/``Running``/``On Hold``/``Succeeded``: attach to it.
+    - ``Submitted``/``Running``/``On Hold``: attach to it.
+    - ``Succeeded`` within ``reuse_succeeded_within``: attach to it, which returns its
+      outputs at once. Older than that: submit.
     - ``Aborting``: wait (up to 15 minutes) for it to become ``Aborted``, then submit.
     - ``Failed``/``Aborted``, or nothing found: submit.
 
     Args:
-        client: the Cromwell client.
         workflow: path to the main WDL file.
         options: Workflow options, e.g. from ``build_workflow_options``.
         inputs: an inputs dict, sent as the last input document (so it overrides
             values from ``input_files``).
         input_files: inputs JSON files, sent first, in order.
         dependencies: a dependencies zip, e.g. from ``zip_dependencies``.
-        destinations: if given, passed to ``collect_outputs`` after success.
+        destinations: if given, passed to ``collect_outputs`` after success, and
+            the result's ``outputs`` point at the copies.
+        time_limit_seconds: abort the Workflow if it is still running this long after
+            its submission (see ``watch_workflow``).
+        abort_on_interrupt: abort the Workflow if watching stops for a reason other
+            than the Workflow failing or timing out (see ``watch_workflow``).
         reuse_existing: look up an existing Workflow by Submission key first.
+        reuse_succeeded_within: only reuse a ``Succeeded`` Workflow that finished at
+            most this long ago; ``None`` reuses one of any age. Active Workflows are
+            always reused.
+        polling: the polling curve and consecutive-error budget.
         collect_threads: parallel copies when collecting.
-        **watch_kwargs: passed to ``watch_workflow``, e.g. ``time_limit_seconds``.
+        client: the Cromwell client. Defaults to ``CromwellClient()``.
 
     Raises:
-        TypeError: an unknown ``watch_kwargs`` key, before any request is made.
         ValueError: more than five input documents.
         CromwellError: see ``watch_workflow`` and ``collect_outputs``. A lookup that
             fails raises rather than risking a duplicate submission.
@@ -235,7 +257,6 @@ def run_workflow(
     Example::
 
         result = run_workflow(
-            client,
             'wdl/Align.wdl',
             options=options,
             inputs={'Align.sample': 'sample-1'},
@@ -244,11 +265,8 @@ def run_workflow(
             time_limit_seconds=12 * 3600,
         )
     """
-    unknown = sorted(set(watch_kwargs) - _WATCH_KWARGS)
-    if unknown:
-        raise TypeError(
-            f'run_workflow() got unexpected watch_workflow argument(s): {unknown}',
-        )
+    if client is None:
+        client = CromwellClient()
 
     workflow_path = to_path(workflow)
     workflow_source = workflow_path.read_bytes()
@@ -269,14 +287,8 @@ def run_workflow(
         workflow_id = _find_existing(
             client,
             key,
-            poll_seconds=watch_kwargs.get(
-                'max_poll_interval',
-                DEFAULT_MAX_POLL_INTERVAL,
-            ),
-            max_sequential_exception_count=watch_kwargs.get(
-                'max_sequential_exception_count',
-                DEFAULT_MAX_SEQUENTIAL_EXCEPTION_COUNT,
-            ),
+            polling=polling,
+            reuse_succeeded_within=reuse_succeeded_within,
         )
     reused = workflow_id is not None
     if workflow_id is None:
@@ -292,15 +304,16 @@ def run_workflow(
     else:
         logger.info(f'Attaching to Workflow {workflow_id} (Submission key {key})')
 
-    outputs = watch_workflow(client, workflow_id, **watch_kwargs)
-    collected = (
-        collect_outputs(outputs, destinations, threads=collect_threads)
+    raw_outputs = watch_workflow(
+        client,
+        workflow_id,
+        time_limit_seconds=time_limit_seconds,
+        abort_on_interrupt=abort_on_interrupt,
+        polling=polling,
+    )
+    outputs = (
+        collect_outputs(raw_outputs, destinations, threads=collect_threads)
         if destinations is not None
-        else {}
+        else raw_outputs
     )
-    return WorkflowResult(
-        workflow_id=workflow_id,
-        outputs=outputs,
-        collected=collected,
-        reused=reused,
-    )
+    return WorkflowResult(workflow_id=workflow_id, outputs=outputs, reused=reused)

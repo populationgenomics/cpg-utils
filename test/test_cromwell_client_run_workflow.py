@@ -11,17 +11,24 @@ import pytest
 
 from cpg_utils.cromwell_client import collect as collect_module
 from cpg_utils.cromwell_client import common as common_module
+from cpg_utils.cromwell_client import submission as submission_module
 from cpg_utils.cromwell_client.client import CromwellClient
-from cpg_utils.cromwell_client.errors import CromwellError, CromwellUnavailable
+from cpg_utils.cromwell_client.errors import (
+    CromwellError,
+    CromwellUnavailable,
+    WorkflowTimedOut,
+)
 from cpg_utils.cromwell_client.gcp_batch import build_workflow_options
 from cpg_utils.cromwell_client.submission import (
     ABORTING_WAIT_SECONDS,
+    DEFAULT_REUSE_SUCCEEDED_WITHIN,
     SUBMISSION_KEY_LABEL,
     WorkflowResult,
     compute_submission_key,
     run_workflow,
     serialise_inputs,
 )
+from cpg_utils.cromwell_client.watch import Polling
 
 OPTIONS = {'backend': 'batch', 'google_project': 'proj'}
 
@@ -44,12 +51,14 @@ class FakeCromwell:
         *,
         key: str | None = None,
         submitted: str = '2026-11-03T10:00:00.000Z',
+        ended: str | None = None,
         outputs: dict[str, Any] | None = None,
     ) -> None:
         self.workflows[workflow_id] = {
             'statuses': list(statuses),
             'labels': {SUBMISSION_KEY_LABEL: key} if key else {},
             'submission': submitted,
+            'end': ended,
         }
         self.outputs_by_id[workflow_id] = outputs or {'w.out': f'out-{workflow_id}'}
 
@@ -76,6 +85,7 @@ class FakeCromwell:
                 'id': workflow_id,
                 'status': wf['statuses'][0],
                 'submission': wf['submission'],
+                **({'end': wf['end']} if wf['end'] else {}),
             }
             for workflow_id, wf in self.workflows.items()
             if wf['labels'].get(key) == value
@@ -146,7 +156,7 @@ def fake() -> FakeCromwell:
 def _run(fake: FakeCromwell, wdl: pathlib.Path, **kwargs: Any) -> WorkflowResult:
     kwargs.setdefault('options', OPTIONS)
     kwargs.setdefault('inputs', {'w.x': 1})
-    return run_workflow(cast(CromwellClient, fake), wdl, **kwargs)
+    return run_workflow(wdl, client=cast(CromwellClient, fake), **kwargs)
 
 
 def _key(wdl: pathlib.Path, inputs: dict[str, Any] | None = None) -> str:
@@ -164,7 +174,6 @@ def test_nothing_found_submits(fake: FakeCromwell, wdl: pathlib.Path):
     assert result == WorkflowResult(
         workflow_id='new-1',
         outputs={'w.out': 'out-new-1'},
-        collected={},
         reused=False,
     )
     sub = fake.submissions[0]
@@ -200,13 +209,15 @@ def test_succeeded_workflow_is_attached_and_collected_again(
     )
     src = tmp_path / 'result.txt'
     src.write_text('done\n')
-    fake.add('old', ['Succeeded'], key=_key(wdl), outputs={'w.out': str(src)})
+    raw = {'w.out': str(src), 'w.n': 7}
+    fake.add('old', ['Succeeded'], key=_key(wdl), outputs=raw)
     dst = tmp_path / 'dest' / 'result.txt'
     for _ in range(2):
         dst.unlink(missing_ok=True)
         result = _run(fake, wdl, destinations={'w.out': dst})
         assert result.reused is True
-        assert result.collected == {'w.out': str(dst)}
+        # collected outputs point at their copies; the rest keep their raw values
+        assert result.outputs == {'w.out': str(dst), 'w.n': 7}
         assert dst.read_text() == 'done\n'
     assert 'submit' not in fake.calls
     # straight to outputs: one status poll per run
@@ -232,7 +243,7 @@ def test_aborting_waits_then_submits(
     clock: Clock,
 ):
     fake.add('old', ['Aborting', 'Aborting', 'Aborting', 'Aborted'], key=_key(wdl))
-    result = _run(fake, wdl, max_poll_interval=30)
+    result = _run(fake, wdl, polling=Polling(max_seconds=30))
     assert result.workflow_id == 'new-1'
     assert fake.calls.count('status:old') == 3  # noqa: PLR2004
     assert clock.sleeps[:3] == [30, 30, 30]
@@ -256,7 +267,7 @@ def test_aborting_wait_retries_transient_errors(
 ):
     blip = CromwellUnavailable('503')
     fake.add('old', ['Aborting', blip, 'Aborting', blip, 'Aborted'], key=_key(wdl))
-    result = _run(fake, wdl, max_sequential_exception_count=2)
+    result = _run(fake, wdl, polling=Polling(max_consecutive_errors=2))
     assert result.workflow_id == 'new-1'
     assert fake.calls.count('status:old') == 4  # noqa: PLR2004
 
@@ -268,7 +279,7 @@ def test_aborting_wait_gives_up_when_budget_runs_out(
     blip = CromwellUnavailable('503')
     fake.add('old', ['Aborting', blip], key=_key(wdl))
     with pytest.raises(CromwellUnavailable, match='2 consecutive errors'):
-        _run(fake, wdl, max_sequential_exception_count=2)
+        _run(fake, wdl, polling=Polling(max_consecutive_errors=2))
     assert 'submit' not in fake.calls
 
 
@@ -343,23 +354,81 @@ def test_too_many_input_documents_raises_before_any_request(
     assert fake.calls == []
 
 
-def test_bad_watch_kwarg_raises_before_any_request(
+def test_client_defaults_to_cromwell_client(
     fake: FakeCromwell,
     wdl: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
 ):
-    with pytest.raises(TypeError, match='time_limit'):
-        _run(fake, wdl, time_limit=60)
-    assert fake.calls == []
+    monkeypatch.setattr(submission_module, 'CromwellClient', lambda: fake)
+    result = run_workflow(wdl, options=OPTIONS)
+    assert result.workflow_id == 'new-1'
 
 
-def test_watch_kwargs_are_passed_through(fake: FakeCromwell, wdl: pathlib.Path):
+def test_time_limit_is_passed_to_the_watcher(fake: FakeCromwell, wdl: pathlib.Path):
     fake.next_statuses = ['Running']
-    from cpg_utils.cromwell_client.errors import WorkflowTimedOut
-
     # submitted at 11:59, clock at 12:00: a 30s limit has already passed
     with pytest.raises(WorkflowTimedOut):
         _run(fake, wdl, time_limit_seconds=30)
     assert 'abort:new-1' in fake.calls
+
+
+@pytest.mark.parametrize('abort_on_interrupt', [True, False])
+def test_abort_on_interrupt_is_passed_to_the_watcher(
+    fake: FakeCromwell,
+    wdl: pathlib.Path,
+    abort_on_interrupt: bool,
+):
+    fake.next_statuses = ['Running']
+    with (
+        pytest.raises(KeyboardInterrupt),
+        patch.object(common_module, 'sleep', side_effect=KeyboardInterrupt),
+    ):
+        _run(fake, wdl, abort_on_interrupt=abort_on_interrupt)
+    assert ('abort:new-1' in fake.calls) is abort_on_interrupt
+
+
+def test_reuse_succeeded_within_defaults_to_one_week():
+    assert timedelta(weeks=1) == DEFAULT_REUSE_SUCCEEDED_WITHIN
+
+
+def test_old_succeeded_workflow_is_resubmitted(fake: FakeCromwell, wdl: pathlib.Path):
+    # the clock is at 2026-11-03T12:00Z
+    fake.add('old', ['Succeeded'], key=_key(wdl), submitted='2026-10-20T00:00:00Z')
+    result = _run(fake, wdl)
+    assert fake.calls[:2] == ['query', 'submit']
+    assert result.workflow_id == 'new-1'
+    assert result.reused is False
+
+
+def test_succeeded_age_counts_from_end(fake: FakeCromwell, wdl: pathlib.Path):
+    # submitted three weeks ago, but only finished two days ago
+    fake.add(
+        'old',
+        ['Succeeded'],
+        key=_key(wdl),
+        submitted='2026-10-13T00:00:00Z',
+        ended='2026-11-01T00:00:00Z',
+    )
+    result = _run(fake, wdl)
+    assert 'submit' not in fake.calls
+    assert result.workflow_id == 'old'
+
+
+def test_reuse_succeeded_within_is_configurable(fake: FakeCromwell, wdl: pathlib.Path):
+    fake.add('old', ['Succeeded'], key=_key(wdl), submitted='2026-10-20T00:00:00Z')
+    assert _run(fake, wdl, reuse_succeeded_within=None).workflow_id == 'old'
+    result = _run(fake, wdl, reuse_succeeded_within=timedelta(hours=1))
+    assert result.workflow_id == 'new-1'
+
+
+def test_old_active_workflow_is_still_attached(fake: FakeCromwell, wdl: pathlib.Path):
+    fake.add(
+        'old',
+        ['Running', 'Succeeded'],
+        key=_key(wdl),
+        submitted='2026-10-01T00:00:00Z',
+    )
+    assert _run(fake, wdl).workflow_id == 'old'
 
 
 def test_round_trip_reattaches_despite_new_secret_and_ar_guid(
@@ -384,7 +453,7 @@ def test_round_trip_reattaches_despite_new_secret_and_ar_guid(
                 logs_dir='gs://ds-analysis/cromwell_logs/x',
                 gcs_root='gs://ds-tmp/cromwell',
                 outputs_dir='gs://ds-main/x',
-                labels={'stage': 'align'},
+                google_labels={'stage': 'align'},
                 ar_guid=ar_guid,
             )
 

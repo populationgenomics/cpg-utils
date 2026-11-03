@@ -62,9 +62,26 @@ def test_resource_group_as_two_keys(src: pathlib.Path, dst: pathlib.Path):
         outputs,
         {'w.bam': dst / 's.bam', 'w.bai': dst / 's.bam.bai'},
     )
-    assert set(result) == {'w.bam', 'w.bai'}
+    assert result == {
+        'w.bam': str(dst / 's.bam'),
+        'w.bai': str(dst / 's.bam.bai'),
+        'w.ignored': str(src / 'c.txt'),
+    }
     assert (dst / 's.bam.bai').read_text() == 'content of x.bam.bai\n'
     assert not (dst / 'c.txt').exists()
+
+
+def test_uncollected_outputs_keep_raw_values(src: pathlib.Path, dst: pathlib.Path):
+    outputs: dict[str, Any] = {
+        'w.a': str(src / 'a.txt'),
+        'w.n': 3,
+        'w.null': None,
+        'w.arr': [str(src / 'b.txt')],
+    }
+    result = collect_outputs(outputs, {'w.a': dst / 'a.txt'})
+    assert result == {**outputs, 'w.a': str(dst / 'a.txt')}
+    # the caller's dict is not modified
+    assert outputs['w.a'] == str(src / 'a.txt')
 
 
 def test_planning_problems_reported_together(src: pathlib.Path, dst: pathlib.Path):
@@ -105,16 +122,15 @@ def test_planning_problems_reported_together(src: pathlib.Path, dst: pathlib.Pat
     assert not dst.exists()
 
 
-def test_scalar_passes_through_with_warning(
-    dst: pathlib.Path,
-    caplog: pytest.LogCaptureFixture,
-):
-    outputs = {'w.n': 3, 'w.s': 'hello', 'w.flag': False, 'w.f': 1.5}
-    with caplog.at_level(logging.WARNING):
-        result = collect_outputs(outputs, {k: dst / k for k in outputs})
-    assert result == outputs
-    warnings = [r for r in caplog.records if 'is not a file' in r.message]
-    assert len(warnings) == len(outputs)
+def test_non_file_outputs_are_problems(dst: pathlib.Path):
+    outputs = {'w.n': 3, 'w.s': 'hello', 'w.flag': False, 'w.f': 1.5, 'w.arr': [1, 2]}
+    destinations: dict[str, Any] = {k: dst / k for k in outputs}
+    destinations['w.arr'] = [dst / 'a', dst / 'b']
+    with pytest.raises(CollectError) as exc:
+        collect_outputs(outputs, destinations)
+    problems = exc.value.problems
+    for key in ('w.n', 'w.s', 'w.flag', 'w.f', 'w.arr[0]', 'w.arr[1]'):
+        assert any(p.startswith(f'{key}: output is not a file') for p in problems), key
     assert not dst.exists()
 
 
@@ -170,10 +186,10 @@ def test_gcs_to_gcs_uses_rewrite(monkeypatch: pytest.MonkeyPatch):
         lambda s, d: calls.append((str(s), str(d))),
     )
     result = collect_outputs(
-        {'w.big': 'gs://cromwell-bucket/exec/big.cram', 'w.n': 1},
-        {'w.big': 'gs://dataset-bucket/out/big.cram', 'w.n': 'gs://unused'},
+        {'w.big': 'gs://cromwell-bucket/exec/big.cram'},
+        {'w.big': 'gs://dataset-bucket/out/big.cram'},
     )
-    assert result == {'w.big': 'gs://dataset-bucket/out/big.cram', 'w.n': 1}
+    assert result == {'w.big': 'gs://dataset-bucket/out/big.cram'}
     assert calls == [
         ('gs://cromwell-bucket/exec/big.cram', 'gs://dataset-bucket/out/big.cram'),
     ]

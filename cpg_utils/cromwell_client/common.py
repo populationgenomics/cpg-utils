@@ -1,6 +1,6 @@
 """
 Pieces shared by more than one module in this package: Cromwell status names, the
-input-document limit, shared defaults, the clock and sleep indirections, timestamp
+input-document limit, the clock and sleep indirections, timestamp
 parsing, and the consecutive-error budget used when retrying Cromwell calls.
 
 Internal to the package: nothing here is re-exported from ``cpg_utils.cromwell_client``.
@@ -26,10 +26,6 @@ ABORTING = 'Aborting'
 ACTIVE_STATUSES = frozenset({'Submitted', 'Running', 'On Hold'})
 UNSUCCESSFUL_STATUSES = frozenset({FAILED, ABORTED})
 TERMINAL_STATUSES = UNSUCCESSFUL_STATUSES | {SUCCEEDED}
-
-# watch_workflow defaults that run_workflow also needs before it starts watching.
-DEFAULT_MAX_POLL_INTERVAL = 60
-DEFAULT_MAX_SEQUENTIAL_EXCEPTION_COUNT = 25
 
 MAX_INPUT_DOCUMENTS = 5
 

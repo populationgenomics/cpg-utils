@@ -102,13 +102,16 @@ def _plan_value(
     value: Any,
     destination: Destination,
     copies: list[_Copy],
-) -> Any:
+    problems: list[str],
+) -> str:
+    dst = str(to_path(destination))
     if _is_file_value(value):
-        dst = str(to_path(destination))
         copies.append(_Copy(key, value, dst))
-        return dst
-    logger.warning(f'Output {key} is not a file; destination ignored: {value!r}')
-    return value
+    else:
+        problems.append(
+            f'{key}: output is not a file, so it has no destination: {value!r:.200}',
+        )
+    return dst
 
 
 def _plan(
@@ -135,7 +138,7 @@ def _plan(
                     'is a single path',
                 )
                 continue
-            result[key] = _plan_value(key, value, destination, copies)  # type: ignore[arg-type]
+            result[key] = _plan_value(key, value, destination, copies, problems)  # type: ignore[arg-type]
             continue
 
         targets = list(destination)  # type: ignore[arg-type]
@@ -161,7 +164,7 @@ def _plan(
             problems.extend(element_problems)
             continue
         result[key] = [
-            _plan_value(f'{key}[{index}]', element, target, copies)
+            _plan_value(f'{key}[{index}]', element, target, copies, problems)
             for index, (element, target) in enumerate(zip(value, targets, strict=True))
         ]
 
@@ -177,16 +180,16 @@ def collect_outputs(
     threads: int = 8,
 ) -> dict[str, Any]:
     """
-    Copy Workflow outputs to their Destinations.
+    Copy Workflow outputs to their Destinations, and return every output where it
+    now lives.
 
     ``destinations`` maps a full output name (e.g. ``'MyWorkflow.bam'``) to one path,
     or to a list of paths for an ``Array[File]`` output, matched element by element.
-    A resource group such as a BAM and its index is simply two keys. Outputs not named
-    in ``destinations`` are ignored.
+    A resource group such as a BAM and its index is simply two keys. ``destinations``
+    is only for file outputs; outputs not named in it are returned unchanged.
 
-    Everything is checked before anything is copied, and every problem is reported
-    in one :class:`CollectError`. A non-file output (a number, or a string that isn't a
-    ``gs://`` path) is passed through unchanged with a warning. A copy is skipped when
+    Everything is checked before anything is copied,
+    and every problem is reported in one :class:`CollectError`. A copy is skipped when
     the source already is the destination. Copies run in parallel; every copy is
     attempted even if some fail. Rerunning overwrites the destinations.
 
@@ -196,16 +199,17 @@ def collect_outputs(
         threads: number of parallel copies.
 
     Returns:
-        ``{output name: destination | [destinations] | raw value}`` for each key in
-        ``destinations``.
+        A copy of ``outputs`` in which each key in ``destinations`` is replaced by its
+        destination path (or list of paths), as a string. Every other output keeps
+        its raw value.
 
     Raises:
-        CollectError: if any output is missing, null or the wrong shape, or any copy
-            fails.
+        CollectError: if any output is missing, null, not a file or the wrong shape,
+            or any copy fails.
 
     Example::
 
-        collected = collect_outputs(
+        located = collect_outputs(
             outputs,
             {
                 'Align.bam': f'{prefix}/sample.bam',
@@ -220,4 +224,4 @@ def collect_outputs(
             problems = [p for p in pool.map(_run_copy, copies) if p is not None]
         if problems:
             raise CollectError(problems)
-    return result
+    return {**outputs, **result}

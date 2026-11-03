@@ -5,14 +5,13 @@ Watch a Cromwell Workflow until it finishes, and return its Workflow outputs.
 import logging
 import math
 from collections.abc import Iterable
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
 from cpg_utils.cromwell_client import common
 from cpg_utils.cromwell_client.client import CromwellClient
 from cpg_utils.cromwell_client.common import (
-    DEFAULT_MAX_POLL_INTERVAL,
-    DEFAULT_MAX_SEQUENTIAL_EXCEPTION_COUNT,
     SUCCEEDED,
     TERMINAL_STATUSES,
     UNSUCCESSFUL_STATUSES,
@@ -49,27 +48,42 @@ METADATA_REPORT_KEYS = (
 )
 
 
-def poll_interval(
-    elapsed_seconds: float,
-    *,
-    min_seconds: int,
-    max_seconds: int,
-    ramp_seconds: int,
-) -> int:
+@dataclass(frozen=True)
+class Polling:
     """
-    Seconds to wait before the next poll: a cosine ramp from ``min_seconds`` up to
-    ``max_seconds`` over the first ``ramp_seconds``, then flat.
+    How often a watcher polls Cromwell, and how many consecutive errors it tolerates.
 
-    >>> curve = {'min_seconds': 5, 'max_seconds': 60, 'ramp_seconds': 1200}
-    >>> poll_interval(0, **curve), poll_interval(600, **curve)
-    (5, 29)
-    >>> poll_interval(5000, **curve)
-    60
+    The wait between polls follows a cosine ramp from ``min_seconds`` up to
+    ``max_seconds`` over the first ``ramp_seconds`` after the Workflow's submission,
+    then stays at ``max_seconds``. The defaults match ``cpg_utils.cromwell``.
+
+    >>> polling = Polling()
+    >>> polling.interval(0), polling.interval(600), polling.interval(5000)
+    (5, 29, 60)
     """
-    factor = elapsed_seconds / ramp_seconds
-    if factor > 1:
-        return max_seconds
-    return max(min_seconds, int((1 - math.cos(math.pi * factor)) * max_seconds // 2))
+
+    #: shortest wait between polls, in seconds
+    min_seconds: int = 5
+    #: longest wait between polls, in seconds
+    max_seconds: int = 60
+    #: how long the wait takes to ramp from ``min_seconds`` to ``max_seconds``
+    ramp_seconds: int = 1200
+    #: give up after this many consecutive errors talking to Cromwell; a successful
+    #: status poll resets the count
+    max_consecutive_errors: int = 25
+
+    def interval(self, elapsed_seconds: float) -> int:
+        """Seconds to wait before the next poll, ``elapsed_seconds`` after submission."""
+        factor = elapsed_seconds / self.ramp_seconds
+        if factor > 1:
+            return self.max_seconds
+        return max(
+            self.min_seconds,
+            int((1 - math.cos(math.pi * factor)) * self.max_seconds // 2),
+        )
+
+
+DEFAULT_POLLING = Polling()
 
 
 def _flatten_failures(failures: Iterable[Any]) -> list[str]:
@@ -157,12 +171,9 @@ def watch_workflow(
     client: CromwellClient,
     workflow_id: str,
     *,
-    min_poll_interval: int = 5,
-    max_poll_interval: int = DEFAULT_MAX_POLL_INTERVAL,
-    exponential_decrease_seconds: int = 1200,
-    max_sequential_exception_count: int = DEFAULT_MAX_SEQUENTIAL_EXCEPTION_COUNT,
     time_limit_seconds: int | None = None,
     abort_on_interrupt: bool = False,
+    polling: Polling = DEFAULT_POLLING,
 ) -> dict[str, Any]:
     """
     Poll a Workflow until it finishes, and return its Workflow outputs.
@@ -175,21 +186,17 @@ def watch_workflow(
     Args:
         client: the Cromwell client.
         workflow_id: the Workflow to watch.
-        min_poll_interval: shortest wait between polls, in seconds.
-        max_poll_interval: longest wait between polls, in seconds.
-        exponential_decrease_seconds: how long the wait takes to ramp from min to max.
-        max_sequential_exception_count: give up after this many consecutive errors
-            talking to Cromwell. A successful status poll resets the count.
         time_limit_seconds: abort the Workflow if it is still running this long after
             submission.
         abort_on_interrupt: abort the Workflow if watching stops for any reason other
             than the Workflow failing or timing out (e.g. ``KeyboardInterrupt``). Off
             by default, so that preempting a watcher doesn't kill its Workflow.
+        polling: the polling curve and the consecutive-error budget.
 
     Raises:
         WorkflowFailed: the Workflow finished as ``Failed`` or ``Aborted``.
         WorkflowTimedOut: the time limit passed and an abort was requested.
-        CromwellUnavailable: the error budget ran out.
+        CromwellUnavailable: ``polling.max_consecutive_errors`` errors in a row.
         CromwellNotFound: Cromwell doesn't know the Workflow ID.
 
     Example::
@@ -200,11 +207,8 @@ def watch_workflow(
         return _watch(
             client,
             workflow_id,
-            min_poll_interval=min_poll_interval,
-            max_poll_interval=max_poll_interval,
-            exponential_decrease_seconds=exponential_decrease_seconds,
-            max_sequential_exception_count=max_sequential_exception_count,
             time_limit_seconds=time_limit_seconds,
+            polling=polling,
         )
     except (WorkflowFailed, WorkflowTimedOut):
         raise
@@ -228,26 +232,18 @@ def _watch(
     client: CromwellClient,
     workflow_id: str,
     *,
-    min_poll_interval: int,
-    max_poll_interval: int,
-    exponential_decrease_seconds: int,
-    max_sequential_exception_count: int,
     time_limit_seconds: int | None,
+    polling: Polling,
 ) -> dict[str, Any]:
-    budget = ErrorBudget(max_sequential_exception_count, workflow_id)
-    submitted = _submission_time(client, workflow_id, budget, min_poll_interval)
+    budget = ErrorBudget(polling.max_consecutive_errors, workflow_id)
+    submitted = _submission_time(client, workflow_id, budget, polling.min_seconds)
     logger.info(f'Watching Workflow {workflow_id}, submitted {submitted.isoformat()}')
     report: dict[str, Any] | None = None
     reported = False
 
     while True:
         elapsed = (common.utcnow() - submitted).total_seconds()
-        wait = poll_interval(
-            elapsed,
-            min_seconds=min_poll_interval,
-            max_seconds=max_poll_interval,
-            ramp_seconds=exponential_decrease_seconds,
-        )
+        wait = polling.interval(elapsed)
         status = budget.retry(
             lambda: client.status(workflow_id),
             'polling status',

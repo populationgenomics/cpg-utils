@@ -23,7 +23,6 @@ Nothing here imports `hail`, `hailtop`, `cpg_utils.config`, `cpg_utils.hail_batc
 import logging
 
 from cpg_utils.cromwell_client import (
-    CromwellClient,
     build_workflow_options,
     run_workflow,
     zip_dependencies,
@@ -43,12 +42,11 @@ options = build_workflow_options(
     logs_dir=f'gs://cpg-{dataset}-{access_level}-analysis/cromwell_logs/{prefix}',
     gcs_root=f'gs://cpg-{dataset}-{access_level}-tmp/cromwell',
     outputs_dir=f'gs://cpg-{dataset}-{access_level}/{prefix}',
-    labels={'stage': 'align'},
+    google_labels={'stage': 'align'},
     ar_guid='0f7d2a51-0000-0000-0000-000000000000',
 )
 
 result = run_workflow(
-    CromwellClient(),
     'wdl/Align.wdl',
     options=options,
     input_files=['wdl/defaults.json'],
@@ -70,8 +68,8 @@ result = run_workflow(
 )
 
 print(result.workflow_id, result.reused)
-print(result.collected['Align.bam'])  # where the BAM was copied to
-print(result.outputs['Align.vcf'])  # a raw output that wasn't collected
+print(result.outputs['Align.bam'])  # where the BAM was copied to
+print(result.outputs['Align.vcf'])  # an output that wasn't collected: its raw value
 ```
 
 ## Layering
@@ -146,15 +144,17 @@ options = build_workflow_options(
     logs_dir='gs://cpg-my-dataset-main-analysis/cromwell_logs/align/v1',
     gcs_root='gs://cpg-my-dataset-main-tmp/cromwell',
     outputs_dir=None,  # don't have Cromwell copy final outputs anywhere
-    labels={'stage': 'align'},
+    google_labels={'stage': 'align'},
     ar_guid=None,
 )
 ```
 
 This reads the service account key from Secret Manager, and Cromwell runs the
 Workflow's jobs as that account. The secret's project can differ from
-`google_project`. `google_labels` always gets `compute-category: cromwell`, and also
-`ar-guid` when `ar_guid` is given. The result matches what `run_cromwell_workflow`
+`google_project`. The directories can be strings or paths. `google_labels` are
+attached to the cloud resources the Workflow creates; they aren't Cromwell workflow
+labels. They always get `compute-category: cromwell`, and also `ar-guid` when
+`ar_guid` is given. The result matches what `run_cromwell_workflow`
 built, key for key and in the same order. A parity test enforces this.
 
 ### `zip_dependencies`
@@ -174,7 +174,7 @@ Submission key stable from one launch to the next.
 ### `watch_workflow`
 
 ```python
-from cpg_utils.cromwell_client import CromwellClient, watch_workflow
+from cpg_utils.cromwell_client import CromwellClient, Polling, watch_workflow
 
 client = CromwellClient()
 
@@ -183,18 +183,26 @@ outputs = watch_workflow(
     client,
     'b2bd3f54-0000-0000-0000-000000000000',
     time_limit_seconds=6 * 60 * 60,
-    max_poll_interval=120,
+    polling=Polling(max_seconds=120),
 )
 ```
 
-It returns the Workflow outputs once the status is `Succeeded`. Polling starts every
-`min_poll_interval` seconds and ramps up to every `max_poll_interval` seconds over
-`exponential_decrease_seconds`. The ramp and the time limit both count from the
-Workflow's own `submission` time, so re-attaching doesn't restart either. When the
-Workflow finishes, a report built from its metadata is logged at INFO.
+It returns the Workflow outputs once the status is `Succeeded`. When the Workflow
+finishes, a report built from its metadata is logged at INFO.
 
-Transient errors are retried until `max_sequential_exception_count` of them happen in
-a row. Every successful status poll resets that count.
+`Polling` holds the settings that rarely need changing. Its defaults match
+`cpg_utils.cromwell`:
+
+| Field                    | Default | Meaning                                                    |
+|--------------------------|---------|------------------------------------------------------------|
+| `min_seconds`            | 5       | the first wait between polls                               |
+| `max_seconds`            | 60      | the wait once the ramp is over                             |
+| `ramp_seconds`           | 1200    | how long the wait takes to ramp up (a cosine curve)        |
+| `max_consecutive_errors` | 25      | give up after this many errors in a row talking to Cromwell |
+
+The ramp and the time limit both count from the Workflow's own `submission` time, so
+re-attaching doesn't restart either. Every successful status poll resets the error
+count.
 
 ### `collect_outputs`
 
@@ -206,7 +214,7 @@ outputs = {
     'Align.bai': 'gs://cromwell-exec/Align/abc/call-Align/sample-1.bam.bai',
     'Align.read_count': 123456,
 }
-collected = collect_outputs(
+located = collect_outputs(
     outputs,
     {
         'Align.bam': 'gs://cpg-my-dataset-main/align/sample-1.bam',
@@ -214,24 +222,33 @@ collected = collect_outputs(
     },
     threads=8,
 )
+# {'Align.bam': 'gs://cpg-my-dataset-main/align/sample-1.bam',
+#  'Align.bai': 'gs://cpg-my-dataset-main/align/sample-1.bam.bai',
+#  'Align.read_count': 123456}
 ```
+
+It returns every output where it now lives: the destination for each collected
+output, and the raw value for the rest.
 
 ### `run_workflow`
 
 ```python
-from cpg_utils.cromwell_client import CromwellClient, run_workflow
+from datetime import timedelta
+
+from cpg_utils.cromwell_client import CromwellClient, Polling, run_workflow
 
 options = {'backend': 'batch', 'google_project': 'my-dataset-project'}
 result = run_workflow(
-    CromwellClient(),
     'wdl/Hello.wdl',
     options=options,
     inputs={'Hello.name': 'world'},
+    time_limit_seconds=3600,  # passed to watch_workflow
+    abort_on_interrupt=False,  # passed to watch_workflow
     reuse_existing=True,
+    reuse_succeeded_within=timedelta(days=2),  # default: one week
+    polling=Polling(max_seconds=120),
     collect_threads=4,
-    # anything else goes to watch_workflow
-    time_limit_seconds=3600,
-    abort_on_interrupt=False,
+    client=CromwellClient('https://cromwell.example.org'),  # default: CromwellClient()
 )
 ```
 
@@ -239,8 +256,7 @@ This reads the WDL and the inputs up front. It then looks up an existing Workflo
 [Submission key](#resubmission-and-submission-keys), or submits a new one, then
 watches it and collects the outputs if `destinations` is given. Input documents are
 sent in this order: `input_files`, then `inputs` serialised as canonical JSON.
-Cromwell applies later documents over earlier ones, so `inputs` wins. An unknown
-keyword argument raises `TypeError` before any request is sent.
+Cromwell applies later documents over earlier ones, so `inputs` wins.
 
 ### `WorkflowResult`
 
@@ -249,11 +265,14 @@ from cpg_utils.cromwell_client import WorkflowResult
 
 result = WorkflowResult(
     workflow_id='b2bd3f54-0000-0000-0000-000000000000',
-    outputs={'Hello.greeting': 'gs://cromwell-exec/hello.txt'},  # raw Workflow outputs
-    collected={},  # collect_outputs(...) result, or {} without destinations
+    # every output where it now lives: collected outputs point at their copies
+    outputs={'Hello.greeting': 'gs://cpg-my-dataset-main/hello.txt', 'Hello.n': 3},
     reused=False,  # True if attached to an existing Workflow via the Submission key
 )
 ```
+
+`outputs` isn't exactly what Cromwell reported: collected outputs point at their
+destinations. For the original locations, call `client.outputs(result.workflow_id)`.
 
 ## Collecting
 
@@ -264,8 +283,8 @@ A Destination is a `str`, a `pathlib.Path` or a `CloudPath`:
 - **`Array[File]`.** A list of paths, the same length as the array, matched element by
   element.
 - **Resource group,** such as a BAM and its index: several keys.
-- **Path-only outputs:** leave them out of `destinations` and read them from
-  `result.outputs`.
+- **Path-only outputs and non-file outputs:** leave them out of `destinations`. They
+  keep their raw values in `result.outputs`.
 
 Collecting is **strict**. Every destination is checked before anything is copied.
 These are problems:
@@ -274,12 +293,10 @@ These are problems:
 - a `null` output
 - an array whose length doesn't match the list of destinations
 - a single destination for an array output, or a list for a single value
+- a non-file output, such as a number or a string that isn't a `gs://` path
 
 All of them are reported together in one `CollectError`. The old wrapper wrote the
 literal string `null` instead.
-
-A **non-file output**, such as a number or a string that isn't a `gs://` path, is
-returned unchanged with a WARNING. Nothing is written for it.
 
 If an output is **already at its destination**, for example because `outputs_dir`
 points there, the copy is skipped.
@@ -307,10 +324,10 @@ CromwellError
 | `CromwellNotFound` | 404 | No. Check the Workflow ID and server URL. |
 | `WorkflowFailed` | The Workflow ended `Failed` or `Aborted`. `failures` holds Cromwell's messages, flattened through `causedBy`. | Only after fixing the cause. A rerun with the same content submits a new Workflow. |
 | `WorkflowTimedOut` | The time limit passed and an abort was requested. `abort_confirmed=False` means the abort request itself never succeeded, so check the Workflow by hand. | Only with a longer limit. |
-| `CollectError` | Outputs were missing, null or the wrong shape, or copies failed. | Yes for failed copies: rerunning re-attaches to the `Succeeded` Workflow and collects again. |
+| `CollectError` | Outputs were missing, null, not files or the wrong shape, or copies failed. | Yes for failed copies: rerunning re-attaches to the `Succeeded` Workflow and collects again. |
 
-`ValueError` (bad arguments, a missing secret) and `TypeError` (an unknown
-`watch_workflow` argument) are raised before anything is submitted.
+`ValueError` (bad arguments, a missing secret) is raised before anything is
+submitted.
 
 ## Resubmission and Submission keys
 
@@ -335,15 +352,24 @@ submission as the Cromwell label `cpg-submission-key`, and found again with
 |-------------------------------------|-----------------------------------------------------------------------------------|
 | none                                | submit                                                                            |
 | `Submitted` / `Running` / `On Hold` | attach and watch it (`reused=True`)                                               |
-| `Succeeded`                         | attach; outputs come back at once and are collected again                         |
+| `Succeeded`, finished within a week | attach; outputs come back at once and are collected again                         |
+| `Succeeded`, finished longer ago    | submit                                                                            |
 | `Aborting`                          | wait up to 15 minutes for `Aborted`, then submit; otherwise raise `CromwellError` |
 | `Failed` / `Aborted`                | submit                                                                            |
 
 If the lookup itself fails, the error is raised. It isn't treated as "none", because
 that could cause exactly the duplicate the key is there to prevent.
 
+**`reuse_succeeded_within`** (default one week, `None` for no limit) bounds how old a
+`Succeeded` Workflow can be and still be reused. Its age counts from its `end` time.
+There are two reasons for the limit. The key hashes the inputs document, not the
+files it points to, so a file rewritten in place doesn't change the key. And the
+Workflow's outputs may since have been deleted by a lifecycle rule on the bucket.
+Active Workflows are always reused, whatever their age.
+
 **`reuse_existing=False`** skips the lookup and always submits. The label is still
-sent, so later runs can find this Workflow.
+sent, so later runs can find this Workflow. Use it to force a fresh run, for
+example when a reused `Succeeded` Workflow's outputs can no longer be collected.
 
 **`abort_on_interrupt` defaults to `False`.** When a watcher is preempted, the Workflow
 should keep running so that the retried watcher can re-attach to it. Set it to `True`
@@ -363,8 +389,9 @@ Preemption followed by a retry happens one after the other, so that case is cove
 | Old                                                                                                               | New                                                                                                                                                                                                 |
 |-------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `run_cromwell_workflow(job, dataset, access_level, workflow, cwd, libs, output_prefix, ...)`                      | `build_workflow_options(...)` + `zip_dependencies(cwd, libs)` + `client.submit(...)`, or all of it via `run_workflow(...)`                                                                          |
-| `watch_workflow(...)` / `watch_workflow_and_get_output(b, job_prefix, workflow_id_file, outputs_to_collect, ...)` | `watch_workflow(client, workflow_id, ...)` + `collect_outputs(outputs, destinations)`. The polling arguments keep their names and defaults.                                                         |
-| `run_cromwell_workflow_from_repo_and_get_outputs(b, ..., repo, commit, cwd, ...)`                                 | Check out the repo yourself, then call `run_workflow(client, f'{cwd}/{workflow}', options=..., dependencies=zip_dependencies(cwd, libs), destinations=...)`. There is no "commit is on main" check. |
+| `watch_workflow(...)` / `watch_workflow_and_get_output(b, job_prefix, workflow_id_file, outputs_to_collect, ...)` | `watch_workflow(client, workflow_id, ...)` + `collect_outputs(outputs, destinations)`. The polling arguments move to `Polling`; see the next row.                                                   |
+| `min_poll_interval`, `max_poll_interval`, `exponential_decrease_seconds`, `max_sequential_exception_count`        | `polling=Polling(min_seconds=..., max_seconds=..., ramp_seconds=..., max_consecutive_errors=...)`, with the same defaults                                                                           |
+| `run_cromwell_workflow_from_repo_and_get_outputs(b, ..., repo, commit, cwd, ...)`                                 | Check out the repo yourself, then call `run_workflow(f'{cwd}/{workflow}', options=..., dependencies=zip_dependencies(cwd, libs), destinations=...)`. There is no "commit is on main" check.         |
 | `CromwellOutputType.single('w.out')`                                                                              | `{'w.out': dst}`                                                                                                                                                                                    |
 | `CromwellOutputType.array('w.outs', length=n)`                                                                    | `{'w.outs': [dst_1, …, dst_n]}`                                                                                                                                                                     |
 | `CromwellOutputType.single_resource_group(name, {'bam': 'w.bam', 'bai': 'w.bai'})`                                | `{'w.bam': bam_dst, 'w.bai': bai_dst}`                                                                                                                                                              |
@@ -379,6 +406,7 @@ Preemption followed by a retry happens one after the other, so that case is cove
 | `dataset_path(f'cromwell_logs/{output_prefix}', dataset=dataset, category='analysis')`                            | `logs_dir=...`                                                                                                                                                                                      |
 | `join(dataset_path('', dataset=dataset, category='tmp'), 'cromwell')`                                             | `gcs_root=...`                                                                                                                                                                                      |
 | `ar_guid_override` or `try_get_ar_guid()`                                                                         | `ar_guid=...`                                                                                                                                                                                       |
+| `labels={...}` (became `google_labels`)                                                                           | `google_labels={...}`                                                                                                                                                                               |
 | `input_paths` then `input_dict`                                                                                   | `input_files` then `inputs`, in the same order                                                                                                                                                      |
 | the watcher returning silently after a time-limit abort                                                           | `WorkflowTimedOut` is raised                                                                                                                                                                        |
 | a `null` output written as the string `null`                                                                      | `CollectError`                                                                                                                                                                                      |
