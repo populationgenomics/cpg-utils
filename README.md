@@ -18,3 +18,4 @@ We use `bump-my-version` for incrementing the library's semantic version. A new 
 - [Methods to facilitate cloud computing](documentation/cloud.md)
 - [Helper functions for Hail Batch jobs](documentation/hail_batch.md)
 - [Cloning git repositories inside Hail Batch jobs](documentation/git.md)
+- [Cromwell client that works under any workflow manager](cpg_utils/cromwell_client/README.md)

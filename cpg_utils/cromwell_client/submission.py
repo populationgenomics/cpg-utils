@@ -159,9 +159,9 @@ def _find_existing(
         return None
     newest = max(results, key=_submission_sort_key)
     workflow_id, status = newest['id'], newest.get('status', '')
+    newest_of = f' (newest of {len(results)})' if len(results) > 1 else ''
     logger.info(
-        f'Found Workflow {workflow_id} ({status}) with Submission key {key}'
-        + (f' (newest of {len(results)})' if len(results) > 1 else ''),
+        f'Found Workflow {workflow_id} ({status}) with Submission key {key}{newest_of}',
     )
     if status == ABORTING:
         status = _wait_for_abort(client, workflow_id, interval_seconds=poll_seconds)

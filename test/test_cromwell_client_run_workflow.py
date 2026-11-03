@@ -88,7 +88,12 @@ class FakeCromwell:
             statuses.pop(0)
         return statuses[0]
 
-    def metadata(self, workflow_id: str, *, include_keys: Any = ()) -> dict[str, Any]:
+    def metadata(
+        self,
+        workflow_id: str,
+        *,
+        include_keys: Any = (),  # noqa: ARG002
+    ) -> dict[str, Any]:
         self.calls.append(f'metadata:{workflow_id}')
         return {
             'id': workflow_id,
@@ -338,15 +343,20 @@ def test_round_trip_reattaches_despite_new_secret_and_ar_guid(
     fake: FakeCromwell,
     wdl: pathlib.Path,
 ):
-    def options(secret_email: str, ar_guid: str) -> dict[str, Any]:
-        key_json = json.dumps({'client_email': secret_email, 'private_key': ar_guid})
+    secret_args = {
+        'service_account_secret': 'ds-cromwell-test-key',
+        'secret_project': 'ds-project',
+    }
+
+    def options(private_key: str, ar_guid: str) -> dict[str, Any]:
+        # a rotated key for the same service account
+        key_json = json.dumps({'client_email': 'sa@ds', 'private_key': private_key})
         with patch(
             'cpg_utils.cromwell_client.gcp_batch.read_secret',
             return_value=key_json,
         ):
             return build_workflow_options(
-                service_account_secret='ds-cromwell-test-key',
-                secret_project='ds-project',
+                **secret_args,
                 google_project='ds-project',
                 logs_dir='gs://ds-analysis/cromwell_logs/x',
                 gcs_root='gs://ds-tmp/cromwell',
@@ -356,19 +366,19 @@ def test_round_trip_reattaches_despite_new_secret_and_ar_guid(
             )
 
     fake.next_statuses = ['Running']  # the first watcher is "preempted" mid-run
-    first_options = options('sa@one', 'guid-1')
-    with pytest.raises(KeyboardInterrupt):
-        with patch.object(
-            watch_module,
-            '_sleep',
-            side_effect=KeyboardInterrupt,
-        ):
-            _run(fake, wdl, options=first_options)
+    first_options = options('key-1', 'guid-1')
+    with (
+        pytest.raises(KeyboardInterrupt),
+        patch.object(watch_module, '_sleep', side_effect=KeyboardInterrupt),
+    ):
+        _run(fake, wdl, options=first_options)
     assert fake.calls.count('submit') == 1
     assert not any(c.startswith('abort') for c in fake.calls)
 
     fake.workflows['new-1']['statuses'] = ['Running', 'Succeeded']
-    second = _run(fake, wdl, options=options('sa@two', 'guid-2'))
+    second_options = options('key-2', 'guid-2')
+    assert second_options != first_options
+    second = _run(fake, wdl, options=second_options, time_limit_seconds=3600)
     assert fake.calls.count('submit') == 1
     assert second.workflow_id == 'new-1'
     assert second.reused is True
