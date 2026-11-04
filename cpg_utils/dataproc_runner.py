@@ -36,6 +36,7 @@ Example:
 
 import hashlib
 import io
+import keyword
 import os
 import pathlib
 import posixpath
@@ -88,13 +89,16 @@ _TERMINAL_ERROR_STATES = frozenset({'ERROR', 'CANCELLED'})
 # File types Dataproc's pyspark_job.python_file_uris accepts, and that Spark puts on
 # the PYTHONPATH of the driver and executors.
 PYFILE_SUFFIXES = ('.py', '.egg', '.zip')
+PY_SUFFIX = '.py'
 # Python package zips: the earliest timestamp a zip entry can hold, fixed (along with
 # permissions and entry order) so zipping an unchanged tree gives identical bytes.
 _ZIP_FIXED_DATE_TIME = (1980, 1, 1, 0, 0, 0)
 _ZIP_FILE_MODE = 0o644
 _ZIP_UNIX_CREATE_SYSTEM = 3
 _ZIP_EXCLUDED_DIRS = frozenset({'__pycache__'})
-_ZIP_EXCLUDED_SUFFIXES = frozenset({'.pyc', '.pyo'})
+# Compiled extension modules. zipimport cannot load them, so a package directory
+# containing one would zip cleanly but fail to import on the cluster.
+_ZIP_EXTENSION_SUFFIXES = frozenset({'.so', '.pyd', '.dylib'})
 _PYFILE_HASH_LENGTH = 16
 
 
@@ -360,17 +364,43 @@ def validate_python_file_uris(uris: Sequence[str]) -> None:
 
 
 def _package_files(root: pathlib.Path) -> list[pathlib.Path]:
-    """Files under root to include in a package zip, excluding bytecode caches.
+    """The .py files under root to include in a package zip.
 
+    Only .py files are kept, as hailctl --pyfiles does. `__pycache__` and any file or
+    directory whose name starts with '.' (.git, .venv, .env, ...) are skipped.
     Symlinks to files are included by content. Symlinked directories are not walked.
+
+    Raises:
+        ValueError: If root contains a compiled extension module (.so, .pyd, .dylib),
+            which cannot be imported from a zip, or a .py symlink whose target does
+            not exist.
     """
     found: list[pathlib.Path] = []
+    extensions: list[pathlib.Path] = []
     for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
-        dirnames[:] = [d for d in dirnames if d not in _ZIP_EXCLUDED_DIRS]
+        dirnames[:] = [
+            d for d in dirnames if d not in _ZIP_EXCLUDED_DIRS and not d.startswith('.')
+        ]
         for filename in filenames:
+            if filename.startswith('.'):
+                continue
             path = pathlib.Path(dirpath, filename)
-            if path.suffix not in _ZIP_EXCLUDED_SUFFIXES and path.is_file():
-                found.append(path)
+            if path.suffix in _ZIP_EXTENSION_SUFFIXES:
+                extensions.append(path)
+            elif path.suffix == PY_SUFFIX:
+                # Check before is_file(), which follows the link and is False for a
+                # dangling one.
+                if path.is_symlink() and not path.exists():
+                    raise ValueError(
+                        f'Symlink file {str(path)!r} does not have a real target',
+                    )
+                if path.is_file():
+                    found.append(path)
+    if extensions:
+        raise ValueError(
+            'Python package contains compiled extension modules, which cannot be '
+            f'imported from a zip: {sorted(str(path) for path in extensions)}',
+        )
     return found
 
 
@@ -378,9 +408,10 @@ def zip_python_package(package_dir: str | os.PathLike[str]) -> bytes:
     """Zip a local package directory so it can be imported from python_file_uris.
 
     The directory is the zip's top-level entry, so a zip of `my_helpers/` placed on
-    sys.path supports `import my_helpers.annotations`. `__pycache__` directories and
-    `.pyc`/`.pyo` files are left out. Entries are sorted, with a fixed timestamp and
-    permissions, so zipping an unchanged directory gives identical bytes.
+    sys.path supports `import my_helpers.annotations`. Only .py files are included,
+    and `__pycache__` and dot-prefixed files and directories are skipped. Entries are
+    sorted, with a fixed timestamp and permissions, so zipping an unchanged directory
+    gives identical bytes.
 
     The directory name is taken as given rather than from a resolved symlink target,
     and must be a valid Python identifier, otherwise it could not be imported.
@@ -393,12 +424,13 @@ def zip_python_package(package_dir: str | os.PathLike[str]) -> bytes:
 
     Raises:
         ValueError: If package_dir is not a directory, its name is not a valid Python
-            identifier, or it contains no files to zip.
+            identifier, it contains no files to zip, or it contains a compiled
+            extension module or dangling .py symlink (see _package_files).
     """
     root = pathlib.Path(os.path.abspath(package_dir))
     if not root.is_dir():
         raise ValueError(f'Python package {str(package_dir)!r} is not a directory')
-    if not root.name.isidentifier():
+    if not root.name.isidentifier() or keyword.iskeyword(root.name):
         raise ValueError(
             f'Python package directory name {root.name!r} is not a valid Python '
             'identifier, so it could not be imported',
@@ -425,19 +457,22 @@ def _pyfile_payload(local_path: str | os.PathLike[str]) -> tuple[str, bytes]:
     """The file name and contents to upload for one local pyfile.
 
     A directory is zipped with zip_python_package and named <dir>.zip. A .py, .egg or
-    .zip file is uploaded unchanged.
+    .zip file is uploaded unchanged, after checking a .zip or .egg really is a zip
+    archive. Otherwise the import system ignores it and the job fails on the cluster.
     """
     path = pathlib.Path(local_path)
     if path.is_dir():
         data = zip_python_package(path)
         return f'{pathlib.Path(os.path.abspath(path)).name}.zip', data
     if not path.is_file():
-        raise ValueError(f'pyfile {str(local_path)!r} does not exist')
+        raise ValueError(f'pyfile {os.path.abspath(local_path)!r} does not exist')
     if path.suffix not in PYFILE_SUFFIXES:
         raise ValueError(
             f'pyfile {str(local_path)!r} must be a package directory or a .py, .egg '
             'or .zip file',
         )
+    if path.suffix != PY_SUFFIX and not zipfile.is_zipfile(path):
+        raise ValueError(f'pyfile {str(local_path)!r} is not a valid zip archive')
     return path.name, path.read_bytes()
 
 
@@ -757,10 +792,15 @@ class HailDataprocCluster:
             The gs:// URIs of the uploaded files, in the order given.
 
         Raises:
-            ValueError: If an entry is missing or of an unsupported type, if a package
-                directory cannot be zipped (see zip_python_package), or if two
-                entries would upload with the same name.
+            TypeError: If local_paths is a single path rather than a list of paths.
+            ValueError: If an entry is missing or of an unsupported type, a .zip or
+                .egg is not a valid zip archive, a package directory cannot be zipped
+                (see zip_python_package), or two entries would upload with the same
+                name.
         """
+        if isinstance(local_paths, str | os.PathLike):
+            raise TypeError('local_paths must be a list of paths, not a single path')
+
         payloads = [_pyfile_payload(path) for path in local_paths]
         validate_python_file_uris([name for name, _ in payloads])
 
@@ -816,9 +856,12 @@ class HailDataprocCluster:
             The Dataproc job id assigned by the API.
 
         Raises:
-            ValueError: If python_file_uris fails validate_python_file_uris. This is
+            TypeError: If python_file_uris is a single URI rather than a list.
+            ValueError: If python_file_uris fails validate_python_file_uris. Both are
                 checked before the cluster is started.
         """
+        if isinstance(python_file_uris, str):
+            raise TypeError('python_file_uris must be a list of URIs, not a single URI')
         if python_file_uris:
             validate_python_file_uris(python_file_uris)
 

@@ -20,6 +20,18 @@ is idempotent, so it's safe to call from a `finally` block, and
 `install_sigterm_cleanup` wires it up as a SIGTERM handler for orchestrators
 that cancel jobs by sending SIGTERM.
 
+A job on the cluster can only import code that is installed from PyPI or
+shipped with the job, so a script split across several local files needs its
+helpers sent along with it. `upload_pyfiles()` uploads local package
+directories (zipped automatically) and `.py`, `.egg` or `.zip` files, and
+`submit_job`/`run_job` take the returned URIs as `python_file_uris`, putting
+them on the job's PYTHONPATH. Packaging mistakes that would only surface as
+an import error on the cluster (an invalid package name, compiled extension
+modules, a corrupt archive, or two files with the same name) are caught
+locally, before the cluster is started. See
+[Shipping helper modules with a job](#shipping-helper-modules-with-a-job-pyfiles)
+for the rules.
+
 ## Running a single job on an ephemeral cluster
 
 ```python
@@ -62,9 +74,13 @@ with HailDataprocCluster(...) as cluster:
 - **Package directories** are zipped with the directory as the top-level
   entry, so `src/my_helpers/` becomes `my_helpers.zip` and the script can use
   `import my_helpers.annotations`. The directory name must be a valid Python
-  identifier. `__pycache__` directories and `.pyc`/`.pyo` files are left out,
-  and the zip has fixed timestamps, so the same code always gives the same
-  bytes. `zip_python_package` exposes the zipping step on its own.
+  identifier. Only `.py` files are included, as with `hailctl --pyfiles`;
+  `__pycache__` and anything whose name starts with `.` (`.git`, `.venv`,
+  `.env`) are skipped. A package containing compiled extension modules
+  (`.so`, `.pyd`, `.dylib`) or a broken `.py` symlink is rejected, because it
+  could not be imported on the cluster. The zip has fixed timestamps, so the
+  same code always gives the same bytes. `zip_python_package` exposes the
+  zipping step on its own.
 - **Upload location.** Files go to
   `<staging_bucket>/scripts/<cluster_name>/pyfiles/<content-hash>/<name>`, or
   `<prefix>/<content-hash>/<name>` if you pass `prefix=`. Unchanged code gets

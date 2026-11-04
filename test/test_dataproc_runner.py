@@ -289,14 +289,61 @@ def test_zip_python_package_uses_given_dir_name(tmp_path: pathlib.Path):
         assert archive.namelist()[0] == 'my_helpers/__init__.py'
 
 
+def test_zip_python_package_skips_dot_prefixed_and_non_py(tmp_path: pathlib.Path):
+    pkg = _write_package(tmp_path)
+    (pkg / '.env').write_text('TOKEN=secret')
+    (pkg / '.DS_Store').write_bytes(b'')
+    (pkg / '.hidden.py').write_text('')
+    (pkg / 'notes.txt').write_text('')
+    (pkg / '.git').mkdir()
+    (pkg / '.git' / 'HEAD').write_text('ref')
+    # Dot-prefixed directories are not walked, so a venv's .py and .so files are
+    # neither zipped nor rejected as extension modules.
+    venv = pkg / '.venv' / 'lib'
+    venv.mkdir(parents=True)
+    (venv / 'site.py').write_text('')
+    (venv / 'fast.cpython-311-darwin.so').write_bytes(b'')
+    with zipfile.ZipFile(io.BytesIO(zip_python_package(pkg))) as archive:
+        names = archive.namelist()
+    assert names == [
+        'my_helpers/__init__.py',
+        'my_helpers/annotations.py',
+        'my_helpers/sub/__init__.py',
+        'my_helpers/sub/mod.py',
+    ]
+
+
+def _package_with(root: pathlib.Path, name: str) -> pathlib.Path:
+    """A valid package plus one extra file, or a dangling symlink for 'dangling.py'."""
+    pkg = _write_package(root)
+    if name == 'dangling.py':
+        (pkg / 'sub' / name).symlink_to('nowhere.py')
+    else:
+        (pkg / 'sub' / name).write_bytes(b'')
+    return pkg
+
+
 @pytest.mark.parametrize(
     ('make', 'message'),
     [
         (lambda root: root / 'missing', 'is not a directory'),
         (lambda root: _write_package(root, 'hail-scripts'), 'not a valid Python'),
+        (lambda root: _write_package(root, 'import'), 'not a valid Python'),
         (
             lambda root: (root / 'empty').mkdir() or root / 'empty',
             'contains no files',
+        ),
+        (
+            lambda root: _package_with(root, 'fast.cpython-311-darwin.so'),
+            r'compiled extension modules.*fast\.cpython-311-darwin\.so',
+        ),
+        (
+            lambda root: _package_with(root, 'fast.pyd'),
+            r'compiled extension modules.*fast\.pyd',
+        ),
+        (
+            lambda root: _package_with(root, 'dangling.py'),
+            r'dangling\.py.*does not have a real target',
         ),
     ],
 )
@@ -377,6 +424,8 @@ def test_upload_pyfiles_prefix_override(tmp_path: pathlib.Path):
         (['notes.txt'], 'must be a package directory'),
         (['missing.py'], 'does not exist'),
         (['a/util.py', 'b/util.py'], 'share a basename'),
+        (['helpers.zip'], 'not a valid zip archive'),
+        (['helpers.egg'], 'not a valid zip archive'),
     ],
 )
 def test_upload_pyfiles_rejects(tmp_path: pathlib.Path, names: list[str], message: str):
@@ -393,6 +442,43 @@ def test_upload_pyfiles_rejects(tmp_path: pathlib.Path, names: list[str], messag
     ):
         cluster.upload_pyfiles([tmp_path / name for name in names])
     assert not fake.uploads
+
+
+def test_upload_pyfiles_accepts_real_zip(tmp_path: pathlib.Path):
+    archive = tmp_path / 'helpers.zip'
+    archive.write_bytes(zip_python_package(_write_package(tmp_path)))
+    cluster = _make_cluster()
+    fake = _FakeUpload()
+    with patch('cpg_utils.dataproc_runner.upload_to_gcs', fake):
+        (uri,) = cluster.upload_pyfiles([archive])
+    assert fake.uploads[uri] == archive.read_bytes()
+
+
+@pytest.mark.parametrize('make', [str, pathlib.Path])
+def test_upload_pyfiles_rejects_single_path(
+    tmp_path: pathlib.Path,
+    make: Callable[[pathlib.Path], Any],
+):
+    pkg = _write_package(tmp_path)
+    cluster = _make_cluster()
+    fake = _FakeUpload()
+    with (
+        patch('cpg_utils.dataproc_runner.upload_to_gcs', fake),
+        pytest.raises(TypeError, match='not a single path'),
+    ):
+        cluster.upload_pyfiles(make(pkg))
+    assert not fake.uploads
+
+
+def test_submit_job_rejects_single_python_file_uri():
+    cluster = _make_cluster()
+    with pytest.raises(TypeError, match='not a single URI'):
+        cluster.submit_job(
+            'gs://staging/main.py',
+            python_file_uris='gs://staging/helpers.zip',  # type: ignore[arg-type]
+        )
+    cluster._cluster_client.create_cluster.assert_not_called()
+    assert not cluster.is_started
 
 
 def posix_basename(uri: str) -> str:
