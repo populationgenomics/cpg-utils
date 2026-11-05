@@ -973,7 +973,7 @@ wheels = [
 
 [[package]]
 name = "cpg-utils"
-version = "5.8.2"
+version = "5.9.0"
 source = { editable = "." }
 dependencies = [
     { name = "boto3" },
