@@ -493,7 +493,7 @@ class HailDataprocCluster:
     service_account sets the identity the cluster VMs run as, i.e. the identity Hail code uses to
     read from and write to GCS.
     If unset, Dataproc falls back to the project's default compute service account. At CPG that should
-    normally be dataproc-<access_level>@<project>.iam.gserviceaccount.com, as in the hailctl implementation.
+    normally be seqera-<access_level>@<project>.iam.gserviceaccount.com, as in the hailctl implementation.
     """
 
     def __init__(
@@ -717,6 +717,7 @@ class HailDataprocCluster:
                     'idle_delete_ttl': {'seconds': self._max_idle_seconds},
                 },
                 'temp_bucket': self._temp_bucket.removeprefix('gs://'),
+                'config_bucket': self._staging_bucket.removeprefix('gs://'),
             },
         }
 
