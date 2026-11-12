@@ -81,7 +81,8 @@ DEFAULT_JOB_POLL_BACKOFF = 1.5
 # GCP label keys/values: lowercase letters, digits, underscore, hyphen; <=63 chars.
 # Keys must start with a lowercase letter. values may be empty.
 _KEY_VALUE_INVALID = r'[^a-z0-9_-]'
-# Cluster names are stricter: no underscores allowed, max length 52 chars.
+# Cluster names are stricter: no underscores allowed. GCP allows up to 52 chars;
+# unique_cluster_name targets 51 to leave a one-char margin.
 _CLUSTER_INVALID = r'[^a-z0-9-]'
 
 _TERMINAL_ERROR_STATES = frozenset({'ERROR', 'CANCELLED'})
@@ -247,8 +248,6 @@ def resolve_autoscaling_policy_uri(
         raise ValueError(
             f'Invalid autoscaling policy components: {project}, {region}, {policy_ref}',
         )
-    # projects/seqera-trial/regions/australia-southeast1/autoscalingPolicies/trial-combiner-1
-    # projects/australia-southeast1/regions/trial-combiner-1
     return f'projects/{project}/regions/{region}/autoscalingPolicies/{policy_ref}'
 
 
@@ -560,7 +559,6 @@ class HailDataprocCluster:
         )
 
         self._name = unique_cluster_name(cluster_name_prefix)
-        # 8 hex chars of uniqueness; keeps the total name well under the 51-char limit.
 
         endpoint = f'{region}-dataproc.googleapis.com:443'
         self._cluster_client = cluster_client or dataproc_v1.ClusterControllerClient(
@@ -652,9 +650,9 @@ class HailDataprocCluster:
                 'cluster': cluster_config,
             },
         )
-        # set started = True before launching. If the cluster times out during the creation it can enter an error state
-        # by setting started=True early, any failures will be caught and managed by the context handler
-        # ERROR state dataproc clusters need to be deleted manually, the idle TTL does not apply
+        # Mark started before blocking on the create operation: if creation fails or times
+        # out the cluster can be left in ERROR state, which the idle TTL does not clean up.
+        # Setting this early ensures __exit__ / shutdown() still issues a delete.
         self._started = True
         self._cluster = operation.result()
         print(f"Cluster '{self._name}' created successfully.")
