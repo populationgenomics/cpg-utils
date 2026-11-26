@@ -77,11 +77,17 @@ def get_batch(
     backend: hb.Backend
     if _batch is None:
         _backend = config_retrieve(['hail', 'backend'], default='batch')
+        default_timeout = config_retrieve(['hail', 'default_timeout'], default=None)
         if _backend == 'local':
             logging.info('Initialising Hail Batch with local backend')
             backend = hb.LocalBackend(
                 tmp_dir=tempfile.mkdtemp('batch-tmp'),
             )
+            if default_timeout is not None:
+                # Job.timeout() raises on anything but the service backend, so passing
+                # the default on would make every new_job() call fail
+                logging.warning('hail/default_timeout is ignored by the local backend')
+                default_timeout = None
         else:
             logging.info('Initialising Hail Batch with service backend')
             backend = hb.ServiceBackend(
@@ -97,7 +103,7 @@ def get_batch(
                 ['hail', 'cancel_after_n_failures'],
                 default=None,
             ),
-            default_timeout=config_retrieve(['hail', 'default_timeout'], default=None),
+            default_timeout=default_timeout,
             default_memory=config_retrieve(['hail', 'default_memory'], default=None),
             default_python_image=default_python_image
             or config_retrieve(['workflow', 'driver_image']),
